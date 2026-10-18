@@ -19,7 +19,7 @@ const { values } = loadConfigValues();
 if (strict) {
   const missing = missingRequired(values, ["deploy"]);
   if (missing.length) {
-    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub production secrets.`);
+    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub repository secrets.`);
   }
 }
 

@@ -1,6 +1,6 @@
 # Self-hosting guide
 
-The step-by-step guide now lives in the main [README](../../README.md). Automatic deploys from `main` (Workers Builds or GitHub Actions) need no `.env`: the two deploy keys are build variables or GitHub production secrets, `PROVIDER_CREDENTIAL_KEY` is a Worker secret, and integration keys are entered in Admin → Keys. Command-line deploys use `.env` → `npm run setup` → `npm run deploy:self`. Either way: first-run setup in the browser → Email Routing per domain → sending.
+The step-by-step guide now lives in the main [README](../../README.md). Automatic deploys from `main` (Workers Builds or GitHub Actions) need no `.env`: the two deploy keys are build variables or GitHub repository secrets, `PROVIDER_CREDENTIAL_KEY` is a Worker secret, and integration keys are entered in Admin → Keys. Command-line deploys use `.env` → `npm run setup` → `npm run deploy:self`. Either way: first-run setup in the browser → Email Routing per domain → sending.
 
 Summary of the v3.06 model:
 

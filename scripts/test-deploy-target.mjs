@@ -20,7 +20,6 @@ const triggers = workflow.slice(workflow.indexOf("\non:"), workflow.indexOf("\np
 assert.match(triggers, /push:\n\s+branches:\n\s+- main\n/, "deploys on push to main");
 assert.doesNotMatch(triggers, /pull_request|schedule|workflow_run/, "no other automatic triggers");
 assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/, "manual runs are limited to main");
-assert.match(workflow, /environment: production/, "uses the production environment");
 const install = workflow.slice(workflow.indexOf("Install dependencies"), workflow.indexOf("Generate browser favicon"));
 assert.doesNotMatch(install, /CLOUDFLARE_API_TOKEN/, "the token is not exposed to npm ci");
 assert.doesNotMatch(workflow, /^\s{4}env:/m, "no job-wide secrets");

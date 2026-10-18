@@ -1,8 +1,9 @@
 name: Deploy production
 
 # Deploys main to Cloudflare. Use this or Cloudflare Workers Builds, not both.
-# Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as secrets of the
-# "production" environment (limit its deployment branches to main).
+# Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets.
+# Only main deploys: the triggers, the job condition and `npm run deploy`'s
+# guard all refuse other branches and pull requests.
 on:
   push:
     branches:
@@ -21,7 +22,6 @@ jobs:
     name: Build, migrate, and deploy
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 15
     steps:
       - name: Checkout
