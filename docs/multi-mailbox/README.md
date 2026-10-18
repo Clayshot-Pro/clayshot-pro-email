@@ -1,5 +1,7 @@
 # Cloudflare-native multi-mailbox roadmap
 
+> **Historical (v2).** Kept as a record of the v2 roadmap. Settings it mentions such as `PRIMARY_ADDRESS`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `EMAIL_DYNAMIC` and Workers Builds-only deploys no longer exist in v3. To install, deploy or administer the app, follow the [README](../../README.md).
+
 **Status:** Planning only — no new mailbox features, routing rules, sender authorization, or database migrations have been deployed.
 
 **Starting checkpoint:** `v1.04` in `LiamTheMo/LTM-Email-Service`. **Production:** `main`, deployed by Cloudflare Workers Builds.

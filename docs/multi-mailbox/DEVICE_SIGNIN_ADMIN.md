@@ -1,5 +1,7 @@
 # v2.01 — device-specific account sign-ins and administrator provisioning
 
+> **Introduced in v2.01.** The account and device model below is still current. Its rollout steps are historical: for installation and deployment, follow the [README](../../README.md).
+
 **Status:** Development branch; not a production capability until this release is merged to `main`, Cloudflare Workers Builds completes, D1 migration 0013 is applied, and manual sign-in tests pass.
 
 ## Account and device model
