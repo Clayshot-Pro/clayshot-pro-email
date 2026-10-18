@@ -129,7 +129,7 @@ Open the app on its **final HTTPS hostname** (passkeys are bound to it).
 
 1. Enter your **mail domain** (for example `example.com`) and your `AUTH_SETUP_TOKEN`, then register the owner passkey. This creates the **admin@** mailbox on that domain (`admin@example.com`): the administrator's own inbox and sign-in. It cannot be deleted, it receives postmaster@ and abuse@ by default, and only the administrator sign-in opens it.
 2. In **Email administration**, set an administrator password (4–32 characters).
-3. Sign in again as `admin@<mail domain>` (for example `admin@example.com`; `admin@<app hostname>` also works) with the password and your passkey. You land in the mail app on the admin@ inbox, with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the administration pages, and **Back to mail** returns. Sensitive admin actions ask for a fresh passkey check.
+3. Sign in again as `admin@<mail domain>` (for example `admin@example.com`; `admin@<app hostname>` also works) with the password and your passkey. You land in the mail app with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the administration pages, and **Back to mail** returns. Sensitive admin actions ask for a fresh passkey check.
 4. Delete the `AUTH_SETUP_TOKEN` secret: **Worker → Settings → Variables & Secrets**, or `npx wrangler secret delete AUTH_SETUP_TOKEN`. (Also remove it from `.env` if you use one.)
 5. Open **Admin → Keys**. *Push notification keys* should read "Created and stored automatically". If the page asks for `PROVIDER_CREDENTIAL_KEY`, add that Worker secret first. Add Gmail or Resend keys here when you need them.
 
@@ -180,7 +180,7 @@ All from the admin panel, stored in D1:
 
 Users get **Settings → Appearance** for anything you leave unlocked.
 
-With two or more accounts signed in on a device, the account switcher offers **All inboxes**: every account's mail in one list, newest first, each row labelled with its account. Every folder works there, and opening, archiving, deleting, bulk actions and replies always act on the message's own account.
+With two or more accounts signed in on a device, the app opens on **All inboxes** (with one account, it opens that inbox): every account's mail in one list, newest first, each row labelled with its account. Every folder works there, and opening, archiving, deleting, bulk actions and replies always act on the message's own account.
 
 Each custom mailbox can **block senders**: **Block** in the message reader (on phones, in the Unsubscribe dialog) or **Settings → Blocked senders**, by address (`someone@example.com`) or by domain (`example.com`, which includes its subdomains). Mail from a blocked sender goes straight to that mailbox's Junk, with no push notification or forwarding, and the sender is not told; blocking also moves the sender's existing mail to Junk. Gmail accounts use Gmail's own block.
 

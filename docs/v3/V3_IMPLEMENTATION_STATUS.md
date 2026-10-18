@@ -68,7 +68,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - The former primary mailbox (`native:primary`) keeps its ID, address and mail and is an ordinary mailbox. On a fresh install, setup deletes migration 0010's placeholder row (only while the install holds no data).
 - Moved to admin@: default postmaster/abuse mailbox, forwarding, profile photo, VAPID contact, default account for requests without one.
 - Sign-in: `admin@<main domain>` on any host, plus `admin@<app host>`; both open the same administrator record.
-- Admin sessions open the mail app (admin@ first, every mailbox listed). **Admin panel** in the sidebar and in Settings; **Back to mail** in the panel header; `#admin` keeps the panel across reloads, and the open mailbox is kept per tab.
+- Admin sessions open the mail app with every mailbox listed (since v3.10 it opens on All inboxes, like any device with two or more accounts). **Admin panel** in the sidebar and in Settings; **Back to mail** in the panel header; `#admin` keeps the panel across reloads, and the open mailbox is kept per tab.
 - Phone layout: the admin panel no longer overflows the screen; its section links scroll.
 
 ## v3.09: blocked senders
@@ -85,6 +85,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Photos: `/api/profile` and `/api/profile/photo` take `?accountId=` and are authorized against that mailbox (its own session or the admin); admin@ keeps the original R2 key, other mailboxes use `profile/mailbox/<id>.jpg`. `native_mailboxes.photo_version` (migration 0022) feeds account lists and Admin → Mailboxes without R2 lookups; admin@'s earlier photo is adopted once by the bootstrap. Purging a mailbox deletes its photo.
 - Junk: migration 0022 turns `spam_filter_enabled` on for every mailbox, and new mailboxes (including admin@) are created with it on. `email/junk.ts` decides: upstream spam flags and failed authentication (DMARC fail, or SPF fail without DKIM pass; skipped for List-Id mail) are decisive; otherwise weighted content signals must reach 4. Senders the mailbox has written to skip content scoring. Only failures in Authentication-Results are used, so a forged header can never make mail look more trustworthy.
 - Admin → Mailboxes no longer offers "Change password" for admin@ (it uses the administrator sign-in).
+- Start: the app opens on All inboxes when two or more usable accounts are signed in, otherwise on the one account; the last mailbox used on the device no longer decides. Returning from the admin panel in the same tab keeps the open mailbox.
 - Phone reader spacing: the open reader's toolbar no longer adds the top safe area a second time; reader actions sit in one compact row (icon above label, labels sized to the screen; 360px and wider fit in full); and in the installed iOS app (`display-mode: standalone`) the root is at least screen-tall, the workaround for the iOS 26 regression (WebKit 301108) that left an empty band under the tab bar. Chromium cannot reproduce that regression, so the last part needs a check on an iPhone.
 
 ## Production rollout (LTM instance)

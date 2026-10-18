@@ -7,8 +7,8 @@
 - `admin@<mail domain>` is the administrator's sign-in and, since v3.08, also the administrator's own mailbox. `admin@<worker-hostname>` is accepted as an alias. No other admin@ address can be created as a mailbox or signed in with a mailbox password.
 - On a device without saved accounts, type `admin@<mail domain>` into the normal **Custom email** sign-in form, followed by the administrator password.
 - The app then requests the previously registered **owner passkey** as a mandatory second factor. Both must succeed on the same browser, within five minutes, to establish an administrator session.
-- Once authenticated, the app opens the mail app on the **admin@ inbox**, with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the Email administration pages; **Back to mail** returns. The panel opens first while no administrator password is set.
-- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@<mail domain>`; after completing both factors the app opens the admin@ inbox.
+- Once authenticated, the app opens the mail app on **All inboxes**, with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the Email administration pages; **Back to mail** returns. The panel opens first while no administrator password is set.
+- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@<mail domain>`; after completing both factors the app opens the mail app.
 - Admin dashboard supports creating mailboxes, changing their passwords to an owner-chosen value (4–32 characters) or generating a secure random password, quotas, archival and deletion operations.
 
 ## Setting your administrator password the first time

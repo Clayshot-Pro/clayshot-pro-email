@@ -41,6 +41,7 @@ import {
   accountLabel,
   allInboxesAvailable,
   groupByAccount,
+  startingAccountId,
   mergeAccountLists,
   unifiedAccounts,
   type AccountListResult,
@@ -83,10 +84,10 @@ export function App() {
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [addInboxMode, setAddInboxMode] = useState<AddInboxMode>(null);
-  // Admins start in admin@; returning from the admin panel keeps the mailbox
-  // that was open in this tab.
+  // The app opens on All inboxes (or the only account) once accounts load;
+  // returning from the admin panel keeps the mailbox open in this tab.
   const [activeAccountId, setActiveAccountId] = useState(() => {
-    try { return sessionStorage.getItem(TAB_ACCOUNT_KEY) ?? ADMIN_ACCOUNT_ID; } catch { return ADMIN_ACCOUNT_ID; }
+    try { return sessionStorage.getItem(TAB_ACCOUNT_KEY) ?? ""; } catch { return ""; }
   });
   // The account of the open message; in All inboxes it differs per message.
   const [readerAccountId, setReaderAccountId] = useState<string | null>(null);
@@ -324,7 +325,6 @@ export function App() {
     setDraftCount(0);
     setLoading(true);
     setActiveAccountId(id);
-    localStorage.setItem("ltm:active-mail-account", id);
     try { sessionStorage.setItem(TAB_ACCOUNT_KEY, id); } catch { /* private mode */ }
     setSelected(null);
     setThread([]);
@@ -336,9 +336,8 @@ export function App() {
   useEffect(() => {
     if (!accountsLoaded || accounts.length === 0) return;
     if (knownAccount(activeAccountId)) return;
-    const remembered = localStorage.getItem("ltm:active-mail-account");
-    const selectedId = accounts.find(account => account.id === remembered)?.id ?? accounts[0].id;
-    switchAccount(selectedId);
+    const selectedId = startingAccountId(accounts);
+    if (selectedId) switchAccount(selectedId);
   }, [accountsLoaded, accounts, activeAccountId]);
 
   const persistDraft = useCallback(async (current: ComposeState) => {

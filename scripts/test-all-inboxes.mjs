@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ALL_INBOXES_ID, accountLabel, allInboxesAvailable, groupByAccount, mergeAccountLists, threadKey, unifiedAccounts,
+  ALL_INBOXES_ID, accountLabel, allInboxesAvailable, groupByAccount, mergeAccountLists, startingAccountId, threadKey, unifiedAccounts,
 } from "../src/client/allInboxes.ts";
 import { applyMailMutationShields, mailMutationKey } from "../src/client/mailMutationShields.ts";
 
@@ -19,6 +19,16 @@ assert.equal(allInboxesAvailable([account("native:primary"), account("gmail:x", 
 assert.equal(allInboxesAvailable([account("native:primary"), account("gmail:x")]), true);
 assert.deepEqual(unifiedAccounts([account("native:a"), account("native:b", { status: "disabled" })]).map(a => a.id), ["native:a"]);
 assert.ok(!["native:", "gmail:"].some(prefix => ALL_INBOXES_ID.startsWith(prefix)), "the pseudo account can never name a real one");
+
+// The app opens on All inboxes with two or more accounts, else on the one account.
+assert.equal(startingAccountId([account("native:admin"), account("native:work"), account("gmail:x")]), ALL_INBOXES_ID);
+assert.equal(startingAccountId([account("gmail:x")]), "gmail:x");
+assert.equal(startingAccountId([account("native:work"), account("gmail:x", { status: "reauth_required" })]), "native:work",
+  "an account that needs reconnecting does not make All inboxes the start");
+assert.equal(startingAccountId([]), null);
+const appSource = readFileSync(new URL("../src/client/App.tsx", import.meta.url), "utf8");
+assert.match(appSource, /const selectedId = startingAccountId\(accounts\);/);
+assert.doesNotMatch(appSource, /ltm:active-mail-account/, "the last mailbox used on the device no longer decides where the app opens");
 
 // Merge: newest first, tagged, counts summed, failures reported, duplicates dropped.
 const merged = mergeAccountLists([
