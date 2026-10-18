@@ -6,6 +6,7 @@ export function adminMutationEvent(method: string, path: string): string {
   if (path.startsWith("/api/admin/domains/")) return method === "DELETE" ? "admin.domain.deleted" : "admin.domain.updated";
   if (path === "/api/admin/instance") return "admin.branding.updated";
   if (path === "/api/admin/instance/logo") return method === "DELETE" ? "admin.branding.logo_removed" : "admin.branding.logo_uploaded";
+  if (path.startsWith("/api/admin/keys/")) return method === "DELETE" ? "admin.key.removed" : "admin.key.updated";
   if (path === "/api/admin/suppressions") return "admin.suppression.added";
   if (path.startsWith("/api/admin/suppressions/")) return "admin.suppression.removed";
   if (path === "/api/mailboxes") return "admin.mailbox.created";

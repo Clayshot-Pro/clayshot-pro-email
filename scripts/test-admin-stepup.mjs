@@ -13,6 +13,7 @@ for (const [method, path] of [
   ["POST","/api/auth/sessions/reset"], ["DELETE","/api/auth/sessions/example"],
   ["POST","/api/admin/domains"], ["PATCH","/api/admin/domains/example.org"], ["DELETE","/api/admin/domains/example.org"],
   ["POST","/api/admin/suppressions"], ["DELETE","/api/admin/suppressions/someone%40example.net"],
+  ["PUT","/api/admin/keys/RESEND_API_KEY"], ["DELETE","/api/admin/keys/GOOGLE_CLIENT_SECRET"],
 ]) {
   assert.equal(adminMutationNeedsStepUp(method,path),true,path);
   assert.equal(isApprovedAdminMutation(method,path),true,path);
@@ -34,6 +35,11 @@ assert.equal(adminMutationEvent("PATCH","/api/admin/domains/example.org"),"admin
 assert.equal(adminMutationEvent("DELETE","/api/admin/domains/example.org"),"admin.domain.deleted");
 assert.equal(adminMutationNeedsStepUp("GET","/api/admin/domains/example.org/dns"),false,"DNS checks are read-only lookups");
 assert.equal(isApprovedAdminMutation("POST","/api/admin/domains/example.org/dns"),false);
+assert.equal(adminMutationEvent("PUT","/api/admin/keys/RESEND_API_KEY"),"admin.key.updated");
+assert.equal(adminMutationEvent("DELETE","/api/admin/keys/RESEND_API_KEY"),"admin.key.removed");
+assert.equal(adminMutationNeedsStepUp("GET","/api/admin/keys"),false,"listing keys returns no values");
+assert.equal(isApprovedAdminMutation("POST","/api/admin/keys/RESEND_API_KEY"),false);
+assert.equal(isApprovedAdminMutation("PUT","/api/admin/keys/resend_api_key/../x"),false);
 
 const emptyHash = await hashMutationBody(new Request("https://example.com", {method:"POST"}));
 assert.equal(emptyHash,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");

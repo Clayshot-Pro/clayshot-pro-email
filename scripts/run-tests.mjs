@@ -6,6 +6,7 @@ const TESTS = [
   "test-app-config",
   "test-config-render",
   "test-deploy-target",
+  "test-stored-keys",
   "test-instance-identity",
   "test-account-access",
   "test-admin-auth-boundary",

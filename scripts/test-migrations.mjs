@@ -62,4 +62,11 @@ if (migrations.includes("0018_customization.sql")) {
   assert.throws(() => db.exec("INSERT INTO instance_settings (id, settings) VALUES (2, '{}')"), /CHECK/, "singleton row");
 }
 
+if (migrations.includes("0020_instance_keys.sql")) {
+  assert.deepEqual(columns("instance_keys"), ["name", "value", "hint", "updated_at"]);
+  db.exec("INSERT INTO instance_keys (name, value) VALUES ('VAPID', 'v1.x.y')");
+  assert.throws(() => db.exec("INSERT INTO instance_keys (name, value) VALUES ('PROVIDER_CREDENTIAL_KEY', 'x')"), /CHECK/,
+    "the encryption key itself can never be stored in D1");
+}
+
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

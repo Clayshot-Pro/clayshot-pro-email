@@ -4,6 +4,7 @@ import { DomainManager } from "./DomainManager";
 import { SuppressionManager } from "./SuppressionManager";
 import { BrandingManager } from "./BrandingManager";
 import { MailSettingsManager } from "./MailSettingsManager";
+import { KeysManager } from "./KeysManager";
 import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
@@ -162,6 +163,7 @@ export function AdminPanel() {
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
           {configured && <a href="#admin-mail-settings">Mail</a>}
           {configured && <a href="#admin-suppressions">Deliverability</a>}
+          {configured && <a href="#admin-keys">Keys</a>}
           {configured && <a href="#admin-branding">Branding</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
@@ -172,6 +174,7 @@ export function AdminPanel() {
         {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
         {configured && <MailSettingsManager />}
         {configured && <SuppressionManager />}
+        {configured && <KeysManager />}
         {configured && <BrandingManager />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}

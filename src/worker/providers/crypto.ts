@@ -2,7 +2,7 @@ const VERSION = "v1";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function toBase64Url(bytes: Uint8Array): string {
+export function toBase64Url(bytes: Uint8Array): string {
   let value = "";
   for (const byte of bytes) value += String.fromCharCode(byte);
   return btoa(value)
@@ -44,6 +44,11 @@ async function credentialKey(env: Env): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
+}
+
+/** True when PROVIDER_CREDENTIAL_KEY is set and is a valid 32-byte key. */
+export async function credentialEncryptionAvailable(env: Env): Promise<boolean> {
+  return credentialKey(env).then(() => true, () => false);
 }
 
 export async function encryptSecret(env: Env, value: unknown, aad: string): Promise<string> {
