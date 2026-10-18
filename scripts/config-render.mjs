@@ -1,30 +1,31 @@
 // Render the gitignored wrangler.jsonc from wrangler.template.jsonc. There
-// are no instance vars to supply: strict mode (Workers Builds on main, or
-// --strict) only requires the Cloudflare deploy keys and a resolved D1
-// database; other builds use a placeholder database ID for typecheck/bundle.
+// are no instance vars to supply: strict mode (a production deploy from main
+// by Workers Builds or GitHub Actions, or --strict) only requires the
+// Cloudflare deploy keys and a resolved D1 database; other builds use a
+// placeholder database ID for typecheck/bundle.
 import { readFile, writeFile } from "node:fs/promises";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import {
   PLACEHOLDER_DATABASE_ID, renderWrangler,
-  databaseIdFromDeployedWorker, databaseIdByName, isWorkersBuildOnMain,
+  databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy,
 } from "./config-lib.mjs";
 
 const TEMPLATE = new URL("../wrangler.template.jsonc", import.meta.url);
 const OUTPUT = new URL("../wrangler.jsonc", import.meta.url);
 
-const strict = process.argv.includes("--strict") || isWorkersBuildOnMain();
+const strict = process.argv.includes("--strict") || isProductionDeploy();
 const { values } = loadConfigValues();
 
 if (strict) {
   const missing = missingRequired(values, ["deploy"]);
   if (missing.length) {
-    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env or as build variables.`);
+    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub production secrets.`);
   }
 }
 
 let databaseId = values.D1_DATABASE_ID?.trim() || "";
 if (!databaseId && strict) {
-  databaseId = (isWorkersBuildOnMain() ? await databaseIdFromDeployedWorker(values) : null)
+  databaseId = (isProductionDeploy() ? await databaseIdFromDeployedWorker(values) : null)
     ?? await databaseIdByName(values)
     ?? "";
   if (!databaseId) {

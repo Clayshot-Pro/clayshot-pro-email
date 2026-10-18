@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 const TESTS = [
   "test-app-config",
   "test-config-render",
+  "test-deploy-target",
   "test-instance-identity",
   "test-account-access",
   "test-admin-auth-boundary",

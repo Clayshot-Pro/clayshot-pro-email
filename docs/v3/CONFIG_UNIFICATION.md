@@ -135,7 +135,7 @@ For LTM production the values match, so nothing changes.
 | `npm run deploy:self` | For CLI self-hosters: render → typecheck → build → migrate remote → `wrangler deploy`. Asks for confirmation showing the account ID and worker name. |
 | `npm run deploy` | Unchanged for LTM production: still refuses to run outside Workers Builds on `main`. |
 
-`assert-cloudflare-production.mjs` keeps its guard for the Workers Builds path. The guard only applies when `WORKERS_CI=1`; `deploy:self` uses its own confirmation instead.
+`assert-cloudflare-production.mjs` allows `npm run deploy` only from `main`: Workers Builds (`WORKERS_CI=1`, branch `main`) or the GitHub Actions deploy workflow (`refs/heads/main`). `deploy:self` uses its own confirmation instead.
 
 ### 8. Moving LTM production over
 

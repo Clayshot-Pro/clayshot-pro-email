@@ -47,7 +47,7 @@ npm ci
 
 Nothing secret is ever committed. Depending on how you deploy, keys live in one of these places:
 
-| Key | Automatic deploys (Workers Builds) | Command-line deploys |
+| Key | Automatic deploys (Workers Builds; for GitHub Actions see Option A2) | Command-line deploys |
 | --- | --- | --- |
 | `CLOUDFLARE_ACCOUNT_ID` | **Workers Builds → Build variables** (plain text) | `.env` |
 | `CLOUDFLARE_API_TOKEN` — deploy token: Workers Scripts edit, D1 edit, R2 edit, Account Settings read | **Workers Builds → Build variables** (mark as **secret**) | `.env` |
@@ -80,11 +80,21 @@ Keep `PROVIDER_CREDENTIAL_KEY` backed up: changing it makes stored Gmail credent
    - Build command: `npm run build:cloudflare`
    - Deploy command: `npm run deploy`
    - **Build variables:** `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (as a secret).
-4. Push or merge to `main`. The build renders `wrangler.jsonc`, finds the D1 database, applies migrations and deploys. `npm run deploy` refuses to run anywhere except Workers Builds on `main`.
+4. Push or merge to `main`. The build renders `wrangler.jsonc`, finds the D1 database, applies migrations and deploys. `npm run deploy` refuses to run anywhere except a deploy from `main` (Workers Builds or the GitHub Actions workflow).
 5. In the Worker's **Settings → Variables & Secrets**, add `AUTH_SETUP_TOKEN` (and any optional secrets from the table) as type **Secret**. Secrets take effect immediately and survive later deploys.
 6. Under **Settings → Domains & Routes**, add your custom domain (for example `mail.example.com`).
 
 Every later merge to `main` deploys automatically; nothing else needs to be set again.
+
+### Option A2 — automatic deploys from `main` (GitHub Actions)
+
+Use this instead of Workers Builds, not alongside it (otherwise each merge deploys twice). `.github/workflows/deploy.yml` builds, applies migrations and deploys on every push to `main`; it never runs for other branches.
+
+1. Create the D1 database and R2 bucket as in Option A step 1, and a Worker named `ltm-email-service` (or set `WORKER_NAME`). If the Worker is connected to Git under **Settings → Build**, disconnect it.
+2. In GitHub: **Settings → Environments → New environment** `production`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`.
+3. In that environment, add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+4. Push or merge to `main`, or run **Actions → Deploy production → Run workflow** on `main`.
+5. Continue with Option A steps 5 and 6. Runtime secrets still go in the Worker's **Variables & Secrets**, never in GitHub.
 
 ### Option B — deploy from your computer (`.env`)
 
