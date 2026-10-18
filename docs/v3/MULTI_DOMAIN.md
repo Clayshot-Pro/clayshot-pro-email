@@ -1,6 +1,6 @@
 # v3.01 — Multi-domain mailboxes
 
-**Document status:** Planned. Depends on [v3.00 config unification](./CONFIG_UNIFICATION.md).
+**Document status:** Implemented on `v3.01`. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.00 config unification](./CONFIG_UNIFICATION.md).
 
 ## Goal
 

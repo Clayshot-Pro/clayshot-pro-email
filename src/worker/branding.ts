@@ -91,10 +91,10 @@ export async function deleteLogo(env: Env): Promise<Response> {
 }
 
 /** GET /api/instance/icon/:size.png (public). */
-export async function iconResponse(env: Env, size: number): Promise<Response> {
+export async function iconResponse(request: Request, env: Env, size: number): Promise<Response> {
   if (!(ICON_SIZES as readonly number[]).includes(size)) return jsonError("Not found", 404);
   const object = await env.MAIL.get(`instance/icon/${size}.png`);
-  if (!object) return env.ASSETS.fetch(new Request("https://assets.invalid/apple-touch-icon.png"));
+  if (!object) return env.ASSETS.fetch(new Request(new URL("/apple-touch-icon.png", request.url)));
   return new Response(object.body, {
     headers: {
       "Content-Type": "image/png",

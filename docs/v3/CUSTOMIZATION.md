@@ -1,6 +1,6 @@
 # v3.04 — Branding, themes and icons
 
-**Document status:** Planned. Depends on [v3.00](./CONFIG_UNIFICATION.md) (config + `/api/instance`) and [v3.03](./THEME_FOUNDATION.md) (tokens).
+**Document status:** Implemented on `v3.04` (icon sets shipped as outline, bold outline and duotone; logos uploaded as PNG). See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.00](./CONFIG_UNIFICATION.md) (config + `/api/instance`) and [v3.03](./THEME_FOUNDATION.md) (tokens).
 
 ## Scope
 

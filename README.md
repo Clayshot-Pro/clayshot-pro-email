@@ -84,7 +84,7 @@ scripts/                    build/asset and deployment helper scripts
 
 ## Planned: v3 — self-hosting, multi-domain, customization
 
-A documentation-only roadmap for the next major version. Nothing in it is implemented, and the current license stays in force until the v3.00 release.
+The next major version, implemented on branches `v3.00`–`v3.04` but not yet merged or deployed. The current license stays in force until the v3 release.
 
 - **v3.00 Config unification:** one `.env` file as the source of truth, rendered Wrangler config, scripted Worker-secret upload, no hard-coded instance identity
 - **v3.01 Multi-domain:** native mailboxes on several domains under one global administrator
@@ -93,7 +93,7 @@ A documentation-only roadmap for the next major version. Nothing in it is implem
 - **v3.04 Customization:** admin-locked branding, user themes, icon sets, per-mailbox accents
 - **Licensing:** others may run their own instance, including commercially, with credit given; redistribution and paid services stay prohibited
 
-[Roadmap and decisions](./docs/v3/README.md) · [Self-hosting guide (target state)](./docs/v3/SELF_HOSTING.md) · [Licensing change](./docs/v3/LICENSING.md)
+[Implementation status](./docs/v3/V3_IMPLEMENTATION_STATUS.md) · [Roadmap and decisions](./docs/v3/README.md) · [Self-hosting guide (target state)](./docs/v3/SELF_HOSTING.md) · [Licensing change](./docs/v3/LICENSING.md)
 
 ## v2.07: Repository security optimization and audit
 
@@ -128,12 +128,13 @@ This repository reflects the source for a private production service. Runtime in
 
 GitHub Actions run validation and full-history security checks only for pushes to version branches (`vX.XX`) and pull requests targeting those branches. They do not run on `main`.
 
-Cloudflare Workers Builds is the only production deployment path. Its current `npm run build` and `npx wrangler deploy` commands are supported. The build hydrates the production D1 ID and applies remote migrations only for a Cloudflare production build on `main`. Recommended commands, with an additional deploy preflight, are:
+Cloudflare Workers Builds is the only production deployment path. From v3, `wrangler.jsonc` is generated from `wrangler.template.jsonc` and instance settings (`npm run config:render`, see [config unification](./docs/v3/CONFIG_UNIFICATION.md)); set the instance values as Workers Builds build variables. The build resolves the D1 ID and applies remote migrations only for a Cloudflare production build on `main`. Recommended commands, with an additional deploy preflight, are:
 
 - Build command: `npm run build:cloudflare`
 - Deploy command: `npm run deploy`
 - Production branch: `main`
-- Build variables/secrets: `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (secret)
+- Build variables/secrets: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (secret), and the instance vars `APP_ORIGIN`, `PRIMARY_ADDRESS`, `ADMIN_ADDRESS`, `BRAND_NAME`
+- Tests: `npm test`
 
 The build resolves the production D1 binding from the deployed Worker before bundling, so the database ID stays out of source control. On preview branches, production binding hydration and migrations are skipped. The `npm run deploy` command refuses to run outside Cloudflare Workers Builds on `main`, verifies the generated config, applies D1 migrations, and deploys the Worker. Give the API token Workers Scripts read/edit and D1 edit access. Keep the preview command set to `npx wrangler preview`.
 

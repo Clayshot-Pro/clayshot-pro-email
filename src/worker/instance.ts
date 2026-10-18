@@ -107,8 +107,12 @@ export async function shellResponse(request: Request, env: Env): Promise<Respons
     })
     .transform(asset);
   const headers = new Headers(rewritten.headers);
-  for (const [name, value] of Object.entries(SHELL_HEADERS)) {
-    if (!headers.has(name)) headers.set(name, value);
+  // Vite's dev server injects inline module preambles that script-src 'self'
+  // would block; production builds always get the full policy.
+  if (!import.meta.env.DEV) {
+    for (const [name, value] of Object.entries(SHELL_HEADERS)) {
+      if (!headers.has(name)) headers.set(name, value);
+    }
   }
   headers.set("Cache-Control", "no-store");
   return new Response(rewritten.body, { status: rewritten.status, headers });

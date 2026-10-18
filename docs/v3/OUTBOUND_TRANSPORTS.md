@@ -1,6 +1,6 @@
 # v3.02 — Pluggable outbound transports and Resend
 
-**Document status:** Planned. Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
+**Document status:** Implemented on `v3.02`; must be reconciled with v2.08 sending before merge. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
 
 ## Decision
 

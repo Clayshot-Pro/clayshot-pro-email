@@ -1,6 +1,6 @@
 # v3.00 — Config unification
 
-**Document status:** Planned. Nothing here is implemented.
+**Document status:** Implemented on `v3.00`; not yet merged or deployed. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
 
 ## Problem
 

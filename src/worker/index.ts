@@ -129,7 +129,7 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
   // Public instance identity for the sign-in screen (no addresses or secrets).
   if (url.pathname === "/api/instance" && request.method === "GET") return instanceResponse(env);
   const iconRoute = url.pathname.match(/^\/api\/instance\/icon\/(\d{2,3})\.png$/);
-  if (iconRoute && request.method === "GET") return iconResponse(env, Number(iconRoute[1]));
+  if (iconRoute && request.method === "GET") return iconResponse(request, env, Number(iconRoute[1]));
 
   // Device authentication is independent from the privileged owner passkey.
   if (url.pathname === "/api/device/status" && request.method === "GET") return deviceStatus(request, env);
