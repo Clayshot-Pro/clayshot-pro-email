@@ -1,6 +1,6 @@
 # v3.00 roadmap — self-hostable, multi-domain, customizable
 
-**Status:** Code implemented on branches `v3.00`–`v3.04`; not merged to `main` or deployed, and the licence is not yet replaced. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
+**Status:** Implemented on branches `v3.00`–`v3.05` (`v3.05` includes v2.08); not merged to `main` or deployed. v3.05 moved all instance settings into D1, routes all Cloudflare sending through the Email Sending API and adds per-domain themes. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
 
 **Starting checkpoint:** `main` at v2.07 (`13c0421`). **Development line:** `v3.00` and following `v3.0x` version branches. **Production:** `main`, deployed by Cloudflare Workers Builds.
 

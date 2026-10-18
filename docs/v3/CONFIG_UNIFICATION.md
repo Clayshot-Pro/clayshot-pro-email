@@ -1,6 +1,6 @@
 # v3.00 — Config unification
 
-**Document status:** Implemented on `v3.00`; not yet merged or deployed. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
+**Document status:** Implemented on `v3.00`, then **superseded in v3.05**: the Worker has no instance vars at all. The origin and admin sign-in come from the request URL; the primary mailbox, domains, branding and mail settings live in D1; `.env` holds only secrets and deploy keys. The var tables below describe the v3.00 design. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
 
 ## Problem
 

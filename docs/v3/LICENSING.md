@@ -1,6 +1,6 @@
 # Licensing change for v3
 
-**Document status:** Planned. The current [`LICENSE`](../../LICENSE) (proprietary, no use permitted) stays in force until the v3.00 release replaces it. **This is not legal advice.** Since commercial use is allowed, have the final text reviewed before publishing it.
+**Document status:** Option B applied to [`LICENSE`](../../LICENSE) on `v3.05`: free self-hosting for personal and internal organizational use (including commercial), credit required, no redistribution, no hosting for others (paid or free), no paid services. **This is not legal advice.**
 
 ## Decision
 
