@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MailboxManager } from "./MailboxManager";
 import { DomainManager } from "./DomainManager";
+import { SuppressionManager } from "./SuppressionManager";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
 import { useInstance } from "../instance";
@@ -157,6 +158,7 @@ export function AdminPanel() {
         <nav className="admin-home-nav" aria-label="Administrator sections">
           {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
+          {configured && <a href="#admin-suppressions">Deliverability</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
         </nav>
@@ -170,6 +172,7 @@ export function AdminPanel() {
         {configured === false && passwordSection}
         {configured && <DomainManager onChanged={() => setDomainVersion(version => version + 1)} />}
         {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
+        {configured && <SuppressionManager />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}
         {configured === null && (

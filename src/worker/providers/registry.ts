@@ -3,6 +3,7 @@ import { nativeProvider } from "./native";
 import { allNativeMailboxes, mailboxById, PRIMARY_MAILBOX_ID } from "../mailboxes";
 import type { MailProvider, MailProviderKind } from "./types";
 import { appConfig } from "../appConfig";
+import { transportChoice } from "../transports";
 
 export type ConnectedAccount = {
   id: string;
@@ -56,8 +57,13 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
     ? `/api/profile/photo?v=${encodeURIComponent(profileVersion)}`
     : null;
 
+  const active = mailboxes.filter((box) => box.status === "active" && !box.deleted_at);
+  // Same selection the send handler applies, so the UI never offers a sender
+  // the server will refuse.
+  const sendable = await Promise.all(active.map(async (box) =>
+    (await transportChoice(env, box.id, box.email_address)).kind !== "unavailable"));
   return [
-    ...mailboxes.filter((box) => box.status === "active").map((box) => ({
+    ...active.map((box, index) => ({
       id: box.id,
       provider: "native" as const,
       emailAddress: box.email_address,
@@ -65,7 +71,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
       avatarUrl: box.id === NATIVE_ACCOUNT_ID ? primaryAvatarUrl : null,
       status: box.status,
       lastSyncedAt: null,
-      sendEnabled: box.id === NATIVE_ACCOUNT_ID || appConfig(env).features.multiSender,
+      sendEnabled: sendable[index],
     })),
     ...result.results.map((row) => ({
       id: row.id,

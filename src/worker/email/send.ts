@@ -1,7 +1,7 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
-import { appConfig } from "../appConfig";
-import { sendingDomain } from "../domains";
+import { transportChoice } from "../transports";
+import { SAFE_DELIVERY_CODES, TransportError } from "../transports/types";
 
 type ReplyTarget = {
   id: string;
@@ -33,22 +33,6 @@ const MAX_BODY_CHARS = 500_000;
 const MAX_SUBJECT_CHARS = 500;
 const MAX_RECIPIENTS = 50;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SAFE_DELIVERY_CODES = new Set([
-  "E_RECIPIENT_NOT_ALLOWED",
-  "E_RECIPIENT_SUPPRESSED",
-  "E_SENDER_DOMAIN_NOT_AVAILABLE",
-  "E_CONTENT_TOO_LARGE",
-  "E_DELIVERY_FAILED",
-  "E_RATE_LIMIT_EXCEEDED",
-  "E_DAILY_LIMIT_EXCEEDED",
-  "E_INTERNAL_SERVER_ERROR",
-  "E_HEADER_NOT_ALLOWED",
-  "E_HEADER_USE_API_FIELD",
-  "E_HEADER_VALUE_INVALID",
-  "E_HEADER_VALUE_TOO_LONG",
-  "E_HEADERS_TOO_LARGE",
-  "E_HEADERS_TOO_MANY",
-]);
 
 function splitRecipients(value: FormDataEntryValue | null): string[] {
   if (typeof value !== "string") return [];
@@ -89,6 +73,8 @@ function safeDeliveryError(error: unknown): string {
 }
 
 function userDeliveryError(code: string): string {
+  if (code === "E_DELIVERY_UNCERTAIN") return "Delivery status is uncertain. Check Sent before trying again";
+  if (code === "E_SENDER_DOMAIN_NOT_AVAILABLE") return "This mailbox's domain is not set up for sending";
   if (code === "E_RECIPIENT_SUPPRESSED") {
     return "Recipient cannot currently receive this email";
   }
@@ -177,16 +163,12 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Cloudflare's current binding permits only the primary sender.
-  // Do not enable other addresses before provider policy and binding approval.
-  if (provider.kind === "native" && provider.address !== appConfig(env).primaryAddress && !appConfig(env).features.multiSender) {
-    return Response.json({ error: "Sending from this mailbox is not enabled yet" }, { status: 403 });
-  }
+  // Native senders need an active domain and an available transport:
+  // Cloudflare (primary always; others only when MULTI_SENDER_APPROVED) or
+  // Resend for domains the administrator switched to it.
   if (provider.kind === "native") {
-    const domain = await sendingDomain(env, provider.address);
-    if (!domain || domain.status !== "active" || domain.transport === "none") {
-      return Response.json({ error: "Sending is not enabled for this mailbox's domain" }, { status: 403 });
-    }
+    const choice = await transportChoice(env, provider.accountId, provider.address);
+    if (choice.kind === "unavailable") return Response.json({ error: choice.reason }, { status: 403 });
   }
   const to = splitRecipients(form.get("to"));
   const cc = splitRecipients(form.get("cc"));
@@ -212,6 +194,16 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       { error: `A message can contain at most ${MAX_RECIPIENTS} recipients` },
       { status: 400 },
     );
+  }
+  if (provider.kind === "native") {
+    // Hard bounces and complaints reported by the provider block further sends.
+    const lowered = [...new Set(recipients.map(address => address.toLowerCase()))];
+    const suppressed = await env.DB.prepare(
+      `SELECT address FROM suppressed_recipients WHERE address IN (${lowered.map(() => "?").join(",")}) LIMIT 1`,
+    ).bind(...lowered).first<{ address: string }>();
+    if (suppressed) {
+      return Response.json({ error: `${suppressed.address}: ${userDeliveryError("E_RECIPIENT_SUPPRESSED")}` }, { status: 422 });
+    }
   }
   if (recipients.some((address) => !EMAIL_PATTERN.test(address))) {
     return Response.json(
@@ -352,27 +344,33 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   let status = "sent";
   let deliveryError: string | null = null;
   let providerMessageId: string | null = null;
+  let transportKind: string | null = null;
+  let uncertain = false;
   try {
-    providerMessageId = (
-      await provider.sendMessage({
-        to,
-        cc,
-        bcc,
-        subject,
-        text,
-        headers,
-        attachments: allUploads,
-      })
-    ).providerMessageId;
+    const result = await provider.sendMessage({
+      to,
+      cc,
+      bcc,
+      subject,
+      text,
+      headers,
+      attachments: allUploads,
+      idempotencyKey: provider.kind === "native" ? `${provider.accountId}:${clientKey}` : undefined,
+    });
+    providerMessageId = result.providerMessageId;
+    transportKind = result.transport ?? null;
   } catch (error) {
     status = "failed";
     deliveryError = safeDeliveryError(error);
+    uncertain = error instanceof TransportError && error.uncertain;
   }
 
   if (provider.kind === "native") {
+    // An uncertain result (e.g. a timeout after the request left) is never
+    // retried automatically; the idempotency key makes a manual retry safe.
     await env.DB.prepare(
-      "UPDATE outbound_attempts SET state=?3, provider_message_id=?4, error_code=?5, updated_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND client_key=?2"
-    ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : "failed",providerMessageId,deliveryError).run();
+      "UPDATE outbound_attempts SET state=?3, provider_message_id=?4, error_code=?5, transport=COALESCE(?6, transport), updated_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND client_key=?2"
+    ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : uncertain ? "uncertain" : "failed",providerMessageId,deliveryError,transportKind).run();
   }
   if (provider.kind === "native" && status !== "sent" && attachmentBytes > 0) {
     await env.DB.prepare(

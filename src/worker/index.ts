@@ -36,6 +36,7 @@ import { appConfig, ConfigError } from "./appConfig";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance, primaryAddressMismatch } from "./bootstrap";
 import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
+import { addSuppression, listSuppressions, pruneWebhookReceipts, removeSuppression, resendWebhook } from "./webhooks/resend";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
@@ -103,6 +104,9 @@ function decodedRouteId(match: RegExpMatchArray): string | null {
 
 async function routeApi(request: Request, env: Env, url: URL): Promise<Response> {
   const config = appConfig(env);
+  // Provider webhooks are server-to-server: exempt from the same-origin and
+  // session checks for this exact path only, authenticated by signature.
+  if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
   if (!sameOrigin(request, config.origin)) return jsonError("Cross-origin request rejected", 403);
   if (!SAFE_METHODS.has(request.method) && requestTooLarge(request)) {
     return jsonError("Request body too large", 413);
@@ -187,6 +191,13 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!domainRoute[2] && request.method === "PATCH") return updateDomain(request, env, domain);
     if (!domainRoute[2] && request.method === "DELETE") return deleteDomain(env, domain);
     return jsonError("Method not allowed", 405);
+  }
+  if (url.pathname === "/api/admin/suppressions" && request.method === "GET") return listSuppressions(env);
+  if (url.pathname === "/api/admin/suppressions" && request.method === "POST") return addSuppression(request, env);
+  const suppressionRoute = url.pathname.match(/^\/api\/admin\/suppressions\/([^/]+)$/);
+  if (suppressionRoute && request.method === "DELETE") {
+    const address = decodePathSegment(suppressionRoute[1]);
+    return address ? removeSuppression(env, address) : jsonError("Invalid address", 400);
   }
 
   // The primary mailbox owns its profile photo. Other mailbox sessions must
@@ -413,5 +424,6 @@ export default {
       ctx.waitUntil(purgeExpiredNativeMailboxes(env));
     }
     ctx.waitUntil(pruneAdminSecurityEvents(env));
+    ctx.waitUntil(pruneWebhookReceipts(env));
   },
 } satisfies ExportedHandler<Env>;

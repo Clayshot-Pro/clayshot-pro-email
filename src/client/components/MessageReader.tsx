@@ -134,6 +134,11 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
             </div>
 
             {item.deliveryStatus === "failed" ? <div className="delivery-error">Delivery failed: {item.deliveryError}</div> : null}
+            {item.deliveryStatus === "bounced" ? <div className="delivery-error">The recipient's server rejected this message (bounced).</div> : null}
+            {item.deliveryStatus === "complained" ? <div className="delivery-error">The recipient marked this message as spam. Further mail to them is blocked.</div> : null}
+            {item.direction === "outbound" && (item.deliveryStatus === "delivered" || item.deliveryStatus === "delayed") ? (
+              <div className="delivery-note">{item.deliveryStatus === "delivered" ? "Delivered to the recipient's server." : "Delivery is delayed; the provider is still retrying."}</div>
+            ) : null}
 
             <div className="message-content">
               {item.bodyHtml ? <RichEmailBody html={item.bodyHtml}/> : <pre>{item.bodyText || "(No readable text content)"}</pre>}

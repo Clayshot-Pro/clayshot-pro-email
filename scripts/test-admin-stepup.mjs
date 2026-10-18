@@ -12,6 +12,7 @@ for (const [method, path] of [
   ["POST","/api/mailboxes/native%3Aexample/reconcile"],
   ["POST","/api/auth/sessions/reset"], ["DELETE","/api/auth/sessions/example"],
   ["POST","/api/admin/domains"], ["PATCH","/api/admin/domains/example.org"], ["DELETE","/api/admin/domains/example.org"],
+  ["POST","/api/admin/suppressions"], ["DELETE","/api/admin/suppressions/someone%40example.net"],
 ]) {
   assert.equal(adminMutationNeedsStepUp(method,path),true,path);
   assert.equal(isApprovedAdminMutation(method,path),true,path);

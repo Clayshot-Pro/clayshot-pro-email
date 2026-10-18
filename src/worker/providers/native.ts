@@ -1,4 +1,6 @@
 import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
+import { transportChoice, transportFor } from "../transports";
+import { TransportError } from "../transports/types";
 
 type NativeMessageRow = {
   id: string;
@@ -127,25 +129,23 @@ export class NativeMailProvider implements MailProvider {
   }
 
   async sendMessage(input: ProviderSendInput): Promise<ProviderSendResult> {
-    const transport = this.accountId === "native:primary" ? this.env.EMAIL : this.env.EMAIL_MULTI;
+    const choice = await transportChoice(this.env, this.accountId, this.address);
+    const transport = transportFor(this.env, choice);
+    if (!transport) throw new TransportError("E_SENDER_DOMAIN_NOT_AVAILABLE");
     const result = await transport.send({
       from: { email: this.address, name: this.senderName },
-      to: input.to,
-      cc: input.cc.length ? input.cc : undefined,
-      bcc: input.bcc.length ? input.bcc : undefined,
       replyTo: this.address,
+      to: input.to,
+      cc: input.cc,
+      bcc: input.bcc,
       subject: input.subject,
       text: input.text,
       html: `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${input.text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replace(/\n/g, "<br>")}</div>`,
-      headers: input.headers && Object.keys(input.headers).length ? input.headers : undefined,
-      attachments: input.attachments.map((attachment) => ({
-        content: attachment.content,
-        filename: attachment.filename,
-        type: attachment.type,
-        disposition: "attachment" as const,
-      })),
+      headers: input.headers,
+      attachments: input.attachments,
+      idempotencyKey: input.idempotencyKey,
     });
-    return { providerMessageId: result.messageId };
+    return { providerMessageId: result.providerMessageId, transport: transport.kind };
   }
 }
 

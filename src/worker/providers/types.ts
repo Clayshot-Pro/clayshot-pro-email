@@ -52,10 +52,12 @@ export type ProviderSendInput = {
   headers?: Record<string, string>;
   threadId?: string | null;
   attachments: ProviderAttachment[];
+  idempotencyKey?: string;
 };
 
 export type ProviderSendResult = {
   providerMessageId: string | null;
+  transport?: "cloudflare" | "resend";
 };
 
 export interface MailProvider {

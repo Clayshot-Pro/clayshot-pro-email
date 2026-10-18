@@ -73,3 +73,5 @@
   .admin-domain-add { flex-direction: column; align-items: stretch; }
   .admin-domain-fields { grid-template-columns: 1fr; }
 }
+.delivery-note { width: min(820px, calc(100% - 56px)); margin: 20px auto 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 11px; }
+@media (max-width: 760px) { .delivery-note { width: calc(100% - 32px); } }
