@@ -1,4 +1,4 @@
-import { suspectedJunk } from "./junk";
+import { junkVerdict } from "./junk";
 import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
@@ -15,6 +15,15 @@ const MAX_HEADER_BYTES = 256 * 1024;
 const MAX_MIME_DEPTH = 30;
 
 const encoder = new TextEncoder();
+
+/** The mailbox has sent mail to this address (its contacts skip content scoring). */
+async function hasWrittenTo(env: Env, mailboxId: string, address: string): Promise<boolean> {
+  const needle = JSON.stringify(address.trim().toLowerCase());
+  if (needle.length < 5) return false;
+  const row = await env.DB.prepare(`SELECT 1 FROM messages WHERE mailbox_id = ?1 AND direction = 'outbound'
+    AND instr(lower(to_addresses), ?2) > 0 LIMIT 1`).bind(mailboxId, needle).first().catch(() => null);
+  return Boolean(row);
+}
 const safePreview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
 const safeFilename = (value: string | null | undefined, fallback: string) => (value || fallback).replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 255);
 const addresses = (items: Array<{ address?: string }> | undefined) => (items ?? []).map(item => item.address?.trim()).filter((value): value is string => Boolean(value)).slice(0, 100);
@@ -126,9 +135,19 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const to = addresses(parsed.to);
   const cc = addresses(parsed.cc);
   const bodyText = truncateUtf8(parsed.text?.trim() || (parsed.html ? htmlToText(parsed.html) : ""), MAX_STORED_TEXT);
-  // A sender the mailbox blocked (header From or envelope) goes to Junk.
+  // Blocked senders (header From or envelope) and likely spam go to Junk.
+  const fromAddress = sender?.address || message.from;
   const isJunk = await isBlockedSender(env, mailbox.id, [sender?.address, message.from])
-    || (mailbox.spam_filter_enabled === 1 && suspectedJunk(parsed.subject ?? "", sender?.address || message.from, bodyText));
+    || (mailbox.spam_filter_enabled === 1 && junkVerdict({
+      subject: parsed.subject ?? "",
+      sender: fromAddress,
+      senderName: sender?.name,
+      replyTo: parsed.replyTo?.[0]?.address,
+      text: bodyText,
+      html: parsed.html,
+      headers: message.headers,
+      knownSender: await hasWrittenTo(env, mailbox.id, fromAddress),
+    }).junk);
   const bodyHtml = parsed.html ? truncateUtf8(sanitizeEmailHtml(parsed.html), MAX_STORED_TEXT) || null : null;
   const threadId = await resolveThreadId(env, mailbox.id, inReplyTo, references);
   const key = `emails/${mailbox.id.replace(":", "_")}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${String(now.getUTCDate()).padStart(2, "0")}/${id}/raw.eml`;

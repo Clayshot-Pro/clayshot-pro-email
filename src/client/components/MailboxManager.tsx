@@ -13,6 +13,7 @@ type Mailbox = {
   purge_after: string | null;
   spam_filter_enabled: number;
   accent_color?: string | null;
+  photo_version?: string | null;
   sender_name?: string | null;
 };
 
@@ -264,7 +265,11 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
           const isAdminMailbox = box.id === "native:admin";
           return (
             <div className="settings-account admin-mailbox-item" key={box.id}>
-              <span className="settings-avatar-fallback">{box.email_address.charAt(0).toUpperCase()}</span>
+              {box.photo_version ? (
+                <img src={`/api/profile/photo?accountId=${encodeURIComponent(box.id)}&v=${encodeURIComponent(box.photo_version)}`} alt="" />
+              ) : (
+                <span className="settings-avatar-fallback">{box.email_address.charAt(0).toUpperCase()}</span>
+              )}
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="admin-mailbox-name-row">
                   <strong>{box.email_address}</strong>
@@ -314,7 +319,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
                 {!box.deleted_at && editing !== box.id && (
                   <button type="button" disabled={busy !== null} onClick={() => edit(box)}>Edit details</button>
                 )}
-                {!box.deleted_at && (
+                {!box.deleted_at && !isAdminMailbox && (
                   <button type="button" disabled={busy !== null} onClick={() => {
                     setPasswordFor(passwordFor === box.id ? null : box.id);
                     setCustomPassword("");setConfirmPassword("");setShowPassword(false);setNotice(null);

@@ -10,6 +10,8 @@ const TESTS = [
   "test-all-inboxes",
   "test-admin-mailbox",
   "test-blocked-senders",
+  "test-junk",
+  "test-profile-photos",
   "test-instance-identity",
   "test-account-access",
   "test-admin-auth-boundary",

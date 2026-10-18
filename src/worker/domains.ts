@@ -59,8 +59,8 @@ async function established(env: Env): Promise<boolean> {
 
 /** The admin@<main domain> mailbox; created once, never renamed. */
 async function ensureAdminMailbox(env: Env, domain: string): Promise<void> {
-  await env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain)
-    VALUES (?1, ?2, 'Admin', ?3)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain).run();
+  await env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain, spam_filter_enabled)
+    VALUES (?1, ?2, 'Admin', ?3, 1)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain).run();
 }
 
 /**
@@ -105,8 +105,8 @@ export async function initializeInstance(env: Env, input: string): Promise<strin
     env.DB.prepare("UPDATE domains SET is_primary = 0 WHERE is_primary = 1"),
     env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
       ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain),
-    env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain)
-      VALUES (?1, ?2, 'Admin', ?3)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain),
+    env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain, spam_filter_enabled)
+      VALUES (?1, ?2, 'Admin', ?3, 1)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain),
   ]);
   cachedPrimary = { domain, at: Date.now() };
   return null;

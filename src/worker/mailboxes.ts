@@ -4,6 +4,7 @@ import { instanceSettings } from "./branding";
 import { addressRules, postmasterMailboxId } from "./domains";
 import { normalizeHex } from "./customization";
 import { ADMIN_MAILBOX_ID } from "./mailboxIds";
+import { profilePhotoKey } from "./api/profile";
 /**
  * Native mailboxes are addresses managed by the single administrator. Each
  * signs in with its own password; admin@ is opened with the owner session.
@@ -27,11 +28,13 @@ export type NativeMailbox = {
   accent_color: string | null;
   sender_name: string | null;
   usage_version: number;
+  /** Set when the mailbox has a profile photo (api/profile.ts). */
+  photo_version?: string | null;
 };
 
 export async function mailboxById(env: Env, id: string): Promise<NativeMailbox | null> {
   return env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE id = ?1"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name, photo_version FROM native_mailboxes WHERE id = ?1"
   ).bind(id).first<NativeMailbox>();
 }
 
@@ -40,7 +43,7 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
   if (!normalized) return null;
   // Exact mailbox routing has priority over plus-address aliases.
   const exact = await env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE email_address = ?1"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name, photo_version FROM native_mailboxes WHERE email_address = ?1"
   ).bind(normalized).first<NativeMailbox>();
   // An explicitly disabled address must not be revived by plus-alias fallback.
   if (exact) return exact.status === "active" && !exact.deleted_at ? exact : null;
@@ -54,13 +57,13 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
     return box?.status === "active" && !box.deleted_at ? box : null;
   }
   return env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE email_address=?1 AND status='active' AND deleted_at IS NULL"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name, photo_version FROM native_mailboxes WHERE email_address=?1 AND status='active' AND deleted_at IS NULL"
   ).bind(alias.parent).first<NativeMailbox>();
 }
 
 export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
   const result = await env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes ORDER BY CASE WHEN id='native:admin' THEN 0 ELSE 1 END, created_at"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name, photo_version FROM native_mailboxes ORDER BY CASE WHEN id='native:admin' THEN 0 ELSE 1 END, created_at"
   ).all<NativeMailbox>();
   return result.results;
 }
@@ -84,7 +87,8 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
     // Atomic mailbox plus credential creation; do not expose plaintext except
     // the one-time response to the authenticated owner.
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO native_mailboxes (id,email_address,display_name,domain) VALUES (?1,?2,?3,?4)")
+      // The junk filter is on for new mailboxes (v3.10).
+      env.DB.prepare("INSERT INTO native_mailboxes (id,email_address,display_name,domain,spam_filter_enabled) VALUES (?1,?2,?3,?4,1)")
         .bind(id,address,displayName,address.slice(address.lastIndexOf("@") + 1)),
       env.DB.prepare(`INSERT INTO native_mailbox_credentials
         (mailbox_id,password_salt,password_hash,iterations) VALUES (?1,?2,?3,?4)`)
@@ -184,6 +188,7 @@ export async function purgeNativeMailbox(env: Env, id: string): Promise<Response
     env.DB.prepare("DELETE FROM blocked_senders WHERE mailbox_id=?1").bind(id),
     env.DB.prepare("DELETE FROM native_mailboxes WHERE id=?1").bind(id),
   ]);
+  await env.MAIL.delete(profilePhotoKey(id)).catch(() => undefined);
   // Keep minimal audit entries to establish that irreversible deletion happened.
   return Response.json({ complete: true });
 }

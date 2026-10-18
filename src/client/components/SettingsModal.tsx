@@ -1,7 +1,6 @@
 import type { ConnectedAccount, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
-import { ADMIN_ACCOUNT_ID } from "../appModel";
 import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
 import { BlockedSenders } from "./BlockedSenders";
 
@@ -22,7 +21,7 @@ type Props = {
   onToggleNotifications: () => void;
   onAddInbox: () => void;
   onRemoveAccount: (id: string) => void;
-  onEditProfile: () => void;
+  onEditProfile: (accountId: string) => void;
   onViewSessions: () => void;
   onResetSessions: () => void;
   onLogout: () => void;
@@ -82,10 +81,10 @@ export function SettingsModal(props: Props) {
                       {account.emailAddress}
                     </small>
                   </div>
-                  {(account.id === ADMIN_ACCOUNT_ID || account.provider === "gmail" || !props.isAdmin) ? (
+                  {(account.provider === "native" || account.provider === "gmail" || !props.isAdmin) ? (
                     <div className="settings-account-actions">
-                      {account.id === ADMIN_ACCOUNT_ID ? (
-                        <button type="button" disabled={props.busy !== null} onClick={props.onEditProfile}>
+                      {account.provider === "native" ? (
+                        <button type="button" disabled={props.busy !== null} onClick={() => props.onEditProfile(account.id)}>
                           Edit profile
                         </button>
                       ) : null}

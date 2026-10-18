@@ -16,6 +16,7 @@
 | `v3.07` | All inboxes: one merged list of every account signed in on the device |
 | `v3.08` | No primary mailbox: admin@<mail domain> is the administrator's mailbox; admins land in mail and switch to the admin panel and back |
 | `v3.09` | Per-mailbox blocked senders (migration 0021) |
+| `v3.10` | Per-mailbox profile photos; junk filter on for every mailbox with authentication and content signals (migration 0022) |
 
 ## Decisions applied in v3.05
 
@@ -78,6 +79,12 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Blocking moves the sender's existing inbound mail in that mailbox to Junk (`moveExisting`, default on); unblocking leaves Junk as it is.
 - UI: **Block** in the desktop reader, **Block sender** in the Unsubscribe dialog (phones), **Settings → Blocked senders** with a mailbox picker, add and Unblock.
 - Fix: choosing the account that is already open no longer leaves the list on "Loading mail…"; it refreshes.
+
+## v3.10: profile photos and junk filtering
+
+- Photos: `/api/profile` and `/api/profile/photo` take `?accountId=` and are authorized against that mailbox (its own session or the admin); admin@ keeps the original R2 key, other mailboxes use `profile/mailbox/<id>.jpg`. `native_mailboxes.photo_version` (migration 0022) feeds account lists and Admin → Mailboxes without R2 lookups; admin@'s earlier photo is adopted once by the bootstrap. Purging a mailbox deletes its photo.
+- Junk: migration 0022 turns `spam_filter_enabled` on for every mailbox, and new mailboxes (including admin@) are created with it on. `email/junk.ts` decides: upstream spam flags and failed authentication (DMARC fail, or SPF fail without DKIM pass; skipped for List-Id mail) are decisive; otherwise weighted content signals must reach 4. Senders the mailbox has written to skip content scoring. Only failures in Authentication-Results are used, so a forged header can never make mail look more trustworthy.
+- Admin → Mailboxes no longer offers "Change password" for admin@ (it uses the administrator sign-in).
 
 ## Production rollout (LTM instance)
 
