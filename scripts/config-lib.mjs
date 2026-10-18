@@ -72,5 +72,15 @@ export function isWorkersBuildOnMain() {
   return process.env.WORKERS_CI === "1" && process.env.WORKERS_CI_BRANCH?.trim() === "main";
 }
 
+/** The GitHub Actions production deploy (.github/workflows/deploy.yml) on main. */
+export function isGitHubActionsOnMain() {
+  return process.env.GITHUB_ACTIONS === "true" && process.env.GITHUB_REF === "refs/heads/main";
+}
+
+/** A production deploy from main, by Workers Builds or GitHub Actions. */
+export function isProductionDeploy() {
+  return isWorkersBuildOnMain() || isGitHubActionsOnMain();
+}
+
 /** Dist folder name produced by the Cloudflare Vite plugin for the Worker. */
 export const distWorkerDir = workerName => workerName.replace(/[^A-Za-z0-9]/g, "_");
