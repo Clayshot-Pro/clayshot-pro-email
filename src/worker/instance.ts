@@ -1,4 +1,6 @@
 import { appConfig, publicInstanceInfo } from "./appConfig";
+import { brandNames, instanceSettings } from "./branding";
+import { THEME_SURFACES } from "./customization";
 
 /** Branding the shell, manifest and public instance endpoint render. */
 export type InstanceBranding = {
@@ -11,21 +13,30 @@ export type InstanceBranding = {
 const DEFAULT_THEME_COLOR = "#0d0c0b";
 
 export async function instanceBranding(env: Env): Promise<InstanceBranding> {
-  const config = appConfig(env);
+  const settings = await instanceSettings(env);
+  const names = brandNames(env, settings);
   return {
-    name: config.brand.name,
-    shortName: config.brand.shortName,
-    themeColor: DEFAULT_THEME_COLOR,
-    iconVersion: null,
+    name: names.name,
+    shortName: names.shortName,
+    // The default dark theme keeps the historical status-bar colour.
+    themeColor: settings.defaultTheme === "ltm-dark" ? DEFAULT_THEME_COLOR : THEME_SURFACES[settings.defaultTheme],
+    iconVersion: settings.logoVersion,
   };
 }
 
 export async function instanceResponse(env: Env): Promise<Response> {
-  const branding = await instanceBranding(env);
+  const settings = await instanceSettings(env);
+  const names = brandNames(env, settings);
   return Response.json({
     ...publicInstanceInfo(appConfig(env)),
-    brandName: branding.name,
-    brandShortName: branding.shortName,
+    brandName: names.name,
+    brandShortName: names.shortName,
+    brandingSource: appConfig(env).brandingSource,
+    logoVersion: settings.logoVersion,
+    accent: settings.accent,
+    defaultTheme: settings.defaultTheme,
+    defaultIconSet: settings.defaultIconSet,
+    lock: settings.lock,
   });
 }
 

@@ -4,6 +4,7 @@ import { allNativeMailboxes, mailboxById, PRIMARY_MAILBOX_ID } from "../mailboxe
 import type { MailProvider, MailProviderKind } from "./types";
 import { appConfig } from "../appConfig";
 import { transportChoice } from "../transports";
+import { accountColors } from "../branding";
 
 export type ConnectedAccount = {
   id: string;
@@ -14,6 +15,7 @@ export type ConnectedAccount = {
   status: "active" | "reauth_required" | "disabled";
   lastSyncedAt: string | null;
   sendEnabled?: boolean;
+  accentColor?: string | null;
 };
 
 type AccountRow = {
@@ -62,6 +64,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
   // the server will refuse.
   const sendable = await Promise.all(active.map(async (box) =>
     (await transportChoice(env, box.id, box.email_address)).kind !== "unavailable"));
+  const colors = await accountColors(env, [...active.map((box) => box.id), ...result.results.map((row) => row.id)]);
   return [
     ...active.map((box, index) => ({
       id: box.id,
@@ -72,6 +75,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
       status: box.status,
       lastSyncedAt: null,
       sendEnabled: sendable[index],
+      accentColor: colors.get(box.id) ?? null,
     })),
     ...result.results.map((row) => ({
       id: row.id,
@@ -82,6 +86,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
       status: row.status,
       lastSyncedAt: row.last_synced_at,
       sendEnabled: true,
+      accentColor: colors.get(row.id) ?? null,
     })),
   ];
 }

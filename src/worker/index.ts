@@ -37,6 +37,9 @@ import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance, primaryAddressMismatch } from "./bootstrap";
 import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
 import { addSuppression, listSuppressions, pruneWebhookReceipts, removeSuppression, resendWebhook } from "./webhooks/resend";
+import {
+  adminSettingsResponse, deleteLogo, getPreferences, iconResponse, savePreferences, saveInstanceSettings, uploadLogo,
+} from "./branding";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
@@ -72,7 +75,10 @@ function requestTooLarge(request: Request): boolean {
 
 function secureApiResponse(response: Response): Response {
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "private, no-store");
+  // Public, versioned instance icons are the only cacheable API responses.
+  if (headers.get("Cache-Control") !== "public, max-age=31536000, immutable" || headers.get("Content-Type") !== "image/png") {
+    headers.set("Cache-Control", "private, no-store");
+  }
   // Preserve stricter endpoint-specific CSP directives (e.g. the "sandbox"
   // directive for attachments) instead of overwriting them.
   if (!headers.has("Content-Security-Policy")) {
@@ -122,6 +128,8 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
 
   // Public instance identity for the sign-in screen (no addresses or secrets).
   if (url.pathname === "/api/instance" && request.method === "GET") return instanceResponse(env);
+  const iconRoute = url.pathname.match(/^\/api\/instance\/icon\/(\d{2,3})\.png$/);
+  if (iconRoute && request.method === "GET") return iconResponse(env, Number(iconRoute[1]));
 
   // Device authentication is independent from the privileged owner passkey.
   if (url.pathname === "/api/device/status" && request.method === "GET") return deviceStatus(request, env);
@@ -192,6 +200,10 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!domainRoute[2] && request.method === "DELETE") return deleteDomain(env, domain);
     return jsonError("Method not allowed", 405);
   }
+  if (url.pathname === "/api/admin/instance" && request.method === "GET") return adminSettingsResponse(env);
+  if (url.pathname === "/api/admin/instance" && request.method === "PUT") return saveInstanceSettings(request, env);
+  if (url.pathname === "/api/admin/instance/logo" && request.method === "PUT") return uploadLogo(request, env);
+  if (url.pathname === "/api/admin/instance/logo" && request.method === "DELETE") return deleteLogo(env);
   if (url.pathname === "/api/admin/suppressions" && request.method === "GET") return listSuppressions(env);
   if (url.pathname === "/api/admin/suppressions" && request.method === "POST") return addSuppression(request, env);
   const suppressionRoute = url.pathname.match(/^\/api\/admin\/suppressions\/([^/]+)$/);
@@ -251,6 +263,10 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
       return jsonError("Account not signed in on this device", 403);
     }
   }
+
+  // Appearance preferences of an account signed in on this device.
+  if (url.pathname === "/api/preferences" && request.method === "GET") return getPreferences(request, env, url);
+  if (url.pathname === "/api/preferences" && request.method === "PUT") return savePreferences(request, env, url);
 
   // Authenticated account and session management.
   if (url.pathname === "/api/auth/sessions" && request.method === "GET") return sessionInfo(request, env);
