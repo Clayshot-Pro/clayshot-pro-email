@@ -19,7 +19,8 @@ const reader = readFileSync(new URL("../src/client/components/MessageReader.tsx"
 const css = readFileSync(new URL("../src/client/ui-overrides.css", import.meta.url), "utf8");
 const dialog = readFileSync(new URL("../src/client/components/DeleteConfirmationDialog.tsx", import.meta.url), "utf8");
 assert.match(app, /toggleVisibleSelection\(current, ids\)/);
-assert.match(app, /for \(const batch of chunkBulkMessageIds\(requestedIds\)\)/);
+// Every selected ID is batched (≤50 per call), per owning account in All inboxes.
+assert.match(app, /groupByAccount\(requestedIds, ownerOf\)\]\s*\.flatMap\(\(\[accountId, ids\]\) => chunkBulkMessageIds\(ids\)/);
 assert.match(app, /body: JSON.stringify\(\{ ids: batch, action \}\)/);
 assert.ok(app.includes("setSelectedMailIds([]);"), "Clear selected IDs after deletion");
 assert.equal(app.includes("setSelectedMailIds(failed.map"), false);

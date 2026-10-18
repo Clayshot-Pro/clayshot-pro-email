@@ -2,6 +2,7 @@ import type { ConnectedAccount, Folder, FolderDefinition, NotificationState } fr
 import { notificationLabel } from "../mailUtils";
 import { Icon } from "./Icon";
 import { useInstance } from "../instance";
+import { ALL_INBOXES_ID } from "../allInboxes";
 
 type Props = {
   folders: FolderDefinition[];
@@ -12,6 +13,7 @@ type Props = {
   notificationsDisabled: boolean;
   accounts: ConnectedAccount[];
   activeAccountId: string;
+  showAllInboxes: boolean;
   connectingGmail: boolean;
   onAccountChange: (id: string) => void;
   onAddInbox: () => void;
@@ -30,6 +32,7 @@ export function Sidebar({
   notificationsDisabled,
   accounts,
   activeAccountId,
+  showAllInboxes,
   connectingGmail,
   onAccountChange,
   onAddInbox,
@@ -52,6 +55,21 @@ export function Sidebar({
       <div className="account-switcher">
         <div className="nav-label">Accounts</div>
         <div className="desktop-account-list" role="list" aria-label="Mail accounts">
+          {showAllInboxes ? (
+            <button
+              className={`desktop-account-option ${activeAccountId === ALL_INBOXES_ID ? "active" : ""}`}
+              type="button"
+              onClick={() => onAccountChange(ALL_INBOXES_ID)}
+              aria-pressed={activeAccountId === ALL_INBOXES_ID}
+            >
+              <span className="desktop-account-fallback"><Icon name="inbox" size={13}/></span>
+              <span className="desktop-account-copy">
+                <strong>All inboxes</strong>
+                <small>Every account on this device</small>
+              </span>
+              {activeAccountId === ALL_INBOXES_ID ? <span className="desktop-account-check">✓</span> : null}
+            </button>
+          ) : null}
           {accounts.map((account) => (
             <button
               key={account.id}

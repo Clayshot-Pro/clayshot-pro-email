@@ -179,6 +179,8 @@ All from the admin panel, stored in D1:
 
 Users get **Settings → Appearance** for anything you leave unlocked.
 
+With two or more accounts signed in on a device, the account switcher offers **All inboxes**: every account's mail in one list, newest first, each row labelled with its account. Every folder works there, and opening, archiving, deleting, bulk actions and replies always act on the message's own account.
+
 ## Optional integrations
 
 **Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Enter the client ID and secret in **Admin → Keys** (`PROVIDER_CREDENTIAL_KEY` must be set), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.

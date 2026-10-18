@@ -1,7 +1,8 @@
 /*
- * Layout fixes made after v2.08. Loaded last. verify-css-equivalence proves
- * the theme tokens left the v2.08 render unchanged, so deliberate changes to
- * that render go here instead of into the original stylesheets.
+ * Layout fixes and new styles added after v2.08. Loaded last.
+ * verify-css-equivalence proves the theme tokens left the v2.08 render
+ * unchanged, so deliberate changes to that render go here instead of into
+ * the original stylesheets.
  */
 
 /* Settings: the scroll area fills the space under the header instead of a
@@ -20,4 +21,22 @@
   max-height: none;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+/* All inboxes: the account a merged message belongs to. */
+.mail-row-account {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  margin-left: auto;
+  padding: 1px 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
