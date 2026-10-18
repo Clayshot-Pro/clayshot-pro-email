@@ -57,7 +57,7 @@ async function run(keys) {
 
   assert.equal(validKeyValue("RESEND_API_KEY", resend), true);
   assert.equal(validKeyValue("RESEND_API_KEY", "sk_wrong"), false);
-  assert.equal(validKeyValue("RESEND_WEBHOOK_SECRET", "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"), true);
+  assert.equal(validKeyValue("RESEND_WEBHOOK_SECRET", `whsec_${randomBytes(24).toString("base64")}`), true);
   assert.equal(validKeyValue("GOOGLE_CLIENT_ID", "123-abc.apps.googleusercontent.com"), true);
   assert.equal(validKeyValue("GOOGLE_CLIENT_SECRET", "has space"), false);
   assert.equal(validKeyValue("CF_EMAIL_SENDING_TOKEN", "short"), false);
