@@ -19,7 +19,9 @@ const offenders = [];
 for (const path of targets) {
   const text = readFileSync(path, "utf8");
   text.split(/\r?\n/).forEach((line, index) => {
-    if (FORBIDDEN.some(pattern => pattern.test(line))) offenders.push(`${path.slice(root.length)}:${index + 1}: ${line.trim().slice(0, 120)}`);
+    // The licence-required attribution link is the one permitted reference.
+    const checked = line.replace("https://github.com/LiamTheMo/LTM-Email-Service", "");
+    if (FORBIDDEN.some(pattern => pattern.test(checked))) offenders.push(`${path.slice(root.length)}:${index + 1}: ${line.trim().slice(0, 120)}`);
   });
 }
 assert.deepEqual(offenders, [], `Hard-coded instance identity found:\n${offenders.join("\n")}`);

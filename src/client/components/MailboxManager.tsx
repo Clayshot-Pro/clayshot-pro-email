@@ -12,6 +12,7 @@ type Mailbox = {
   deleted_at: string | null;
   purge_after: string | null;
   spam_filter_enabled: number;
+  accent_color?: string | null;
 };
 
 async function api(path: string, method = "GET", body?: unknown, approval?: AdminApproval): Promise<Record<string, unknown>> {
@@ -39,6 +40,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   const [editName, setEditName] = useState("");
   const [quotaGB, setQuotaGB] = useState("5");
   const [spamEnabled, setSpamEnabled] = useState(false);
+  const [accentColor, setAccentColor] = useState<string | null>(null);
   const [passwordFor, setPasswordFor] = useState<string | null>(null);
   const [customPassword, setCustomPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -79,6 +81,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
     setEditName(box.display_name);
     setQuotaGB(String(box.quota_bytes / 1073741824));
     setSpamEnabled(box.spam_filter_enabled === 1);
+    setAccentColor(box.accent_color ?? null);
   }
 
   async function create(event: FormEvent<HTMLFormElement>) {
@@ -174,6 +177,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
     await run(box.id, async () => {
       await api(`/api/mailboxes/${encodeURIComponent(box.id)}`, "PATCH", {
         displayName: editName, quotaBytes: Math.round(value * 1073741824), spamFilterEnabled: spamEnabled,
+        accentColor,
       });
       setEditing(null);
     }, "Mailbox settings saved.");
@@ -290,6 +294,8 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
                     <label>Display name <input value={editName} maxLength={80} onChange={e => setEditName(e.target.value)} /></label>
                     <label>Quota in GB <input type="number" min="0.01" max="10" step="0.01" value={quotaGB} onChange={e => setQuotaGB(e.target.value)} /></label>
                     <label><input type="checkbox" checked={spamEnabled} onChange={e => setSpamEnabled(e.target.checked)} /> Move high-confidence suspected spam to Junk (experimental)</label>
+                    <label>Mailbox colour <input type="color" value={accentColor ?? "#ff7a2f"} onChange={e => setAccentColor(e.target.value)} />
+                      {accentColor ? <button type="button" onClick={() => setAccentColor(null)}>No colour</button> : null}</label>
                     <div className="settings-row-actions">
                       <button type="button" disabled={busy !== null} onClick={() => void save(box)}>Save</button>
                       <button type="button" disabled={busy !== null} onClick={() => setEditing(null)}>Cancel</button>

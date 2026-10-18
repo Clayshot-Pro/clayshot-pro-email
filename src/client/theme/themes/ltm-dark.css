@@ -1115,3 +1115,14 @@
   --tone-warning-396: var(--p-amber-396);
   --tone-warning-467: var(--p-amber-467);
 }
+
+/* v3.04 — Fixed previews of every preset for the Appearance picker. Defined on
+   :root only (never overridden by a preset) so each swatch always shows its
+   own theme regardless of the active one. */
+:root {
+  --swatch-ltm-dark: linear-gradient(135deg, #0d0c0b 55%, #ff7a2f 55%);
+  --swatch-ltm-ember: linear-gradient(135deg, #141110 55%, #f8a92f 55%);
+  --swatch-light: linear-gradient(135deg, #f5f5f7 55%, #2b55e6 55%);
+  --swatch-graphite: linear-gradient(135deg, #18191b 55%, #9ab8ff 55%);
+  --swatch-high-contrast: linear-gradient(135deg, #000000 55%, #ffd400 55%);
+}

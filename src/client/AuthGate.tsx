@@ -3,7 +3,8 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AccountSignIn } from "./AccountSignIn";
 import { unlockOwnerPasskey } from "./adminPasskey";
-import { useInstance } from "./instance";
+import { instanceIconUrl, useInstance } from "./instance";
+import { PoweredBy } from "./components/PoweredBy";
 
 type AuthStatus = { configured: boolean; authenticated: boolean; setupAvailable: boolean; adminPasswordConfigured:boolean };
 type DeviceStatus = { authenticated: boolean; isAdmin: boolean; accountCount: number };
@@ -76,7 +77,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <main className="auth-shell">
     <section className="auth-card" aria-labelledby="auth-title">
       <div className="auth-brand-row">
-        <img className="auth-logo" src="/apple-touch-icon.png" alt="" width="64" height="64" />
+        <img className="auth-logo" src={instanceIconUrl(instance, 180)} alt="" width="64" height="64" />
         <div className="auth-heading">
           <p className="auth-eyebrow">Private email</p>
           <h1 id="auth-title">{instance.brandName}</h1>
@@ -102,6 +103,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         ) : null}
       </>}
       {error && <p className="auth-error" role="alert">{error}</p>}
+      <PoweredBy />
     </section>
   </main>;
 }

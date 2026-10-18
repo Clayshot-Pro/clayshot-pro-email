@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useAppearance } from "../appearance";
 
 type IconName = "mail" | "inbox" | "junk" | "star" | "send" | "draft" | "archive" | "trash" | "search" | "compose" | "reply" | "forward" | "back" | "refresh" | "paperclip" | "bell" | "lock" | "more";
 
@@ -28,10 +29,47 @@ const paths: Record<IconName, ReactNode> = {
   more: <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></>,
 };
 
+/** Closed body shapes tinted by the duotone set (open strokes stay as lines). */
+const duotoneFill: Partial<Record<IconName, ReactNode>> = {
+  mail: <rect x="3.75" y="6.25" width="16.5" height="11.5" rx="2.15"/>,
+  inbox: <path d="M4 5.5h16l1.5 9.5v3.5A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5V15L4 5.5Z"/>,
+  junk: <path d="M8 3h8l5 5v8l-5 5H8l-5-5V8l5-5Z"/>,
+  star: <path d="m12 3 2.8 5.67 6.2.9-4.5 4.39 1.06 6.2L12 17.24l-5.56 2.92 1.06-6.2L3 9.57l6.2-.9L12 3Z"/>,
+  send: <path d="m21 3-7.2 18-3.3-7.5L3 10.2 21 3Z"/>,
+  draft: <path d="M5 3h10l4 4v14H5z"/>,
+  archive: <path d="M6 9v10h12V9z"/>,
+  trash: <path d="M7 7l1 14h8l1-14z"/>,
+  search: <circle cx="11" cy="11" r="6"/>,
+  bell: <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>,
+  lock: <rect x="5" y="10" width="14" height="11" rx="2"/>,
+};
+
+export const ICON_SET_LABELS = { ltm: "Outline", "ltm-bold": "Bold outline", duotone: "Duotone" } as const;
+
 export function Icon({ name, size = 18 }: IconProps) {
+  const { effective } = useAppearance();
+  const set = effective.iconSet;
+  const fill = set === "duotone" ? duotoneFill[name] : undefined;
   return (
-    <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={set === "ltm" ? "1.8" : "2.3"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {fill ? <g fill="currentColor" fillOpacity="0.22" stroke="none">{fill}</g> : null}
       {paths[name]}
     </svg>
+  );
+}
+
+/** Preview of a set for the Appearance picker, independent of the active set. */
+export function IconSetPreview({ set }: { set: keyof typeof ICON_SET_LABELS }) {
+  return (
+    <span className="icon-set-preview" aria-hidden="true">
+      {(["inbox", "star", "send", "trash"] as IconName[]).map(name => (
+        <svg key={name} className="icon" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth={set === "ltm" ? "1.8" : "2.3"} strokeLinecap="round" strokeLinejoin="round">
+          {set === "duotone" && duotoneFill[name] ? <g fill="currentColor" fillOpacity="0.22" stroke="none">{duotoneFill[name]}</g> : null}
+          {paths[name]}
+        </svg>
+      ))}
+    </span>
   );
 }

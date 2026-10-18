@@ -49,6 +49,15 @@
     } catch (e) { /* ignore */ }
   }
 
+  function ink(hex) {
+    function channel(offset) {
+      var value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+    }
+    var lum = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    return (lum + 0.05) / 0.05 >= 1.05 / (lum + 0.05) ? "#000000" : "#ffffff";
+  }
+
   function setOrRemove(root, name, value) {
     if (value === null) root.removeAttribute(name);
     else root.setAttribute(name, value);
@@ -64,9 +73,12 @@
       setOrRemove(root, "data-text-size", typeof a.textSize === "string" && TEXT_SIZES[a.textSize] ? a.textSize : null);
       if (typeof a.accent === "string" && /^#[0-9a-f]{6}$/i.test(a.accent)) {
         root.style.setProperty("--user-accent", a.accent);
+        // Black or white text, whichever reads better on the accent.
+        root.style.setProperty("--user-accent-ink", ink(a.accent));
         root.setAttribute("data-custom-accent", "");
       } else {
         root.style.removeProperty("--user-accent");
+        root.style.removeProperty("--user-accent-ink");
         root.removeAttribute("data-custom-accent");
       }
       watchSystem(a.theme === "system");

@@ -2,12 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { MailboxManager } from "./MailboxManager";
 import { DomainManager } from "./DomainManager";
 import { SuppressionManager } from "./SuppressionManager";
+import { BrandingManager } from "./BrandingManager";
+import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
-import { useInstance } from "../instance";
+import { instanceIconUrl, useInstance } from "../instance";
 
 export function AdminPanel() {
-  const { brandName } = useInstance();
+  const instance = useInstance();
+  const { brandName } = instance;
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -140,7 +143,7 @@ export function AdminPanel() {
       <div className="admin-home-card">
         <header className="admin-home-header">
           <div className="admin-home-identity">
-            <img src="/apple-touch-icon.png" alt="" className="admin-home-logo" width={48} height={48} />
+            <img src={instanceIconUrl(instance, 180)} alt="" className="admin-home-logo" width={48} height={48} />
             <div>
               <p className="admin-section-kicker">{brandName} / Administrator</p>
               <h1>Email administration</h1>
@@ -159,6 +162,7 @@ export function AdminPanel() {
           {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
           {configured && <a href="#admin-suppressions">Deliverability</a>}
+          {configured && <a href="#admin-branding">Branding</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
         </nav>
@@ -173,6 +177,7 @@ export function AdminPanel() {
         {configured && <DomainManager onChanged={() => setDomainVersion(version => version + 1)} />}
         {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
         {configured && <SuppressionManager />}
+        {configured && <BrandingManager />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}
         {configured === null && (
@@ -185,6 +190,7 @@ export function AdminPanel() {
           <span>Administrator access requires your password and passkey.</span>
           <a href="#admin-top">Back to top ↑</a>
         </footer>
+        <PoweredBy />
       </div>
     </main>
   );

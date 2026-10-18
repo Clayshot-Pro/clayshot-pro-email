@@ -1,6 +1,6 @@
 import { appConfig, publicInstanceInfo } from "./appConfig";
 import { brandNames, instanceSettings } from "./branding";
-import { THEME_SURFACES } from "./customization";
+import { THEME_BACKGROUNDS } from "./customization";
 
 /** Branding the shell, manifest and public instance endpoint render. */
 export type InstanceBranding = {
@@ -19,7 +19,7 @@ export async function instanceBranding(env: Env): Promise<InstanceBranding> {
     name: names.name,
     shortName: names.shortName,
     // The default dark theme keeps the historical status-bar colour.
-    themeColor: settings.defaultTheme === "ltm-dark" ? DEFAULT_THEME_COLOR : THEME_SURFACES[settings.defaultTheme],
+    themeColor: THEME_BACKGROUNDS[settings.defaultTheme] ?? DEFAULT_THEME_COLOR,
     iconVersion: settings.logoVersion,
   };
 }

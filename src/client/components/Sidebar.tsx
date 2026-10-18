@@ -64,7 +64,7 @@ export function Sidebar({
                 ? <img src={account.avatarUrl} alt=""/>
                 : <span className="desktop-account-fallback"><Icon name="mail" size={13}/></span>}
               <span className="desktop-account-copy">
-                <strong>{account.displayName || account.emailAddress}</strong>
+                <strong>{account.accentColor ? <i className="account-color-dot" style={{ background: account.accentColor }} aria-hidden="true" /> : null}{account.displayName || account.emailAddress}</strong>
                 <small>{account.provider === "gmail" ? "Gmail" : "Custom"} · {account.emailAddress}</small>
               </span>
               {account.id === activeAccountId ? <span className="desktop-account-check">✓</span> : null}

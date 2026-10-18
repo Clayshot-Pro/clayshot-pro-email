@@ -1,6 +1,7 @@
 import type { ConnectedAccount, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
+import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
 
 type Props = {
   open: boolean;
@@ -103,6 +104,8 @@ export function SettingsModal(props: Props) {
             </button>
           </section>
 
+          <AppearanceSettings />
+
           <section className="settings-section">
             <h3>Notifications</h3>
             <div className="settings-row">
@@ -175,6 +178,8 @@ export function SettingsModal(props: Props) {
               </button>
             </div>
           </section>
+
+          <AboutSettings />
         </div>
       </section>
     </div>

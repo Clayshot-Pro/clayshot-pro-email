@@ -3,10 +3,10 @@
  * appearance preferences. D1 and R2 access lives in branding.ts.
  */
 export const THEMES = ["ltm-dark", "ltm-ember", "light", "graphite", "high-contrast"] as const;
-export const ICON_SETS = ["ltm", "ltm-bold", "filled"] as const;
+export const ICON_SETS = ["ltm", "ltm-bold", "duotone"] as const;
 export const DENSITIES = ["compact", "comfortable", "spacious"] as const;
 export const TEXT_SIZES = ["sm", "md", "lg", "xl"] as const;
-export const ACCENT_SWATCHES = ["#b6a2c9", "#ff8a3d", "#5b8def", "#3fb67b", "#e5a50a", "#e06c75", "#2bb3c0", "#9aa0a6"] as const;
+export const ACCENT_SWATCHES = ["#ff8a3d", "#b6a2c9", "#5b8def", "#3fb67b", "#e5a50a", "#e06c75", "#2bb3c0", "#9aa0a6", "#2f5dff", "#1f7a4d", "#b3261e", "#6d3fd1"] as const;
 
 export type ThemeId = typeof THEMES[number];
 export type IconSetId = typeof ICON_SETS[number];
@@ -16,10 +16,19 @@ export type ThemeChoice = ThemeId | "system";
 
 /** Surface colour of each theme, used to keep custom accents visible (WCAG 1.4.11, 3:1). */
 export const THEME_SURFACES: Record<ThemeId, string> = {
-  "ltm-dark": "#202531",
-  "ltm-ember": "#0d0c0b",
+  "ltm-dark": "#12100f",
+  "ltm-ember": "#141110",
   light: "#ffffff",
-  graphite: "#1c1d20",
+  graphite: "#18191b",
+  "high-contrast": "#0a0a0a",
+};
+
+/** --color-bg of each theme, used for the PWA/status-bar theme colour. */
+export const THEME_BACKGROUNDS: Record<ThemeId, string> = {
+  "ltm-dark": "#0d0c0b",
+  "ltm-ember": "#0d0c0b",
+  light: "#f5f5f7",
+  graphite: "#121314",
   "high-contrast": "#000000",
 };
 
