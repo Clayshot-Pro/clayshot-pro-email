@@ -82,6 +82,19 @@ scripts/                    build/asset and deployment helper scripts
 .github/workflows/          version-branch validation and security scanning
 ```
 
+## Planned: v3 — self-hosting, multi-domain, customization
+
+A documentation-only roadmap for the next major version. Nothing in it is implemented, and the current license stays in force until the v3.00 release.
+
+- **v3.00 Config unification:** one `.env` file as the source of truth, rendered Wrangler config, scripted Worker-secret upload, no hard-coded instance identity
+- **v3.01 Multi-domain:** native mailboxes on several domains under one global administrator
+- **v3.02 Outbound transports:** Cloudflare stays the default; Resend opt-in per domain with signed delivery webhooks
+- **v3.03 Theme foundation:** CSS colour tokenization with no visible change
+- **v3.04 Customization:** admin-locked branding, user themes, icon sets, per-mailbox accents
+- **Licensing:** others may run their own instance, including commercially, with credit given; redistribution stays prohibited
+
+[Roadmap and decisions](./docs/v3/README.md) · [Self-hosting guide (target state)](./docs/v3/SELF_HOSTING.md) · [Licensing change](./docs/v3/LICENSING.md)
+
 ## v2.07: Repository security optimization and audit
 
 This release closes cross-mailbox authorization gaps in sending and draft creation, restricts Gmail contact-avatar reads to an authenticated device, preserves attachment security policies, rate-limits OAuth initiation, and adds dependency security checks. See [security findings, remediations, and remaining production tasks](./docs/SECURITY_AUDIT_v2.07.md).
