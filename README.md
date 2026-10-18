@@ -94,10 +94,9 @@ Every later merge to `main` deploys automatically; nothing else needs to be set 
 Use this instead of Workers Builds, not alongside it (otherwise each merge deploys twice). `.github/workflows/deploy.yml` builds, applies migrations and deploys on every push to `main`; it never runs for other branches.
 
 1. Create the D1 database and R2 bucket as in Option A step 1, and a Worker named `ltm-email-service` (or set `WORKER_NAME`). If the Worker is connected to Git under **Settings → Build**, disconnect it.
-2. In GitHub: **Settings → Environments → New environment** `production`. Under **Deployment branches and tags**, choose **Selected branches** and add `main`.
-3. In that environment, add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-4. Push or merge to `main`, or run **Actions → Deploy production → Run workflow** on `main`.
-5. Continue with Option A steps 5 and 6. Runtime secrets still go in the Worker's **Variables & Secrets**, never in GitHub.
+2. In GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+3. Push or merge to `main`, or run **Actions → Deploy production → Run workflow** on `main`.
+4. Continue with Option A steps 5 and 6. Runtime secrets still go in the Worker's **Variables & Secrets**, never in GitHub.
 
 ### Option B — deploy from your computer (`.env`)
 
