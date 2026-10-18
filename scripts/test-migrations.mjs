@@ -52,21 +52,10 @@ if (migrations.includes("0017_outbound_transports.sql")) {
 if (migrations.includes("0019_instance_in_d1.sql")) {
   assert.ok(columns("domains").includes("theme"));
   assert.ok(columns("native_mailboxes").includes("sender_name"));
-  // A fresh install has the 0010 placeholder primary but no owner passkey:
-  // the one-time LTM carry-over must not apply to it.
+  // No instance-specific data is seeded by migrations.
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM instance_settings").get().n, 0);
   assert.equal(db.prepare("SELECT sender_name FROM native_mailboxes WHERE id = 'native:primary'").get().sender_name, null);
-  // On an established install it carries the old Worker-var identity into D1.
-  const upgraded = new DatabaseSync(":memory:");
-  for (const name of migrations) {
-    if (name === "0019_instance_in_d1.sql") {
-      upgraded.exec("INSERT INTO auth_credentials (id, public_key, counter) VALUES ('cred', x'00', 0)");
-      upgraded.exec("UPDATE native_mailboxes SET email_address = 'contact@liamthemo.com' WHERE id = 'native:primary'");
-    }
-    upgraded.exec(readFileSync(new URL(name, dir), "utf8"));
-  }
-  assert.equal(upgraded.prepare("SELECT sender_name FROM native_mailboxes WHERE id = 'native:primary'").get().sender_name, "Liam");
-  assert.match(upgraded.prepare("SELECT settings FROM instance_settings WHERE id = 1").get().settings, /"brandName":"LTM Mails"/);
+  assert.doesNotMatch(readFileSync(new URL("0019_instance_in_d1.sql", dir), "utf8"), /liamthemo|LTM Mails/i);
 }
 if (migrations.includes("0018_customization.sql")) {
   assert.ok(columns("native_mailboxes").includes("accent_color"));

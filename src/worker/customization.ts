@@ -240,7 +240,9 @@ export function updateSettings(current: InstanceSettings, input: unknown): Resul
  * Validate a user's appearance update against the lock. Locked fields are
  * rejected (403) rather than silently ignored, so the server is the boundary.
  */
-export function updatePreferences(current: Preferences, input: unknown, settings: InstanceSettings): Result<Preferences> {
+export function updatePreferences(
+  current: Preferences, input: unknown, settings: InstanceSettings, domainTheme: ThemeId | null = null,
+): Result<Preferences> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "Invalid preferences", status: 400 };
   const body = input as Record<string, unknown>;
   const { lock } = settings;
@@ -267,7 +269,7 @@ export function updatePreferences(current: Preferences, input: unknown, settings
     else {
       const accent = normalizeHex(body.accent);
       if (!accent) return { ok: false, error: "Accent must be a #rrggbb colour", status: 400 };
-      const theme = next.theme && next.theme !== "system" ? next.theme : settings.defaultTheme;
+      const theme = !lock.theme && next.theme && next.theme !== "system" ? next.theme : domainTheme ?? settings.defaultTheme;
       const problem = accentProblem(accent, theme);
       if (problem) return { ok: false, error: problem, status: 400 };
       next.accent = accent;

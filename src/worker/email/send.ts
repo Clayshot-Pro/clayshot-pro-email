@@ -1,5 +1,7 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
+import { textToHtml } from "./textHtml";
+import { fitsCloudflareApi } from "../transports/cloudflareApi";
 import { transportChoice } from "../transports";
 import { SAFE_DELIVERY_CODES, TransportError } from "../transports/types";
 
@@ -46,18 +48,6 @@ function splitRecipients(value: FormDataEntryValue | null): string[] {
   ];
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function textToHtml(value: string): string {
-  return `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(value).replace(/\n/g, "<br>")}</div>`;
-}
 
 function preview(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 240);
@@ -177,12 +167,14 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     );
   }
 
+  let nativeTransport: "cloudflare" | "resend" | null = null;
   // D1 resolves the authenticated, active mailbox (never a client-supplied
   // From). It needs an active domain and an available transport: the
   // Cloudflare Email Sending API by default, or Resend where switched on.
   if (provider.kind === "native") {
     const choice = await transportChoice(env, provider.accountId, provider.address);
     if (choice.kind === "unavailable") return Response.json({ error: choice.reason }, { status: 403 });
+    nativeTransport = choice.kind;
   }
   const to = splitRecipients(form.get("to"));
   const cc = splitRecipients(form.get("cc"));
@@ -295,6 +287,16 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     return Response.json(
       { error: "Attachments must total less than 4 MB" },
       { status: 400 },
+    );
+  }
+  // The Cloudflare Email Sending API caps a message at 5 MiB after base64
+  // encoding; reject before reserving quota rather than failing in transport.
+  if (nativeTransport === "cloudflare" && !fitsCloudflareApi(
+    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0), text.length + subject.length,
+  )) {
+    return Response.json(
+      { error: "Attachments are too large for Cloudflare Email Sending (5 MB per message after encoding, about 3.7 MB of files)" },
+      { status: 413 },
     );
   }
   if (!subject) subject = "(no subject)";

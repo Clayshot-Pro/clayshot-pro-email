@@ -24,7 +24,9 @@ for (const domainStatus of ["pending", "disabled", null]) {
 const registry = readFileSync(new URL("../src/worker/providers/registry.ts", import.meta.url), "utf8");
 const send = readFileSync(new URL("../src/worker/email/send.ts", import.meta.url), "utf8");
 const native = readFileSync(new URL("../src/worker/providers/native.ts", import.meta.url), "utf8");
-assert.match(registry, /transportChoice\(env, box\.id, box\.email_address\)/);
+assert.match(registry, /sendableMailboxes\(env, active\)/);
+const transports = readFileSync(new URL("../src/worker/transports/index.ts", import.meta.url), "utf8");
+assert.match(transports, /export async function sendableMailboxes[\s\S]*selectTransport\(/, "the account list uses the same selection");
 assert.match(send, /transportChoice\(env, provider\.accountId, provider\.address\)/);
 assert.match(native, /transportChoice\(this\.env, this\.accountId, this\.address\)/);
 assert.doesNotMatch(native, /env\.EMAIL\b|EMAIL_MULTI|EMAIL_DYNAMIC|MULTI_SENDER/, "no send bindings or policy gate remain");

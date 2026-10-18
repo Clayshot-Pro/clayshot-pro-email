@@ -1,5 +1,5 @@
 import { appConfig } from "../appConfig";
-import { checkAuthRateLimit } from "../security";
+import { authRateLimitBucket, checkAuthRateLimit } from "../security";
 import { eventEffect, shouldReplaceStatus, suppressionTargets, verifySvix, type ResendEvent } from "./resendEvents";
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -7,7 +7,6 @@ const reply = (body: Record<string, unknown>, status = 200) => Response.json(bod
 
 /** POST /api/webhooks/resend: server-to-server, authenticated by Svix signature only. */
 export async function resendWebhook(request: Request, env: Env): Promise<Response> {
-  if (!(await checkAuthRateLimit(env, "webhook:resend"))) return reply({ error: "Too many requests" }, 429);
   const secret = env.RESEND_WEBHOOK_SECRET?.trim();
   if (!secret || !appConfig(env).features.resendWebhook) return reply({ error: "Unauthorized" }, 401);
   const length = Number(request.headers.get("Content-Length") ?? 0);
@@ -20,7 +19,12 @@ export async function resendWebhook(request: Request, env: Env): Promise<Respons
     timestamp: request.headers.get("svix-timestamp"),
     signature: request.headers.get("svix-signature"),
   };
-  if (!(await verifySvix(secret, headers, body, Math.floor(Date.now() / 1000)))) return reply({ error: "Unauthorized" }, 401);
+  // Verified events are never throttled (Resend sends several per message);
+  // failed verifications are limited per source IP so they cannot starve them.
+  if (!(await verifySvix(secret, headers, body, Math.floor(Date.now() / 1000)))) {
+    const allowed = await checkAuthRateLimit(env, authRateLimitBucket(request, "webhook:resend:invalid"));
+    return allowed ? reply({ error: "Unauthorized" }, 401) : reply({ error: "Too many requests" }, 429);
+  }
 
   // Replays of an already-processed event are acknowledged and ignored.
   const claimed = await env.DB.prepare("INSERT OR IGNORE INTO webhook_receipts (provider, event_id) VALUES ('resend', ?1)")

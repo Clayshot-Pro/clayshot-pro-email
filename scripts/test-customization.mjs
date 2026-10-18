@@ -85,6 +85,10 @@ assert.equal(effectiveAppearance(DEFAULT_SETTINGS, { theme: "light" }, "graphite
 const themeLocked = { ...DEFAULT_SETTINGS, lock: { ...DEFAULT_SETTINGS.lock, theme: true } };
 assert.equal(effectiveAppearance(themeLocked, { theme: "light" }, "graphite").theme, "graphite", "with the theme locked, the domain theme applies");
 assert.equal(effectiveAppearance(themeLocked, { theme: "light" }, "ltm-ember").theme, "ltm-ember", "switching mailbox switches theme");
+// Accent contrast is checked against the theme the mailbox actually shows.
+assert.equal(updatePreferences({}, { accent: "#e5a50a" }, DEFAULT_SETTINGS, "light").status, 400, "pale accent refused on a light domain");
+assert.ok(updatePreferences({}, { accent: "#e5a50a" }, DEFAULT_SETTINGS).ok, "the same accent is fine on the dark default");
+assert.ok(updatePreferences({}, { accent: "#2f5dff" }, DEFAULT_SETTINGS, "light").ok);
 
 // PNG checks without decoding.
 const png = new Uint8Array(33);
@@ -97,7 +101,7 @@ assert.equal(pngDimensions(png.slice(0, 20)), null);
 
 // Wiring: lock enforcement and attribution cannot be configured away.
 const branding = readFileSync(new URL("../src/worker/branding.ts", import.meta.url), "utf8");
-assert.match(branding, /updatePreferences\(current, input, settings\)/);
+assert.match(branding, /updatePreferences\(current, input, settings, domainTheme\)/);
 assert.match(branding, /deviceAuthorized\(request, env, accountId\)/, "preferences are scoped to an account signed in on this device");
 const credit = readFileSync(new URL("../src/client/components/PoweredBy.tsx", import.meta.url), "utf8");
 assert.match(credit, /Powered by/);

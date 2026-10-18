@@ -29,7 +29,8 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 - `npm run typecheck`, `npm run build` and `npm test` pass on `v3.05` (29 Node test scripts, including all v2.08 regressions).
 - Default theme is declaration-for-declaration identical to v2.08 (3745 declarations); every preset covers v2.08's new dialogs.
-- Migrations 0001–0019 apply cleanly (node:sqlite), and the LTM carry-over in 0019 only applies to an established install.
+- Migrations 0001–0019 apply cleanly (node:sqlite) and seed no instance-specific data.
+- Review fixes: passkey registration requires first-run setup; Resend webhooks only throttle failed signatures (per IP); oversized Cloudflare messages are refused before quota is reserved; accents are checked against the mailbox's domain theme; the primary domain is cached per isolate and the account list uses one domains query.
 
 ## Not verified (needs a real account or devices)
 
@@ -42,6 +43,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 1. Back up D1 and R2 and test a restore.
 2. Workers Builds keeps `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; no other build variables are needed. Remove any instance build variables added earlier.
-3. Worker secrets: keep `CF_EMAIL_SENDING_TOKEN` (from v2.08) and the existing Gmail/VAPID secrets. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (it is now a rendered var). `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `PRIMARY_ADDRESS` are no longer read; if you used `FORWARD_TO` or purge, re-enter them in **Admin → Mail settings**.
-4. Migrations 0016–0019 are additive and apply during the deploy. 0019 sets the app name to "LTM Mails" and the primary sender name to "Liam" (only on this instance).
-5. After deploy: Domains shows `liamthemo.com` as primary and active; `admin@liamthemo.com` and `admin@email.liamthemo.com` both sign in; passkeys, Gmail, push, inbound and a send from `contact@` work.
+3. Worker secrets: **`CF_EMAIL_SENDING_TOKEN` is required before deploying** — there is no binding fallback any more, so if production relied on `EMAIL_DYNAMIC` without a token, create an account token with Email Sending permission and push it first. Keep the existing Gmail/VAPID secrets. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (it is now a rendered var). `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `PRIMARY_ADDRESS` are no longer read; if you used `FORWARD_TO` or purge, re-enter them in **Admin → Mail settings**.
+4. Migrations 0016–0019 are additive and apply during the deploy. They seed no instance data.
+5. Right after deploy, in the admin panel: **Branding → App name** `LTM Mails`, and **Mailboxes → contact@ → Sender name** `Liam` (otherwise outgoing mail shows the display name `LTM Email`).
+6. Then check: Domains shows `liamthemo.com` as primary and active; `admin@liamthemo.com` and `admin@email.liamthemo.com` both sign in; passkeys, Gmail, push, inbound and a send from `contact@` work.

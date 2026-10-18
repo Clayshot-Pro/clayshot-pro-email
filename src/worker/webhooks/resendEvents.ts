@@ -2,6 +2,8 @@
  * Pure Resend webhook helpers: Svix signature verification and event
  * interpretation. Network and D1 work lives in resend.ts.
  */
+import { constantTimeEqual } from "../constantTime.ts";
+
 export const MAX_TIMESTAMP_SKEW_SECONDS = 5 * 60;
 
 function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
@@ -9,12 +11,6 @@ function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let index = 0; index < a.length; index++) diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  return diff === 0;
-}
 
 export type SvixHeaders = { id: string | null; timestamp: string | null; signature: string | null };
 

@@ -5,7 +5,7 @@ const source = (path) => readFileSync(new URL("../" + path, import.meta.url), "u
 assert.doesNotMatch(source("wrangler.template.jsonc"), /send_email/);
 const registry = source("src/worker/providers/registry.ts");
 assert.match(registry, /sendEnabled: sendable\[index\]/);
-assert.match(registry, /transportChoice\(env, box\.id, box\.email_address\)/);
+assert.match(registry, /sendableMailboxes\(env, active\)/, "one domains query for the whole account list");
 assert.doesNotMatch(registry, /sendEnabled:.*nativeSendTransportReady/);
 const send = source("src/worker/email/send.ts");
 assert.doesNotMatch(send, /!nativeSendTransportReady\(/);

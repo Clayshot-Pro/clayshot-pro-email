@@ -1,6 +1,7 @@
 import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
 import { transportChoice, transportFor } from "../transports";
 import { TransportError } from "../transports/types";
+import { textToHtml } from "../email/textHtml";
 
 type NativeMessageRow = {
   id: string;
@@ -140,7 +141,7 @@ export class NativeMailProvider implements MailProvider {
       bcc: input.bcc,
       subject: input.subject,
       text: input.text,
-      html: `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${input.text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replace(/\n/g, "<br>")}</div>`,
+      html: textToHtml(input.text),
       headers: input.headers,
       attachments: input.attachments,
       idempotencyKey: input.idempotencyKey,

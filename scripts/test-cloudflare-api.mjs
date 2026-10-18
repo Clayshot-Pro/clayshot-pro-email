@@ -1,7 +1,7 @@
 // Cloudflare Email Sending API transport (all Cloudflare sending goes through it).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CloudflareApiTransport, cloudflareApiPayload, mapCloudflareApiError, MAX_API_MESSAGE_BYTES } from "../src/worker/transports/cloudflareApi.ts";
+import { CloudflareApiTransport, cloudflareApiPayload, fitsCloudflareApi, mapCloudflareApiError, MAX_API_MESSAGE_BYTES } from "../src/worker/transports/cloudflareApi.ts";
 import { SAFE_DELIVERY_CODES } from "../src/worker/transports/types.ts";
 
 const accountId = "a".repeat(32);
@@ -50,6 +50,15 @@ for (const code of [10001, 10004, 10101, 10102, 10103, 10105, 10200, 10203, 1, "
   assert.ok(SAFE_DELIVERY_CODES.has(mapCloudflareApiError(code)), String(code));
 }
 assert.equal(cloudflareApiPayload({ ...message, headers: undefined }).headers, undefined);
+
+// The send handler rejects oversized Cloudflare messages before reserving quota.
+assert.equal(fitsCloudflareApi(3_500_000, 2_000), true);
+assert.equal(fitsCloudflareApi(3_950_000, 2_000), false, "under the 4 MB UI cap but over 5 MiB once base64-encoded");
+const huge2 = { ...message, attachments: [{ filename: "a", type: "x", content: new ArrayBuffer(3_950_000) }] };
+await assert.rejects(ok.send(huge2), error => error.code === "E_CONTENT_TOO_LARGE", "fitsCloudflareApi agrees with the transport");
+const send = readFileSync(new URL("../src/worker/email/send.ts", import.meta.url), "utf8");
+assert.ok(send.indexOf("fitsCloudflareApi(") > 0 && send.indexOf("fitsCloudflareApi(") < send.indexOf("UPDATE native_mailboxes SET used_bytes=used_bytes+?1"),
+  "size is checked before quota is reserved");
 
 // No send_email bindings remain; the account ID is the only rendered var.
 const template = readFileSync(new URL("../wrangler.template.jsonc", import.meta.url), "utf8");

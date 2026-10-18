@@ -1,4 +1,4 @@
-import { appConfig } from "../appConfig";
+import { appConfig, domainOf } from "../appConfig";
 import { sendingDomain } from "../domains";
 import { CloudflareApiTransport } from "./cloudflareApi";
 import { ResendTransport } from "./resend";
@@ -13,6 +13,23 @@ export async function transportChoice(env: Env, _mailboxId: string, address: str
     domainTransport: domain?.transport ?? null,
     emailApiConfigured: features.emailApi,
     resendConfigured: features.resend,
+  });
+}
+
+/** Send availability for many mailboxes with a single domains query. */
+export async function sendableMailboxes(env: Env, boxes: { email_address: string }[]): Promise<boolean[]> {
+  const { features } = appConfig(env);
+  const rows = await env.DB.prepare("SELECT domain, status, outbound_transport FROM domains")
+    .all<{ domain: string; status: "pending" | "active" | "disabled"; outbound_transport: "cloudflare" | "resend" | "none" }>();
+  const domains = new Map(rows.results.map(row => [row.domain.toLowerCase(), row]));
+  return boxes.map(box => {
+    const domain = domains.get(domainOf(box.email_address).toLowerCase());
+    return selectTransport({
+      domainStatus: domain?.status ?? null,
+      domainTransport: domain?.outbound_transport ?? null,
+      emailApiConfigured: features.emailApi,
+      resendConfigured: features.resend,
+    }).kind !== "unavailable";
   });
 }
 

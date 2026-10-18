@@ -54,5 +54,8 @@ assert.equal((router.match(/\/api\/webhooks\//g) ?? []).length, 1, "no other web
 const handler = readFileSync(new URL("../src/worker/webhooks/resend.ts", import.meta.url), "utf8");
 assert.match(handler, /INSERT OR IGNORE INTO webhook_receipts/, "replayed events are deduplicated");
 assert.ok(handler.indexOf("verifySvix(") < handler.indexOf("INSERT OR IGNORE INTO webhook_receipts"), "verify before any write");
+assert.ok(handler.indexOf("checkAuthRateLimit(") > handler.indexOf("verifySvix("),
+  "verified events are never throttled; only failed verifications are rate limited");
+assert.match(handler, /authRateLimitBucket\(request, "webhook:resend:invalid"\)/, "the limit is per source IP, not global");
 
 console.log("PASS: Resend webhook signatures, replay handling, event mapping and suppression targets");

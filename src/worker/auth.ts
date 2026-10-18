@@ -12,6 +12,8 @@ import type {
 } from "@simplewebauthn/server";
 import { adminLoginAddress, appOrigin, passkeyRpId } from "./config";
 import { brandNames, instanceSettings } from "./branding";
+import { secretMatches } from "./constantTime";
+import { isInitialized } from "./domains";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { OWNER_IDLE_TTL_SECONDS, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS, readOwnerSessionToken } from "./ownerSessionPolicy";
 
@@ -148,17 +150,10 @@ export async function isAuthenticated(request: Request, env: Env): Promise<boole
 
 async function setupAuthorized(request: Request, env: Env, supplied?: string): Promise<boolean> {
   if (await hasCredential(env)) return isAuthenticated(request, env);
-  if (!env.AUTH_SETUP_TOKEN || !supplied) return false;
-
-  const expected = new TextEncoder().encode(env.AUTH_SETUP_TOKEN);
-  const actual = new TextEncoder().encode(supplied);
-  if (expected.length !== actual.length) return false;
-
-  let diff = 0;
-  for (let index = 0; index < expected.length; index += 1) {
-    diff |= expected[index] ^ actual[index];
-  }
-  return diff === 0;
+  // A fresh install must choose its primary mailbox (POST /api/setup) before
+  // the owner passkey exists; otherwise the 0010 placeholder would be adopted.
+  if (!(await isInitialized(env))) return false;
+  return secretMatches(env.AUTH_SETUP_TOKEN, supplied);
 }
 
 async function saveChallenge(env: Env, ceremony: Ceremony, challenge: string, adminPendingHash: string | null = null): Promise<string> {

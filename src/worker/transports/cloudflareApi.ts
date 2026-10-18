@@ -1,4 +1,5 @@
 import { TransportError, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types.ts";
+import { toBase64 } from "./resend.ts";
 
 /** Cloudflare Email Service limits a message, attachments included, to 5 MiB. */
 export const MAX_API_MESSAGE_BYTES = 5 * 1024 * 1024;
@@ -22,11 +23,9 @@ type ApiResult = {
   result?: { delivered?: string[]; queued?: string[]; permanent_bounces?: string[] } | null;
 };
 
-function base64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let raw = "";
-  for (let offset = 0; offset < bytes.length; offset += 8192) raw += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-  return btoa(raw);
+/** Whether a message fits the API limit: base64 attachments, text and HTML bodies, JSON overhead. */
+export function fitsCloudflareApi(attachmentBytes: number, textChars: number): boolean {
+  return 4 * Math.ceil(attachmentBytes / 3) + 3 * textChars + 16 * 1024 <= MAX_API_MESSAGE_BYTES;
 }
 
 export function mapCloudflareApiError(code: unknown): string {
@@ -47,7 +46,7 @@ export function cloudflareApiPayload(message: OutboundMessage): Record<string, u
     html: message.html,
     headers: Object.keys(headers).length ? headers : undefined,
     attachments: message.attachments.map(item => ({
-      content: base64(item.content),
+      content: toBase64(item.content),
       filename: item.filename,
       type: item.type,
       disposition: "attachment" as const,

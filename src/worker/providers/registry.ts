@@ -2,7 +2,7 @@ import { gmailProvider } from "./gmailProvider";
 import { nativeProvider } from "./native";
 import { allNativeMailboxes, mailboxById, PRIMARY_MAILBOX_ID } from "../mailboxes";
 import type { MailProvider, MailProviderKind } from "./types";
-import { transportChoice } from "../transports";
+import { sendableMailboxes } from "../transports";
 import { accountColors } from "../branding";
 
 export type ConnectedAccount = {
@@ -63,8 +63,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
   const active = mailboxes.filter((box) => box.status === "active" && !box.deleted_at);
   // Same selection the send handler applies, so the UI never offers a sender
   // the server will refuse.
-  const sendable = await Promise.all(active.map(async (box) =>
-    (await transportChoice(env, box.id, box.email_address)).kind !== "unavailable"));
+  const sendable = await sendableMailboxes(env, active);
   const colors = await accountColors(env, [...active.map((box) => box.id), ...result.results.map((row) => row.id)]);
   return [
     ...active.map((box, index) => ({

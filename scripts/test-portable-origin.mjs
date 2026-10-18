@@ -60,4 +60,7 @@ assert.match(google,/redirect_uri: callbackUri\(request\)/);
 assert.doesNotMatch(google,/REDIRECT_URI|APP_ORIGIN/);
 assert.doesNotMatch(auth,/APP_ORIGIN|RP_ID/);
 assert.doesNotMatch(stepup,/APP_ORIGIN|RP_ID/);
+// A fresh install cannot register the owner passkey before choosing its primary mailbox.
+assert.match(auth, /if \(!\(await isInitialized\(env\)\)\) return false;/);
+assert.ok(auth.indexOf("isInitialized(env)") < auth.indexOf("secretMatches(env.AUTH_SETUP_TOKEN"));
 console.log("PASS: portable admin login, WebAuthn relying-party binding, CSRF and OAuth origin isolation");

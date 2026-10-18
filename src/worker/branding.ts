@@ -162,7 +162,7 @@ export async function savePreferences(request: Request, env: Env, url: URL): Pro
   if (accountId instanceof Response) return accountId;
   const input = await request.json().catch(() => null);
   const [settings, current, domainTheme] = await Promise.all([instanceSettings(env), preferencesFor(env, accountId), domainThemeFor(env, accountId)]);
-  const result = updatePreferences(current, input, settings);
+  const result = updatePreferences(current, input, settings, domainTheme);
   if (!result.ok) return jsonError(result.error, result.status);
   await env.DB.prepare(`INSERT INTO account_preferences (account_id, preferences, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
     ON CONFLICT(account_id) DO UPDATE SET preferences = excluded.preferences, updated_at = CURRENT_TIMESTAMP`)

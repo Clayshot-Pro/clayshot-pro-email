@@ -26,11 +26,21 @@ const jsonError = (error: string, status: number) => Response.json({ error }, { 
 const validTheme = (value: unknown): value is ThemeId =>
   typeof value === "string" && (THEMES as readonly string[]).includes(value);
 
-/** The primary mail domain, or null on a fresh install that has not run setup. */
-export async function primaryDomain(env: Env): Promise<string | null> {
+let cachedPrimary: { domain: string; at: number } | null = null;
+const PRIMARY_CACHE_MS = 60_000;
+
+/**
+ * The primary mail domain, or null on a fresh install that has not run setup.
+ * Read on every authenticated request (legacy admin alias), so a known value
+ * is cached per isolate; "uninitialized" is never cached.
+ */
+export async function primaryDomain(env: Env, fresh = false): Promise<string | null> {
+  if (!fresh && cachedPrimary && Date.now() - cachedPrimary.at < PRIMARY_CACHE_MS) return cachedPrimary.domain;
   const row = await env.DB.prepare("SELECT domain FROM domains WHERE is_primary = 1 LIMIT 1")
     .first<{ domain: string }>().catch(() => null);
-  return row?.domain.toLowerCase() ?? null;
+  const domain = row?.domain.toLowerCase() ?? null;
+  cachedPrimary = domain ? { domain, at: Date.now() } : null;
+  return domain;
 }
 
 /**
@@ -54,7 +64,7 @@ async function established(env: Env): Promise<boolean> {
 export async function ensureDomains(env: Env): Promise<void> {
   await env.DB.prepare(`UPDATE native_mailboxes SET domain = lower(substr(email_address, instr(email_address, '@') + 1))
     WHERE domain IS NULL OR domain != lower(substr(email_address, instr(email_address, '@') + 1))`).run();
-  if (await primaryDomain(env) || !(await established(env))) return;
+  if (await primaryDomain(env, true) || !(await established(env))) return;
   const box = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = ?1")
     .bind(PRIMARY_MAILBOX_ID).first<{ email_address: string }>();
   const domain = box?.email_address.slice(box.email_address.lastIndexOf("@") + 1).toLowerCase();
@@ -64,7 +74,7 @@ export async function ensureDomains(env: Env): Promise<void> {
 }
 
 export async function isInitialized(env: Env): Promise<boolean> {
-  return Boolean(await primaryDomain(env));
+  return Boolean(await primaryDomain(env, true));
 }
 
 /**
@@ -77,7 +87,7 @@ export async function initializeInstance(env: Env, address: string, displayName:
   if (!isValidAddress(normalized) || normalized.startsWith("admin@")) {
     return "Enter a valid address for the primary mailbox (admin@ is reserved)";
   }
-  if (await primaryDomain(env) || await established(env)) return "This instance is already set up";
+  if (await primaryDomain(env, true) || await established(env)) return "This instance is already set up";
   const domain = normalized.slice(normalized.indexOf("@") + 1);
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO native_mailboxes (id, email_address, display_name, domain) VALUES (?1, ?2, ?3, ?4)
@@ -87,6 +97,7 @@ export async function initializeInstance(env: Env, address: string, displayName:
     env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
       ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain),
   ]);
+  cachedPrimary = { domain, at: Date.now() };
   return null;
 }
 
