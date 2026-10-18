@@ -7,19 +7,19 @@
  */
 :root {
   --panel-2: var(--panel-raised);
-  --ui-cta: linear-gradient(180deg, #ff9847, #ff742b);
-  --ui-cta-hover: linear-gradient(180deg, #ffa253, #ff8034);
-  --ui-cta-border: #ff8a3d;
-  --ui-cta-ink: #1b0e07;
-  --ui-control: #1b1815;
-  --ui-control-hover: #241f1b;
-  --ui-field: #171412;
-  --ui-field-border: #302a25;
-  --ui-focus-border: #704328;
-  --ui-focus-ring: rgba(255, 122, 47, .12);
-  --ui-error-bg: #2a1714;
-  --ui-error-border: #60362f;
-  --ui-error-text: #e9988f;
+  --ui-cta: linear-gradient(180deg, var(--tone-accent-361), var(--tone-accent-416));
+  --ui-cta-hover: linear-gradient(180deg, var(--tone-accent-hover-337), var(--tone-accent-hover-398));
+  --ui-cta-border: var(--tone-accent-380);
+  --ui-cta-ink: var(--tone-text-on-accent-933);
+  --ui-control: var(--tone-surface-raised-906);
+  --ui-control-hover: var(--tone-surface-hover-876);
+  --ui-field: var(--tone-surface-sunken-920);
+  --ui-field-border: var(--tone-border-833);
+  --ui-focus-border: var(--tone-accent-strong-702);
+  --ui-focus-ring: var(--tone-accent-408-a12);
+  --ui-error-bg: var(--tone-danger-soft-878);
+  --ui-error-border: var(--tone-danger-border-720);
+  --ui-error-text: var(--tone-danger-263);
 }
 
 /* Primary call to action: same gradient and foreground as Compose / Send. */
@@ -33,7 +33,7 @@
   background: var(--ui-cta);
   color: var(--ui-cta-ink);
   font-weight: 750;
-  box-shadow: 0 8px 24px rgba(255, 116, 43, .13);
+  box-shadow: 0 8px 24px var(--tone-accent-416-a13);
 }
 .primary-compose:hover:not(:disabled),
 .send-control:hover:not(:disabled),
@@ -63,7 +63,7 @@
 .auth-shell,
 .admin-home {
   color: var(--text);
-  background: radial-gradient(circle at 26% 2%, #201813 0, var(--bg) 35%);
+  background: radial-gradient(circle at 26% 2%, var(--tone-auth-bg-glow-900) 0, var(--bg) 35%);
 }
 .auth-card {
   width: min(100%, 440px);
@@ -332,8 +332,8 @@
 .admin-home .settings-account button.mailbox-danger-button:hover:not(:disabled),
 .settings-row.danger button:hover:not(:disabled) {
   border-color: var(--danger);
-  background: #35201b;
-  color: #f0a49a;
+  background: var(--tone-danger-soft-843);
+  color: var(--tone-danger-227);
 }
 .admin-home .settings-account {
   align-items: flex-start;
@@ -478,7 +478,7 @@ a:focus-visible {
   justify-content: space-between;
   padding: 20px 24px;
   border-radius: 15px;
-  background: linear-gradient(110deg, var(--panel) 64%, #1b1511);
+  background: linear-gradient(110deg, var(--panel) 64%, var(--tone-auth-surface-raised-914));
 }
 .admin-home-identity {
   min-width: 0;
@@ -492,7 +492,7 @@ a:focus-visible {
   height: 47px;
   object-fit: cover;
   border-radius: 12px;
-  box-shadow: 0 6px 23px rgba(255, 122, 47, .13);
+  box-shadow: 0 6px 23px var(--tone-auth-accent-408-a13);
 }
 .admin-home-identity > div { min-width: 0; }
 .admin-home-header h1 {
@@ -563,7 +563,7 @@ a:focus-visible {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(18, 16, 15, .97);
+  background: var(--tone-auth-surface-935-a97);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
@@ -750,8 +750,8 @@ a:focus-visible {
   font-size: 10px;
 }
 .admin-mailbox-status.is-active {
-  color: #e8b188;
-  border-color: #59351f;
+  color: var(--tone-auth-accent-278);
+  border-color: var(--tone-auth-accent-strong-765);
   background: var(--accent-soft);
 }
 .admin-mailbox-status.is-disabled,
@@ -977,7 +977,7 @@ a:focus-visible {
   padding: clamp(22px, 4vw, 32px);
   gap: 19px;
   border-radius: 20px;
-  background: linear-gradient(145deg, var(--panel), #191511);
+  background: linear-gradient(145deg, var(--panel), var(--tone-auth-surface-918));
 }
 .auth-brand-row {
   display: flex;
@@ -990,7 +990,7 @@ a:focus-visible {
   height: 58px;
   flex: 0 0 58px;
   border-radius: 15px;
-  box-shadow: 0 8px 22px rgba(255, 116, 43, .09);
+  box-shadow: 0 8px 22px var(--tone-auth-accent-416-a9);
 }
 .auth-brand-row .auth-heading { gap: 5px; min-width: 0; }
 .auth-brand-row .auth-heading h1 {
@@ -1031,8 +1031,8 @@ a:focus-visible {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #f9f6f2;
-  color: #39312c;
+  background: var(--tone-fixed-37);
+  color: var(--tone-fixed-802);
   font-size: 14px;
   font-weight: 800;
 }
@@ -1144,8 +1144,8 @@ a:focus-visible {
 .mail-select-all { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .mail-selection-count { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mail-bulk-actions { min-width: 0; display: flex; gap: 6px; flex-wrap: wrap; }
-.mail-bulk-bar .mail-danger-action { border-color: #743c30; color: #ff9d88; background: #261915; }
-.mail-bulk-bar .mail-danger-action:hover:not(:disabled) { border-color: #ad5943; background: #33211c; }
+.mail-bulk-bar .mail-danger-action { border-color: var(--tone-danger-border-678); color: var(--tone-danger-233); background: var(--tone-danger-soft-884); }
+.mail-bulk-bar .mail-danger-action:hover:not(:disabled) { border-color: var(--tone-danger-border-529); background: var(--tone-danger-soft-845); }
 .mail-bulk-note { font-size: 10px; color: var(--muted); line-height: 1.4; }
 .mail-select-checkbox,
 .mail-select-all input {
@@ -1221,9 +1221,9 @@ a:focus-visible {
   color: var(--accent-2);
 }
 .add-inbox-option-icon.add-inbox-google {
-  background: #f7f4f0;
-  border-color: #bfb0a4;
-  color: #4285f4;
+  background: var(--tone-fixed-45);
+  border-color: var(--tone-fixed-304);
+  color: var(--tone-fixed-392);
   font-size: 23px;
   font-weight: 760;
 }
@@ -1282,7 +1282,7 @@ a:focus-visible {
 .admin-audit-row strong { color: var(--text); font-size: 11px; font-weight: 700; text-transform: capitalize; }
 .admin-audit-row small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .admin-audit-outcome { flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: capitalize; }
-.admin-audit-success { color: #b9e4b1; }
+.admin-audit-success { color: var(--tone-auth-success-206); }
 .admin-audit-denied, .admin-audit-failure { color: var(--danger); }
 .admin-audit-note { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 @media (max-width: 520px) {
