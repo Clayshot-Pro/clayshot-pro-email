@@ -79,3 +79,52 @@
     display: none;
   }
 }
+
+/* iOS 26 installed web app (WebKit bug 301108): with the black-translucent
+   status bar and viewport-fit=cover the viewport is shorter than the screen
+   by the status bar height, so the tab bar stopped above an empty band. A
+   root at least as tall as the screen makes WebKit size the viewport to the
+   whole screen; min() keeps it from scrolling where there is no top inset. */
+@media (display-mode: standalone) {
+  html {
+    min-height: min(100lvh, calc(100% + env(safe-area-inset-top)));
+  }
+}
+
+@media (max-width: 760px) {
+  /* The open reader already starts below the status bar; its toolbar must
+     not add the top inset a second time. */
+  .app-shell.message-open .reader-toolbar {
+    min-height: 0;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  /* Reader actions in one compact row (icon above label) instead of two. */
+  .app-shell.message-open .reader-reply-bar {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 3px;
+    min-height: 0;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .app-shell.message-open .reader-reply-bar button {
+    flex-direction: column;
+    min-height: 46px;
+    padding: 5px 1px;
+    gap: 3px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.1;
+  }
+  .app-shell.message-open .reader-reply-bar .reader-action-label {
+    max-width: 100%;
+    overflow: hidden;
+    transform: none;
+    font-size: clamp(8px, 2.3vw, 10px);
+    letter-spacing: -0.02em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
