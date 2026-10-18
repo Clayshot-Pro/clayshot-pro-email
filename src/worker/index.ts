@@ -35,6 +35,7 @@ import {
 import { appOrigin } from "./config";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance } from "./bootstrap";
+import { adminKeysResponse, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
 import { setupInstance } from "./setup";
 import { instanceSettings } from "./branding";
 import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
@@ -212,6 +213,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/admin/instance" && request.method === "PUT") return saveInstanceSettings(request, env);
   if (url.pathname === "/api/admin/instance/logo" && request.method === "PUT") return uploadLogo(request, env);
   if (url.pathname === "/api/admin/instance/logo" && request.method === "DELETE") return deleteLogo(env);
+  if (url.pathname === "/api/admin/keys" && request.method === "GET") return adminKeysResponse(env);
+  const keyRoute = url.pathname.match(/^\/api\/admin\/keys\/([A-Z_]+)$/);
+  if (keyRoute && request.method === "PUT") return saveStoredKey(request, env, keyRoute[1]);
+  if (keyRoute && request.method === "DELETE") return deleteStoredKey(env, keyRoute[1]);
   if (url.pathname === "/api/admin/suppressions" && request.method === "GET") return listSuppressions(env);
   if (url.pathname === "/api/admin/suppressions" && request.method === "POST") return addSuppression(request, env);
   const suppressionRoute = url.pathname.match(/^\/api\/admin\/suppressions\/([^/]+)$/);
@@ -393,6 +398,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       await bootstrapInstance(env);
+      env = await withStoredKeys(env);
       const response = await routeApi(request, env, url, ctx);
       if (isApprovedAdminMutation(request.method, url.pathname)) {
         // Never retain request payload, mailbox passwords, cookies or assertions.
@@ -428,7 +434,7 @@ export default {
 
   async email(message, env, ctx): Promise<void> {
     await bootstrapInstance(env);
-    await receiveEmail(message, env, ctx);
+    await receiveEmail(message, await withStoredKeys(env), ctx);
   },
 
   async scheduled(_event, env, ctx): Promise<void> {

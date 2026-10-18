@@ -2,6 +2,7 @@ import { ownerSessionHash } from "./auth";
 import { currentDeviceSession } from "./deviceAuth";
 import { mailboxForRecipient } from "./mailboxes";
 import { buildPushPayload, type PushSubscription } from "@block65/webcrypto-web-push";
+import { vapidPair, type VapidPair } from "./vapid";
 
 type StoredSubscription = {
   id: string;
@@ -25,7 +26,6 @@ export type NewMailPush = {
   toAddress: string;
   preview?: string | null;
 };
-type VapidKeys = { publicKey: string; privateKey: string };
 
 /** VAPID contact: the primary mailbox from D1. */
 async function vapidSubject(env: Env): Promise<string> {
@@ -37,23 +37,8 @@ const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const MAX_ENDPOINT_LENGTH = 2048;
 const PUSH_HOSTS = ["web.push.apple.com", "fcm.googleapis.com", "updates.push.services.mozilla.com", "push.services.mozilla.com"];
 
-function normalizeVapidKey(value: string | undefined): string {
-  let normalized = (value ?? "").trim();
-  for (const [open, close] of [["\"", "\""], ["'", "'"], ["“", "”"], ["‘", "’"]]) {
-    if (normalized.startsWith(open) && normalized.endsWith(close)) {
-      normalized = normalized.slice(open.length, -close.length).trim();
-      break;
-    }
-  }
-  return normalized.replace(/\s+/g, "").replace(/=+$/g, "");
-}
-
-function vapidKeys(env: Env): VapidKeys | null {
-  const publicKey = normalizeVapidKey(env.VAPID_PUBLIC_KEY);
-  const privateKey = normalizeVapidKey(env.VAPID_PRIVATE_KEY);
-  return publicKey.length === 87 && privateKey.length === 43 && BASE64URL.test(publicKey) && BASE64URL.test(privateKey)
-    ? { publicKey, privateKey }
-    : null;
+function vapidKeys(env: Env): VapidPair | null {
+  return vapidPair(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
 }
 
 function validEndpoint(value: string): boolean {

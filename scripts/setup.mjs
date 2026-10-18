@@ -2,8 +2,10 @@
 //   1. validate .env
 //   2. create the D1 database and R2 bucket if missing
 //   3. record D1_DATABASE_ID in .env
-//   4. render wrangler.jsonc, upload secrets, apply remote migrations
+//   4. generate PROVIDER_CREDENTIAL_KEY in .env if missing
+//   5. render wrangler.jsonc, upload secrets, apply remote migrations
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync } from "node:fs";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import { databaseIdByName } from "./config-lib.mjs";
@@ -40,6 +42,11 @@ if (!databaseId) {
 if (!values.D1_DATABASE_ID?.trim()) {
   appendFileSync(envFile, `\n# Added by npm run setup\nD1_DATABASE_ID=${databaseId}\n`, "utf8");
   console.log("Recorded D1_DATABASE_ID in .env.");
+}
+
+if (!values.PROVIDER_CREDENTIAL_KEY?.trim()) {
+  appendFileSync(envFile, `\n# Added by npm run setup. Back this up: changing it makes stored keys unreadable.\nPROVIDER_CREDENTIAL_KEY=${randomBytes(32).toString("base64url")}\n`, "utf8");
+  console.log("Generated PROVIDER_CREDENTIAL_KEY in .env. Keep a copy of it somewhere safe.");
 }
 
 const bucket = run("npx", ["wrangler", "r2", "bucket", "create", values.R2_BUCKET_NAME], { allowFailure: true, quiet: true });

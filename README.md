@@ -21,7 +21,7 @@ An **authenticated web application**, not a traditional mail server: there are n
 | Gmail API (optional) | Connected Gmail accounts |
 | Web Push / VAPID (optional) | Browser/PWA notifications |
 
-**There is no instance configuration in the Worker.** The app's address and the admin sign-in come from the URL it is served on. The primary mailbox, mail domains, branding, themes, forwarding and limits are stored in D1 and managed from the app. The only things you configure outside the app are a few Worker **secrets** and the Cloudflare **deploy keys**: in the Cloudflare dashboard for automatic deploys from `main`, or in a local `.env` file for command-line deploys (step 2). Nothing secret is committed.
+**There is no instance configuration in the Worker.** The app's address and the admin sign-in come from the URL it is served on. The primary mailbox, mail domains, branding, themes, forwarding and limits are stored in D1 and managed from the app. The only things you configure outside the app are two Worker **secrets** (`PROVIDER_CREDENTIAL_KEY`, plus `AUTH_SETUP_TOKEN` until setup is done) and the Cloudflare **deploy keys**: in the Cloudflare dashboard for automatic deploys from `main`, or in a local `.env` file for command-line deploys (step 2). Nothing secret is committed.
 
 ## Before you start
 
@@ -52,14 +52,17 @@ Nothing secret is ever committed. Depending on how you deploy, keys live in one 
 | `CLOUDFLARE_ACCOUNT_ID` | **Workers Builds → Build variables** (plain text) | `.env` |
 | `CLOUDFLARE_API_TOKEN` — deploy token: Workers Scripts edit, D1 edit, R2 edit, Account Settings read | **Workers Builds → Build variables** (mark as **secret**) | `.env` |
 | `AUTH_SETUP_TOKEN` — one-time first-run secret | **Worker → Settings → Variables & Secrets** (type **Secret**) | `.env` |
-| `PROVIDER_CREDENTIAL_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Gmail only | **Worker → Variables & Secrets** (Secret) | `.env` |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — push only | **Worker → Variables & Secrets** (Secret) | `.env` |
-| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` — Resend only | **Worker → Variables & Secrets** (Secret) | `.env` |
-| `CF_EMAIL_SENDING_TOKEN` — optional; sending works without it | **Worker → Variables & Secrets** (Secret) | `.env` |
+| `PROVIDER_CREDENTIAL_KEY` — encrypts the keys and Gmail tokens stored in D1 | **Worker → Variables & Secrets** (Secret) | `.env` (`npm run setup` generates it) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Gmail only | **Admin → Keys** | Same |
+| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` — Resend only | **Admin → Keys** | Same |
+| `CF_EMAIL_SENDING_TOKEN` — optional; sending works without it | **Admin → Keys** | Same |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — push notifications | Nothing to do: generated automatically and stored in D1 | Same |
 | `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`, `D1_DATABASE_ID` — optional, sensible defaults | Build variables, only if you change the defaults | `.env` |
 | Primary mailbox, domains, branding, themes, forwarding, limits | **The app itself** (first-run setup and the admin panel, stored in D1) | Same |
 
-**Build variables are not runtime secrets.** Build variables are only visible while Cloudflare builds and deploys the code; the running app cannot read them. Gmail, push, Resend, setup and sending keys must go under the **Worker's own Variables & Secrets**, as type **Secret** — a plain "Text" variable added in the dashboard is removed on the next deploy, while secrets persist across every deploy.
+**Build variables are not runtime secrets.** Build variables are only visible while Cloudflare builds and deploys the code; the running app cannot read them. `PROVIDER_CREDENTIAL_KEY` and `AUTH_SETUP_TOKEN` must go under the **Worker's own Variables & Secrets**, as type **Secret** — a plain "Text" variable added in the dashboard is removed on the next deploy, while secrets persist across every deploy.
+
+**Admin → Keys** stores the Gmail, Resend and sending keys in D1, encrypted with `PROVIDER_CREDENTIAL_KEY`. Saved values are never shown again, and changing one needs a fresh passkey check. A Worker secret with the same name still works and takes precedence; it is copied into D1 automatically, so you can delete the Worker secret afterwards and keep the value.
 
 Generate strong random values locally, for example:
 
@@ -67,7 +70,7 @@ Generate strong random values locally, for example:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Keep `PROVIDER_CREDENTIAL_KEY` backed up: changing it makes stored Gmail credentials unreadable.
+Keep `PROVIDER_CREDENTIAL_KEY` backed up outside Cloudflare (for example in a password manager): changing or losing it makes the stored keys and connected Gmail accounts unreadable.
 
 ## 3. Deploy
 
@@ -81,7 +84,7 @@ Keep `PROVIDER_CREDENTIAL_KEY` backed up: changing it makes stored Gmail credent
    - Deploy command: `npm run deploy`
    - **Build variables:** `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (as a secret).
 4. Push or merge to `main`. The build renders `wrangler.jsonc`, finds the D1 database, applies migrations and deploys. `npm run deploy` refuses to run anywhere except a deploy from `main` (Workers Builds or the GitHub Actions workflow).
-5. In the Worker's **Settings → Variables & Secrets**, add `AUTH_SETUP_TOKEN` (and any optional secrets from the table) as type **Secret**. Secrets take effect immediately and survive later deploys.
+5. In the Worker's **Settings → Variables & Secrets**, add `AUTH_SETUP_TOKEN` and `PROVIDER_CREDENTIAL_KEY` (generate it with the command in step 2) as type **Secret**. Secrets take effect immediately and survive later deploys. Other keys are entered later in **Admin → Keys**.
 6. Under **Settings → Domains & Routes**, add your custom domain (for example `mail.example.com`).
 
 Every later merge to `main` deploys automatically; nothing else needs to be set again.
@@ -141,7 +144,7 @@ For **each** mail domain:
 ## 6. Outbound sending
 
 - **Cloudflare (default):** onboard each mail domain for **Email Sending** in the same Cloudflare account. That's all: the Worker sends through its built-in `EMAIL` binding, which needs no token, and every active mailbox on an active domain can send. (Optionally set `CF_EMAIL_SENDING_TOKEN` to use the REST API instead.) Check Cloudflare's terms cover your use.
-- **Resend (optional, per domain):** verify the domain in Resend, add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` as Worker secrets (see step 2), add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
+- **Resend (optional, per domain):** verify the domain in Resend, add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` in **Admin → Keys**, add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
 - A domain can also be **receive-only**.
 
 Outbound sending always applies server-side mailbox authorization, rate and daily limits, idempotency and quota checks; the From address is never taken from the client.
@@ -164,9 +167,9 @@ Users get **Settings → Appearance** for anything you leave unlocked.
 
 ## Optional integrations
 
-**Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Add the three Gmail keys as Worker secrets (see step 2), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.
+**Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Enter the client ID and secret in **Admin → Keys** (`PROVIDER_CREDENTIAL_KEY` must be set), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.
 
-**Push notifications.** Add a VAPID keypair as Worker secrets (see step 2). The VAPID contact is the primary mailbox address.
+**Push notifications.** Nothing to configure: the VAPID key pair is generated on first use and stored encrypted in D1 (an existing `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` Worker secret pair is kept and copied in). The VAPID contact is the primary mailbox address.
 
 ## Validate the deployment
 

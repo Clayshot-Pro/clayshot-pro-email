@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** Implemented on version branches `v3.00` → `v3.05`; `v3.05` contains everything, including v2.08. Not yet merged to `main` or deployed. The new self-hosting [`LICENSE`](../../LICENSE) is in place on `v3.05`.
+**Status:** Implemented on version branches `v3.00` → `v3.06`; `v3.06` contains everything, including v2.08. `v3.05` is merged to `main`; production deploys from `main` through GitHub Actions (`.github/workflows/deploy.yml`). The new self-hosting [`LICENSE`](../../LICENSE) is in place on `v3.05`.
 
 ## Branches
 
@@ -11,7 +11,8 @@
 | `v3.02` | Outbound transports + Resend |
 | `v3.03` | Theme foundation (CSS tokens) |
 | `v3.04` | Branding, lock, themes, icons, credit |
-| `v3.05` | v2.08 merged; instance settings moved into D1; Cloudflare Email Sending API for all Cloudflare sending; per-domain themes; licence |
+| `v3.05` | v2.08 merged; instance settings moved into D1; Cloudflare Email Sending API for all Cloudflare sending; per-domain themes; licence; GitHub Actions deploys |
+| `v3.06` | Integration keys in D1 (Admin → Keys), encrypted with `PROVIDER_CREDENTIAL_KEY`; VAPID generated automatically (migration 0020) |
 
 ## Decisions applied in v3.05
 
@@ -39,12 +40,22 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - `npm run setup` / `deploy:self` against a fresh account.
 - iPhone/iPad PWA appearance per preset.
 
+## v3.06: keys in D1
+
+- Gmail, Resend and Cloudflare sending keys are entered in **Admin → Keys** and stored in `instance_keys`, AES-GCM encrypted with the `PROVIDER_CREDENTIAL_KEY` Worker secret and bound to the key name. Values are write-only: the API returns only the source and a short hint. Saving or removing a key needs an administrator step-up and is audit-logged (`admin.key.updated` / `admin.key.removed`).
+- A Worker secret with the same name takes precedence and is mirrored into D1 whenever it differs, so deleting the Worker secret later keeps the latest value.
+- The VAPID pair is one row. An existing Worker secret pair is copied in (existing push subscriptions keep working); otherwise a pair is generated once.
+- Without a valid `PROVIDER_CREDENTIAL_KEY`, the Worker behaves exactly as before (Worker secrets only).
+- Resolved keys are cached per isolate for a minute; a change applies at once on the isolate that saved it.
+- `npm run setup` generates `PROVIDER_CREDENTIAL_KEY` when `.env` has none.
+
 ## Production rollout (LTM instance)
 
 1. Back up D1 and R2 and test a restore.
 2. Workers Builds keeps `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; no other build variables are needed. Remove any instance build variables added earlier.
    The build's own **API token** (Settings → Build → Build configuration) is separate from the `CLOUDFLARE_API_TOKEN` variable and is checked before the build starts. If a build fails with "The build token selected for this build has been deleted or rolled", create a new token from that dropdown (it can still list stale tokens), save, and start a new build. If a new token still fails, disconnect and reconnect the Git repository (Settings → Build), then re-add the deploy command (`npm run deploy`) and the two build variables as secrets. If Workers Builds still fails, deploy with GitHub Actions instead (README, Option A2) and disconnect Git in Workers Builds.
 3. Worker secrets: `CF_EMAIL_SENDING_TOKEN` is optional (without it, sending uses the `EMAIL` binding). Keep the existing Gmail/VAPID secrets. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (it is now a rendered var). `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `PRIMARY_ADDRESS` are no longer read; if you used `FORWARD_TO` or purge, re-enter them in **Admin → Mail settings**.
-4. Migrations 0016–0019 are additive and apply during the deploy. They seed no instance data.
+4. Migrations 0016–0020 are additive and apply during the deploy. They seed no instance data.
+   After v3.06 is live and Admin → Keys shows each key as stored, the `GOOGLE_*`, `VAPID_*`, `RESEND_*` and `CF_EMAIL_SENDING_TOKEN` Worker secrets can be deleted. Never delete `PROVIDER_CREDENTIAL_KEY`. Keep them until you no longer need to roll back to v2.08, which reads them.
 5. Right after deploy, in the admin panel: **Branding → App name** `LTM Mails`, and **Mailboxes → contact@ → Sender name** `Liam` (otherwise outgoing mail shows the display name `LTM Email`).
 6. Then check: Domains shows `liamthemo.com` as primary and active; `admin@liamthemo.com` and `admin@email.liamthemo.com` both sign in; passkeys, Gmail, push, inbound and a send from `contact@` work.
