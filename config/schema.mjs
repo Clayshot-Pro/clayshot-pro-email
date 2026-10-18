@@ -77,16 +77,16 @@ export function missingRequired(values, kinds = ["secret", "deploy"]) {
 export function renderEnvExample() {
   const lines = [
     "# For deploying from your computer only. Copy to .env and fill in; .env is gitignored. Never commit it.",
-    "# Automatic deploys from main (Cloudflare Workers Builds) need no .env: set CLOUDFLARE_ACCOUNT_ID and",
-    "# CLOUDFLARE_API_TOKEN as Workers Builds build variables, and the secrets below under the Worker's",
-    "# Settings -> Variables & Secrets (type Secret). See README step 2.",
+    "# Automatic deploys from main need no .env: set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN as GitHub",
+    "# repository secrets (or Workers Builds build variables), PROVIDER_CREDENTIAL_KEY and AUTH_SETUP_TOKEN under",
+    "# the Worker's Settings -> Variables & Secrets (type Secret), and the other keys in Admin -> Keys. See README step 2.",
     "# Generated from config/schema.mjs by `npm run config:example`. Do not edit by hand.",
     "#",
     "# Instance settings (primary mailbox, domains, branding, forwarding, limits) are not",
     "# configured here: choose them in first-run setup and the admin panel (stored in D1).",
     "#",
     "# secret -> uploaded as a Worker secret by `npm run secrets:push`",
-    "# deploy -> used by local scripts and the Workers Builds build only",
+    "# deploy -> used by local scripts and automatic deploys only, never by the running app",
   ];
   let group = "";
   for (const entry of CONFIG) {

@@ -1,5 +1,7 @@
 # v2.00 Cloudflare launch checklist — account owner
 
+> **Historical (v2).** Kept as a record of the v2 production rollout. Settings it mentions such as `PRIMARY_ADDRESS`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `EMAIL_DYNAMIC` and Workers Builds-only deploys no longer exist in v3. To install, deploy or administer the app, follow the [README](../../README.md).
+
 **Status:** Manual production steps. The GitHub implementation is not permission to deploy or change the live Email Routing rules before backups and validation. The latest implementation code lives on the permanent `v2.00` version line.
 
 **Service:** `ltm-email-service` / `email.liamthemo.com` / `liamthemo.com` / Workers Paid / D1 `ltm-email-service` / R2 `ltm-email-service-mail`.

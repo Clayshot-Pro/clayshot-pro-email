@@ -1,0 +1,23 @@
+/*
+ * Layout fixes made after v2.08. Loaded last. verify-css-equivalence proves
+ * the theme tokens left the v2.08 render unchanged, so deliberate changes to
+ * that render go here instead of into the original stylesheets.
+ */
+
+/* Settings: the scroll area fills the space under the header instead of a
+   fixed calc() guess of the header height, so the last section is always
+   reachable (it was cut off on tall screens). */
+.settings-modal {
+  display: flex;
+  flex-direction: column;
+}
+.settings-modal > header {
+  flex: 0 0 auto;
+}
+.settings-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}

@@ -1,5 +1,7 @@
 # v2.00 multi-mailbox implementation status
 
+> **Historical (v2).** Kept as a record of the v2 implementation status. Settings it mentions such as `PRIMARY_ADDRESS`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `EMAIL_DYNAMIC` and Workers Builds-only deploys no longer exist in v3. To install, deploy or administer the app, follow the [README](../../README.md).
+
 **Status:** Code implemented on the `v2.00` development line; production `main` intentionally remains at the previous release until Cloudflare and data-protection gates are satisfied. This file describes implementation, not a claim of production functionality.
 
 ## Completed / Passed — code and automated validation

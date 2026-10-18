@@ -1,5 +1,7 @@
 # v3.01 — Multi-domain mailboxes
 
+> **Design document.** Written before implementation; where it differs from the code, the code and the [README](../../README.md) win. Since v3.05 instance settings live in D1 (not `.env` vars), and since v3.06 integration keys are managed in Admin → Keys. Setup steps are in the [README](../../README.md).
+
 **Document status:** Implemented on `v3.01`. **v3.05:** `MAIL_DOMAINS` and `ADMIN_ADDRESS` are gone; the primary domain comes from first-run setup (or the existing primary mailbox on upgrade), and the admin signs in as `admin@<app hostname>`. Domains also carry a theme. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.00 config unification](./CONFIG_UNIFICATION.md).
 
 ## Goal

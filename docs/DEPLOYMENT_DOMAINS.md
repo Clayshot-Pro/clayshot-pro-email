@@ -23,7 +23,7 @@ The alias is not accepted on unrelated deployment hosts. For example, a Worker a
 
 **Changing the hostname of an existing installation does not migrate its passkeys.** WebAuthn credentials are restricted to the relying-party ID for which they were registered. Pointing a new hostname at an existing D1 database with previously registered passkeys does **not** automatically make them work at the new hostname; registration is intentionally locked once any credential exists.
 
-For a truly new standalone deployment, provision a separate D1 database, R2 bucket, Cloudflare secrets, and an administrator setup secret, then enroll the passkey on that new hostname before completing administrator password setup. For an existing installation, preserve the original hostname and passkey until a separately verified, owner-controlled credential migration/recovery path is established. **Do not delete authentication rows or disable WebAuthn as a shortcut.**
+For a truly new standalone deployment, provision a separate D1 database, R2 bucket and Worker secrets (`PROVIDER_CREDENTIAL_KEY`, `AUTH_SETUP_TOKEN`), then complete first-run setup and enroll the passkey on that new hostname before setting the administrator password. For an existing installation, preserve the original hostname and passkey until a separately verified, owner-controlled credential migration/recovery path is established. **Do not delete authentication rows or disable WebAuthn as a shortcut.**
 
 ## Gmail connection: manual Google Console change
 
@@ -31,15 +31,15 @@ Add the new exact callback URI under the Google OAuth application's **Authorized
 
 ## Mail domains are configured separately
 
-The repository's initial native mailbox schema, Cloudflare Email Routing, `PRIMARY_ADDRESS` Worker variable, `send_email.allowed_sender_addresses`, and native mailbox address rules currently describe `contact@liamthemo.com` / `liamthemo.com`. **Changing only the Worker web-app hostname will not change native email addresses, provision MX routing, verify a new sender domain, or migrate existing mailbox records.**
+Mail domains live in D1 and are managed in **Admin → Domains**; the primary domain comes from the primary mailbox chosen in first-run setup. **Changing only the web-app hostname does not change any mailbox address, MX routing, Email Sending onboarding or mailbox records.**
 
-The web app can be served at another hostname while retaining that native mail domain. Moving the underlying **email domain** itself is a separate, stateful migration requiring corresponding D1 primary mailbox updates, provider sending permissions, verified DNS/MX routes, and routing-rule changes. Do not simply replace the published Worker host and assume email delivery moves.
+To add another mail domain, follow README step 5 (Email Routing catch-all → this Worker, then add, check and activate the domain in Admin → Domains) and step 6 (onboard it for Email Sending or switch it to Resend). Renaming the **primary** mail domain of an existing installation is a separate, stateful migration of mailbox records, routing and sending setup; do not assume email moves with the hostname.
 
 ## Deployment checklist
 
 1. Configure the Worker custom domain, HTTPS, and a dedicated D1/R2 deployment.
-2. Use the Workers Builds production path from `main`, with D1 migrations applied before deployment.
+2. Deploy from `main` (GitHub Actions, Workers Builds or `npm run deploy:self`; see README step 3). Migrations apply during the deploy.
 3. Add the Google OAuth redirect URI for the exact new Worker host (if Gmail is enabled).
-4. On a fresh installation, register a new administrator passkey on that hostname and configure its password.
-5. Verify the dynamically named administrator account, WebAuthn sign-in, fresh passkey approval for an administrative change, CSRF rejection from other origins, and the audit log.
+4. On a fresh installation, complete first-run setup on that hostname: primary mailbox, owner passkey, then the administrator password.
+5. Verify the hostname-based administrator account, WebAuthn sign-in, fresh passkey approval for an administrative change, CSRF rejection from other origins, and the audit log.
 6. Independently verify native email routing/sending and backups if the mail domain also changes.

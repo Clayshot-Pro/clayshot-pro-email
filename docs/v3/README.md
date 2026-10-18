@@ -1,8 +1,8 @@
 # v3.00 roadmap — self-hostable, multi-domain, customizable
 
-**Status:** Implemented on branches `v3.00`–`v3.05` (`v3.05` includes v2.08); not merged to `main` or deployed. v3.05 moved all instance settings into D1, routes all Cloudflare sending through the Email Sending API and adds per-domain themes. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
+**Status:** Implemented on branches `v3.00`–`v3.06` and deployed from `main`. v3.05 moved all instance settings into D1, sends through the Worker's Email Sending binding and adds per-domain themes; v3.06 manages integration keys in Admin → Keys. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). **To install or administer the app, follow the [README](../../README.md).**
 
-**Starting checkpoint:** `main` at v2.07 (`13c0421`). **Development line:** `v3.00` and following `v3.0x` version branches. **Production:** `main`, deployed by Cloudflare Workers Builds.
+**Starting checkpoint:** `main` at v2.07 (`13c0421`). **Development line:** `v3.00` and following `v3.0x` version branches. **Production:** `main`, deployed by GitHub Actions (`.github/workflows/deploy.yml`).
 
 ## Goals
 
@@ -34,7 +34,7 @@
 
 Supporting documents:
 
-- [Self-hosting guide (target state)](./SELF_HOSTING.md) — what an operator will do once v3.00 ships.
+- [Self-hosting summary](./SELF_HOSTING.md) — the current model in brief; the steps are in the README.
 - [Licensing change](./LICENSING.md) — options and a draft of the new terms.
 
 ### Sequencing

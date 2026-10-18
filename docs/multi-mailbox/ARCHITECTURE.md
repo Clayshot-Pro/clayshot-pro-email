@@ -1,5 +1,7 @@
 # Multi-mailbox technical design
 
+> **Historical (v2).** Kept as a record of the v2 planning. Settings it mentions such as `PRIMARY_ADDRESS`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `EMAIL_DYNAMIC` and Workers Builds-only deploys no longer exist in v3. To install, deploy or administer the app, follow the [README](../../README.md).
+
 **Status:** Proposed design, subject to implementation review. Derived from source at `v1.04`.
 
 ## 1. Data model and identity separation
