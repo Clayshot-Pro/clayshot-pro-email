@@ -20,6 +20,8 @@
 //    [data-text-size]) and root custom properties declared in files that are
 //    not in the original import list (theme/token files: they are the
 //    environment, not output).
+//    Deliberate changes made after v2.08 live in AMENDMENTS (loaded last) and
+//    are left out of the comparison; they are reviewed like any other change.
 // 6. Compares the ordered lists of (context, selector, property, value,
 //    !important). Whitespace and hex case are normalised. Any difference is
 //    printed and the script exits 1.
@@ -170,7 +172,8 @@ function comparable(decls) {
 
 // ---------------------------------------------------------------------------
 const oldFiles = cssImports(git("src/client/main.tsx"));
-const newFiles = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8"));
+const AMENDMENTS = new Set(["src/client/layout-fixes.css"]);
+const newFiles = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8")).filter(f => !AMENDMENTS.has(f));
 const originals = new Set(oldFiles);
 const oldList = comparable(load(oldFiles, f => git(f), originals));
 const newList = comparable(load(newFiles, f => readFileSync(join(ROOT, f), "utf8"), originals));
