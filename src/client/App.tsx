@@ -96,8 +96,8 @@ export function App() {
   useActiveAccountAppearance(unified ? readerAccountId : activeAccountId);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  // The custom mailbox whose profile photo is being edited.
+  const [profileAccountId, setProfileAccountId] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState<string | null>(null);
   const [sessionCount, setSessionCount] = useState<number | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
@@ -135,16 +135,6 @@ export function App() {
       .then(response => response.ok ? response.json() as Promise<{isAdmin:boolean}> : null)
       .then(status => setIsAdmin(Boolean(status?.isAdmin))).catch(() => undefined);
     void refreshAccounts();
-    fetch("/api/profile", { cache: "no-store" })
-      .then(async (response) => response.ok
-        ? response.json() as Promise<{ hasPhoto: boolean; version: string | null }>
-        : null)
-      .then((profile) => {
-        setProfilePhotoUrl(profile?.hasPhoto
-          ? `/api/profile/photo?v=${encodeURIComponent(profile.version ?? "1")}`
-          : null);
-      })
-      .catch(() => undefined);
   }, [refreshAccounts]);
 
   const refreshSessions = useCallback(async () => {
@@ -1186,9 +1176,9 @@ export function App() {
         onToggleNotifications={() => void toggleNotifications()}
         onAddInbox={openAddInbox}
         onRemoveAccount={(id) => void removeAccount(id)}
-        onEditProfile={() => {
+        onEditProfile={(accountId) => {
           setSettingsOpen(false);
-          setProfileOpen(true);
+          setProfileAccountId(accountId);
         }}
         onViewSessions={() => {
           setSessionsOpen(true);
@@ -1216,16 +1206,15 @@ export function App() {
         onRemoveSession={(id) => void removeSession(id)}
       />
       <ProfileModal
-        open={profileOpen}
-        photoUrl={profilePhotoUrl}
+        open={profileAccountId !== null}
+        accountId={profileAccountId ?? ""}
+        emailAddress={accounts.find(account => account.id === profileAccountId)?.emailAddress ?? ""}
+        photoUrl={accounts.find(account => account.id === profileAccountId)?.avatarUrl ?? null}
         onClose={() => {
-          setProfileOpen(false);
+          setProfileAccountId(null);
           setSettingsOpen(true);
         }}
-        onPhotoChange={(url) => {
-          setProfilePhotoUrl(url);
-          void refreshAccounts();
-        }}
+        onPhotoChange={() => void refreshAccounts()}
       />
       {pendingDeletion ? (
         <DeleteConfirmationDialog

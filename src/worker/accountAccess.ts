@@ -1,4 +1,4 @@
-/** The stored profile photo belongs exclusively to the admin mailbox. */
+/** Profile photo routes; each photo belongs to one mailbox (?accountId=). */
 export const primaryProfilePath = (pathname: string): boolean =>
   pathname === "/api/profile" || pathname === "/api/profile/photo";
 

@@ -76,4 +76,9 @@ if (migrations.includes("0021_blocked_senders.sql")) {
     "a pattern is stored once per mailbox");
 }
 
+if (migrations.includes("0022_photos_and_junk_filter.sql")) {
+  assert.ok(columns("native_mailboxes").includes("photo_version"));
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM native_mailboxes WHERE spam_filter_enabled = 0").get().n, 0, "the junk filter is on for existing mailboxes");
+}
+
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

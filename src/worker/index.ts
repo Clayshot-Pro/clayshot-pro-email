@@ -19,7 +19,7 @@ import { deleteDraft, getDraft, saveDraft } from "./api/drafts";
 import { healthResponse } from "./api/health";
 import { downloadAttachment, getMessage, listMessages, patchMessage } from "./api/mail";
 import { bulkMailAction, permanentlyDeleteMessage } from "./api/mailActions";
-import { deleteProfilePhoto, getProfile, getProfilePhoto, saveProfilePhoto } from "./api/profile";
+import { deleteProfilePhoto, getProfile, getProfilePhoto, profileMailboxId, saveProfilePhoto } from "./api/profile";
 import {
   authenticationOptions,
   authStatus,
@@ -226,10 +226,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     return address ? removeSuppression(env, address) : jsonError("Invalid address", 400);
   }
 
-  // The profile photo belongs to the admin mailbox, which only the owner
-  // session can open; other mailbox sessions must not read or overwrite it.
-  if (primaryProfilePath(url.pathname) && !(await deviceAuthorized(request, env, ADMIN_MAILBOX_ID))) {
-    return jsonError("Administrator sign-in required", 403);
+  // Each mailbox owns its profile photo: only that mailbox's session or the
+  // owner session may read or change it (admin@ when no accountId is given).
+  if (primaryProfilePath(url.pathname) && !(await deviceAuthorized(request, env, profileMailboxId(url)))) {
+    return jsonError("Mailbox sign-in required", 403);
   }
 
   if (url.pathname === "/api/device/accounts" && request.method === "GET") {
@@ -345,12 +345,12 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/blocked-senders" && request.method === "DELETE") return removeBlockedSender(env, url);
   if (url.pathname === "/api/send" && request.method === "POST") return sendEmail(request, env);
   if (url.pathname === "/api/drafts" && request.method === "POST") return saveDraft(request, env);
-  if (url.pathname === "/api/profile" && request.method === "GET") return getProfile(env);
+  if (url.pathname === "/api/profile" && request.method === "GET") return getProfile(env, url);
 
   if (url.pathname === "/api/profile/photo") {
-    if (request.method === "GET") return getProfilePhoto(env);
-    if (request.method === "PUT") return saveProfilePhoto(request, env);
-    if (request.method === "DELETE") return deleteProfilePhoto(env);
+    if (request.method === "GET") return getProfilePhoto(env, url);
+    if (request.method === "PUT") return saveProfilePhoto(request, env, url);
+    if (request.method === "DELETE") return deleteProfilePhoto(env, url);
     return jsonError("Method not allowed", 405);
   }
 

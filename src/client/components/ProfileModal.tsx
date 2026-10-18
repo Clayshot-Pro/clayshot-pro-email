@@ -20,6 +20,10 @@ import { useInstance } from "../instance";
 
 type ProfileModalProps = {
   open: boolean;
+  /** The custom mailbox whose photo is edited. */
+  accountId: string;
+  /** Its address, for the initial shown without a photo. */
+  emailAddress: string;
   photoUrl: string | null;
   onClose: () => void;
   onPhotoChange: (url: string | null) => void;
@@ -34,7 +38,8 @@ type DragState = {
 
 const EMPTY_OFFSET: Point = { x: 0, y: 0 };
 
-export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: ProfileModalProps) {
+export function ProfileModal({ open, accountId, emailAddress, photoUrl, onClose, onPhotoChange }: ProfileModalProps) {
+  const photoPath = `/api/profile/photo?accountId=${encodeURIComponent(accountId)}`;
   const { brandName } = useInstance();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<DragState>({
@@ -117,7 +122,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
         "photo",
         new File([normalized], "profile.jpg", { type: "image/jpeg" }),
       );
-      const response = await fetch("/api/profile/photo", {
+      const response = await fetch(photoPath, {
         method: "PUT",
         body: form,
       });
@@ -130,7 +135,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
       }
 
       announcePhotoChange(
-        `/api/profile/photo?v=${encodeURIComponent(data.version ?? String(Date.now()))}`,
+        `${photoPath}&v=${encodeURIComponent(data.version ?? String(Date.now()))}`,
       );
       clearCrop();
     } catch (uploadError) {
@@ -192,7 +197,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/profile/photo", { method: "DELETE" });
+      const response = await fetch(photoPath, { method: "DELETE" });
       if (!response.ok) throw new Error("Could not remove profile photo");
       announcePhotoChange(null);
     } catch (removeError) {
@@ -296,7 +301,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
           <>
             <div className="profile-photo-section">
               <div className="profile-photo-preview" aria-hidden="true">
-                {photoUrl ? <img src={photoUrl} alt="" /> : <span>LM</span>}
+                {photoUrl ? <img src={photoUrl} alt="" /> : <span>{emailAddress.charAt(0).toUpperCase() || "?"}</span>}
               </div>
               <div className="profile-photo-copy">
                 <strong>Profile photo</strong>
