@@ -39,11 +39,18 @@ for (const password of ["Abcd?789", "LongAdmin?Password2026!", "𝒜bc?1234"]) {
     iterations:prepared.iterations,
   }),true);
 }
-for (const password of ["short?", "a".repeat(33), "abcdefgh".slice(0,7)]) {
+for (const password of ["abc", "a".repeat(33), "aaaa"]) {
   assert.notEqual(adminPasswordError(password),null);
 }
 assert.equal(adminPasswordError("Abcd?789"),null);
-assert.notEqual(mailboxPasswordError("Abcd?789"),null, "mailbox policy remains 16+ characters");
+assert.equal(mailboxPasswordError("Abcd?789"),null);
+for (const policy of ["admin", "mailbox"]) {
+  const password = "Ab1!";
+  const credentials = await preparePassword(password, policy);
+  assert.equal(await checkPassword(password, {
+    password_salt: credentials.salt, password_hash: credentials.hash, iterations: credentials.iterations,
+  }), true, "4-character password verifies");
+}
 const legacyPassword = "LegacyAccount?Password2026";
 const salt = (await preparePassword(legacyPassword)).salt;
 const legacyHash = await hashPassword(legacyPassword,salt,310000);
@@ -55,4 +62,4 @@ assert.equal(legacyHash,webCryptoHash,"legacy PBKDF2 hashes remain byte-compatib
 assert.equal(await checkPassword(legacyPassword,{
   password_salt:salt,password_hash:legacyHash,iterations:310000,
 }),true);
-console.log("PASS: Cloudflare-compatible new scrypt hashes, admin 8–32 and legacy PBKDF2 verification");
+console.log("PASS: Cloudflare-compatible new scrypt hashes, admin/mailbox 4–32 and legacy PBKDF2 verification");

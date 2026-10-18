@@ -2,18 +2,18 @@
 
 ## Intended user experience
 
-- `admin@liamthemo.com` is a **reserved login identity**, not a mail inbox or newly created native mailbox.
-- On a device without saved accounts, type `admin@liamthemo.com` into the normal **Custom email** sign-in form, followed by the administrator password.
+- `admin@<worker-hostname>` is a **reserved login identity**, not a mail inbox or newly created native mailbox.
+- On a device without saved accounts, type `admin@<worker-hostname>` into the normal **Custom email** sign-in form, followed by the administrator password.
 - The app then requests the previously registered **owner passkey** as a mandatory second factor. Both must succeed on the same browser, within five minutes, to establish an administrator session.
 - Once authenticated, the app opens the **standalone Email administration dashboard**, instead of showing a normal inbox or an admin panel buried in Settings.
-- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@liamthemo.com`; after completing both factors the app opens the separate dashboard.
+- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@<worker-hostname>`; after completing both factors the app opens the separate dashboard.
 - Admin dashboard supports creating mailboxes, changing their passwords to an owner-chosen value (16–128 characters) or generating a secure random password, quotas, archival and deletion operations.
 
 ## Setting your administrator password the first time
 
 Your existing owner passkey is already registered. The v2.02 migration **does not set or transmit an administrator password**. On initial use, the sign-in page offers **Set up admin password using passkey**; authenticate with your existing passkey and choose the password in the standalone admin dashboard. You must choose it in the web app. **Do not put it in repository files, Cloudflare build variables, or chat messages.**
 
-Once the password is saved, all existing passkey-only administrator sessions are invalidated. Sign in using `admin@liamthemo.com`, your chosen password, then your passkey. This prevents legacy passkey-only sign-in from bypassing the new second factor.
+Once the password is saved, all existing passkey-only administrator sessions are invalidated. Sign in using `admin@<worker-hostname>`, your chosen password, then your passkey. This prevents legacy passkey-only sign-in from bypassing the new second factor.
 
 ## Changing passwords
 
@@ -23,7 +23,7 @@ Once the password is saved, all existing passkey-only administrator sessions are
 
 ## Security design
 
-- Only one administrator password record is allowed (`admin_credentials.id=1`). `admin@liamthemo.com` cannot be registered as a normal mailbox or logged into via the ordinary mailbox password flow.
+- Only one administrator password record is allowed (`admin_credentials.id=1`). `admin@<worker-hostname>` cannot be registered as a normal mailbox or logged into via the ordinary mailbox password flow.
 - New administrator passwords are salted and **scrypt** hashed (N=16,384, r=8, p=1); plaintext is neither logged nor committed. Per-IP login attempts are rate-limited. Legacy PBKDF2-SHA256 records retain their original per-record verification parameters.
 - A successful administrator password entry issues an HttpOnly, Secure, SameSite=Strict cookie for a short-lived pending login. The password proof is stored hashed and expires after five minutes.
 - WebAuthn passkey options require the pending password proof once the admin password is configured. Each passkey challenge records the pending proof identifier. Successful passkey verification must consume that matching proof exactly once before the owner session is issued.
@@ -56,3 +56,7 @@ The main application and CI include a new isolated Cloudflare workerd integratio
 [Cloudflare cryptography support](https://developers.cloudflare.com/workers/runtime-apis/nodejs/crypto/) · [Cloudflare PBKDF2 iteration limit](https://github.com/cloudflare/workerd/issues/1346).
 
 Do not share passwords, raw hashes, recovery tokens or credentials in bug reports.
+
+## Portable hostnames (v2.07)
+
+The administrator username is derived from the actual HTTPS Worker host, for example `admin@mail.example.org` when the application is deployed to `https://mail.example.org`. At the existing `email.liamthemo.com` production host, the former `admin@liamthemo.com` name remains a compatible alias. Both identify the same owner and require the same password and passkey. See [host migration and WebAuthn caveats](../DEPLOYMENT_DOMAINS.md).

@@ -1126,3 +1126,45 @@
   --swatch-graphite: linear-gradient(135deg, #18191b 55%, #9ab8ff 55%);
   --swatch-high-contrast: linear-gradient(135deg, #000000 55%, #ffd400 55%);
 }
+
+/* v2.08 additions (unsubscribe dialog, delete confirmation, send errors, reader
+   bar), pinned to their original values in the default theme. */
+:root, [data-theme="ltm-dark"] {
+  --tone-v208-reader-bar: #0e0d0c;
+  --tone-v208-unsub-border: #61432f;
+  --tone-v208-unsub-text: #e3b089;
+  --tone-v208-unsub-border-hover: #ab7145;
+  --tone-v208-unsub-text-hover: #ffe0c3;
+  --tone-v208-dialog-backdrop: rgba(4, 3, 3, .76);
+  --tone-v208-dialog-border: #4a362a;
+  --tone-v208-dialog-bg: #201915;
+  --tone-v208-dialog-text: #e6d7cb;
+  --tone-v208-dialog-shadow: rgba(0, 0, 0, .5);
+  --tone-v208-dialog-heading: #fff3e9;
+  --tone-v208-dialog-close: #c7b4a5;
+  --tone-v208-dialog-body: #c4b5a9;
+  --tone-v208-dialog-button-border: #504137;
+  --tone-v208-dialog-button-bg: #2c241f;
+  --tone-v208-dialog-button-text: #e6d6ca;
+  --tone-v208-dialog-cta: #ff8936;
+  --tone-v208-dialog-cta-text: #261309;
+  --tone-v208-dialog-cta-hover: #ffa35c;
+  --tone-v208-send-error-border: #9c4b3c;
+  --tone-v208-send-error-bg: #382019;
+  --tone-v208-send-error-text: #ffcabf;
+  --tone-v208-confirm-backdrop: rgba(4, 3, 3, .8);
+  --tone-v208-confirm-border: #544039;
+  --tone-v208-confirm-bg: #1b1715;
+  --tone-v208-confirm-text: #eee2d8;
+  --tone-v208-confirm-shadow: rgba(0, 0, 0, .48);
+  --tone-v208-confirm-body: #b9aba0;
+  --tone-v208-confirm-button-border: #574439;
+  --tone-v208-confirm-button-bg: #28201c;
+  --tone-v208-confirm-button-text: #f1e6dd;
+  --tone-v208-confirm-focus: #ff9951;
+  --tone-v208-danger-border: #98503f;
+  --tone-v208-danger-bg: #783125;
+  --tone-v208-danger-text: #fff4ec;
+  --tone-v208-danger-hover: #953e2f;
+  --tone-v208-bulk-notice: #f2b17a;
+}

@@ -1363,21 +1363,32 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     overflow: visible !important;
     padding: 10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left));
     border-top: 1px solid var(--line);
-    background: var(--tone-surface-0-a98);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    /* Match the dark message reader: the old white fill formed a bright frame. */
+    background: var(--tone-v208-reader-bar);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
   }
 
   .reader-reply-bar button {
     width: 100%;
     min-width: 0;
     min-height: 40px;
+    align-items: center;
     justify-content: center;
     gap: 4px;
     padding: 9px 4px;
     font-size: 10px;
+    line-height: 1;
     white-space: nowrap;
     touch-action: manipulation;
+  }
+
+  /* Align text optically to the icon center without moving the icon itself. */
+  .reader-reply-bar .reader-action-label {
+    display: inline-block;
+    line-height: 1;
+    transform: translateY(-1.5px);
   }
 
   .reader-reply-bar button .icon {
@@ -1682,3 +1693,222 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   background: linear-gradient(180deg, var(--tone-danger-316), var(--tone-danger-390));
   color: var(--tone-text-on-accent-931);
 }
+
+/* Unsubscribe is available for every opened message, including Trash. */
+.reader-reply-bar button.unsubscribe-action {
+  border-color: var(--tone-v208-unsub-border);
+  color: var(--tone-v208-unsub-text);
+}
+.reader-reply-bar button.unsubscribe-action:hover {
+  border-color: var(--tone-v208-unsub-border-hover);
+  color: var(--tone-v208-unsub-text-hover);
+}
+.unsubscribe-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: var(--tone-v208-dialog-backdrop);
+  padding: 20px;
+}
+.unsubscribe-dialog {
+  width: min(440px, 100%);
+  max-height: min(80dvh, 550px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid var(--tone-v208-dialog-border);
+  border-radius: 16px;
+  background: var(--tone-v208-dialog-bg);
+  color: var(--tone-v208-dialog-text);
+  box-shadow: 0 20px 65px var(--tone-v208-dialog-shadow);
+}
+.unsubscribe-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.unsubscribe-dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--tone-v208-dialog-heading);
+}
+.unsubscribe-dialog-header button {
+  border: 0;
+  background: transparent;
+  color: var(--tone-v208-dialog-close);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 7px 9px;
+}
+.unsubscribe-dialog p {
+  margin: 0 0 14px;
+  color: var(--tone-v208-dialog-body);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.unsubscribe-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 21px;
+}
+.unsubscribe-dialog-actions button,
+.unsubscribe-dialog-actions a {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 40px;
+  padding: 10px 15px;
+  border: 1px solid var(--tone-v208-dialog-button-border);
+  border-radius: 9px;
+  background: var(--tone-v208-dialog-button-bg);
+  color: var(--tone-v208-dialog-button-text);
+  text-decoration: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.unsubscribe-dialog-actions a {
+  border-color: var(--tone-v208-dialog-cta);
+  background: var(--tone-v208-dialog-cta);
+  color: var(--tone-v208-dialog-cta-text);
+}
+.unsubscribe-dialog-actions a:hover {
+  background: var(--tone-v208-dialog-cta-hover);
+}
+@media (max-width: 760px) {
+  .unsubscribe-dialog-backdrop {
+    padding: 15px;
+  }
+  .unsubscribe-dialog {
+    padding: 18px;
+  }
+  .reader-actions .mobile-reader-action {
+    flex: 0 0 34px;
+  }
+}
+
+/* Narrow layouts used to hide the second toolbar action. In Trash,
+ * Unsubscribe can be that second action, so explicitly retain it.
+ */
+@media (max-width: 420px) {
+  .reader-actions button.unsubscribe-mobile-action {
+    display: grid !important;
+  }
+}
+
+/* A failed email send must be visible inside the compose sheet. */
+.compose-send-error {
+  margin: 4px 16px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--tone-v208-send-error-border);
+  border-radius: 8px;
+  background: var(--tone-v208-send-error-bg);
+  color: var(--tone-v208-send-error-text);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Keep the mail action footer above the fixed mobile navigation.
+ * The shared .reader-pane height:100% used to override its bottom inset,
+ * putting the footer underneath the nav on small screens and iOS PWAs. */
+@media (max-width: 760px) {
+  .app-shell.message-open .reader-pane:not(.reader-empty) {
+    top: 0;
+    right: 0;
+    bottom: calc(65px + env(safe-area-inset-bottom));
+    left: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-shell.message-open .reader-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .app-shell.message-open .reader-reply-bar {
+    flex: 0 0 auto;
+    min-height: 60px;
+    background: var(--tone-v208-reader-bar);
+    padding-bottom: 10px;
+    position: relative;
+    z-index: 5;
+    visibility: visible;
+  }
+
+  .app-shell.message-open .reader-reply-bar .unsubscribe-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Destructive actions use the same dark/amber dialog language as Unsubscribe. */
+.delete-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: var(--tone-v208-confirm-backdrop);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.delete-confirm-panel {
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid var(--tone-v208-confirm-border);
+  border-radius: 16px;
+  background: var(--tone-v208-confirm-bg);
+  color: var(--tone-v208-confirm-text);
+  box-shadow: 0 26px 90px var(--tone-v208-confirm-shadow);
+}
+.delete-confirm-panel h3 { margin: 0 0 11px; font-size: 17px; }
+.delete-confirm-panel p { margin: 0 0 20px; color: var(--tone-v208-confirm-body); font-size: 12px; line-height: 1.65; }
+.delete-confirm-actions { display: flex; gap: 9px; justify-content: flex-end; }
+.delete-confirm-actions button {
+  min-height: 39px;
+  padding: 9px 14px;
+  border: 1px solid var(--tone-v208-confirm-button-border);
+  border-radius: 9px;
+  background: var(--tone-v208-confirm-button-bg);
+  color: var(--tone-v208-confirm-button-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.delete-confirm-actions button:focus-visible { outline: 2px solid var(--tone-v208-confirm-focus); outline-offset: 2px; }
+.delete-confirm-actions .delete-confirm-danger {
+  border-color: var(--tone-v208-danger-border);
+  background: var(--tone-v208-danger-bg);
+  color: var(--tone-v208-danger-text);
+}
+.delete-confirm-actions .delete-confirm-danger:hover { background: var(--tone-v208-danger-hover); }
+@media (max-width: 420px) {
+  .delete-confirm-panel { padding: 18px; }
+}
+
+/* Bulk-action outcomes and loaded-page scope: avoid misleading "Select All"
+ * when native Trash contains more than the 50 currently retrieved rows. */
+.mail-bulk-notice {
+  flex: 1 1 160px;
+  min-width: 0;
+  color: var(--tone-v208-bulk-notice);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.mail-select-all span, .mail-selection-count { line-height: 1.4; }

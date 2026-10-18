@@ -716,3 +716,44 @@
   --tone-text-on-accent-933: var(--color-text-on-accent);
   --tone-text-on-accent-945: var(--color-text-on-accent);
 }
+
+/* v2.08 additions follow each preset's semantic tokens. */
+:root[data-theme]:not([data-theme="ltm-dark"]) {
+  --tone-v208-reader-bar: var(--color-surface);
+  --tone-v208-unsub-border: var(--color-border-strong);
+  --tone-v208-unsub-text: var(--color-accent-text);
+  --tone-v208-unsub-border-hover: var(--color-accent);
+  --tone-v208-unsub-text-hover: var(--color-text);
+  --tone-v208-dialog-backdrop: var(--color-overlay);
+  --tone-v208-dialog-border: var(--color-border);
+  --tone-v208-dialog-bg: var(--color-surface-raised);
+  --tone-v208-dialog-text: var(--color-text);
+  --tone-v208-dialog-shadow: var(--color-shadow);
+  --tone-v208-dialog-heading: var(--color-text);
+  --tone-v208-dialog-close: var(--color-text-muted);
+  --tone-v208-dialog-body: var(--color-text-muted);
+  --tone-v208-dialog-button-border: var(--color-border);
+  --tone-v208-dialog-button-bg: var(--color-surface-hover);
+  --tone-v208-dialog-button-text: var(--color-text);
+  --tone-v208-dialog-cta: var(--color-accent);
+  --tone-v208-dialog-cta-text: var(--color-text-on-accent);
+  --tone-v208-dialog-cta-hover: var(--color-accent-hover);
+  --tone-v208-send-error-border: var(--color-danger);
+  --tone-v208-send-error-bg: var(--color-danger-soft);
+  --tone-v208-send-error-text: var(--color-text);
+  --tone-v208-confirm-backdrop: var(--color-overlay);
+  --tone-v208-confirm-border: var(--color-border);
+  --tone-v208-confirm-bg: var(--color-surface-raised);
+  --tone-v208-confirm-text: var(--color-text);
+  --tone-v208-confirm-shadow: var(--color-shadow);
+  --tone-v208-confirm-body: var(--color-text-muted);
+  --tone-v208-confirm-button-border: var(--color-border);
+  --tone-v208-confirm-button-bg: var(--color-surface-hover);
+  --tone-v208-confirm-button-text: var(--color-text);
+  --tone-v208-confirm-focus: var(--color-accent);
+  --tone-v208-danger-border: var(--color-danger);
+  --tone-v208-danger-bg: var(--color-danger);
+  --tone-v208-danger-text: var(--color-bg);
+  --tone-v208-danger-hover: var(--color-danger);
+  --tone-v208-bulk-notice: var(--color-warning);
+}

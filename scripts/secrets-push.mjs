@@ -36,17 +36,23 @@ try {
   rmSync(dir, { recursive: true, force: true });
 }
 
-// v2 stored feature switches as secrets; v3 renders them as plain vars, and a
-// var cannot share a name with an existing secret. Report (names only) so the
-// operator can remove them once.
+// CF_EMAIL_SENDING_ACCOUNT_ID is rendered as a plain var, which cannot share a
+// name with a secret; older installs may also hold secrets v3 no longer reads.
+// Report names only, so the operator can delete them once.
+const RENDERED_VARS = ["CF_EMAIL_SENDING_ACCOUNT_ID"];
+const RETIRED = ["APP_ORIGIN", "PRIMARY_ADDRESS", "ADMIN_ADDRESS", "FORWARD_TO", "MULTI_SENDER_APPROVED", "MAILBOX_PURGE_ENABLED"];
 const listed = spawnSync("npx", ["wrangler", "secret", "list", "--name", values.WORKER_NAME, "--format", "json"], {
   encoding: "utf8", shell: process.platform === "win32",
   env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: values.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN: values.CLOUDFLARE_API_TOKEN },
 });
 let existing = [];
 try { existing = JSON.parse(listed.stdout.slice(listed.stdout.indexOf("["))).map(entry => entry.name); } catch { /* listing is advisory */ }
-const conflicting = existing.filter(name => keysOf("var").includes(name));
+const conflicting = existing.filter(name => RENDERED_VARS.includes(name));
 if (conflicting.length) {
   console.warn(`These secrets are now plain vars and must be deleted before deploying:\n${conflicting
     .map(name => `  npx wrangler secret delete ${name} --name ${values.WORKER_NAME}`).join("\n")}`);
+}
+const retired = existing.filter(name => RETIRED.includes(name));
+if (retired.length) {
+  console.warn(`These secrets are no longer used (settings now live in D1) and can be deleted: ${retired.join(", ")}`);
 }

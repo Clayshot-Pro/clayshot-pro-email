@@ -1,7 +1,6 @@
 import { ownerSessionHash } from "./auth";
 import { currentDeviceSession } from "./deviceAuth";
 import { mailboxForRecipient } from "./mailboxes";
-import { appConfig } from "./appConfig";
 import { buildPushPayload, type PushSubscription } from "@block65/webcrypto-web-push";
 
 type StoredSubscription = {
@@ -28,7 +27,12 @@ export type NewMailPush = {
 };
 type VapidKeys = { publicKey: string; privateKey: string };
 
-const vapidSubject = (env: Env) => `mailto:${appConfig(env).primaryAddress}`;
+/** VAPID contact: the primary mailbox from D1. */
+async function vapidSubject(env: Env): Promise<string> {
+  const row = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = 'native:primary'")
+    .first<{ email_address: string }>().catch(() => null);
+  return `mailto:${row?.email_address ?? "postmaster@localhost"}`;
+}
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const MAX_ENDPOINT_LENGTH = 2048;
 const PUSH_HOSTS = ["web.push.apple.com", "fcm.googleapis.com", "updates.push.services.mozilla.com", "push.services.mozilla.com"];
@@ -149,7 +153,7 @@ async function sendToSubscription(env: Env, row: StoredSubscription, notificatio
     }),
     options: { ttl: 3600 },
   }, subscription, {
-    subject: vapidSubject(env),
+    subject: await vapidSubject(env),
     publicKey: keys.publicKey,
     privateKey: keys.privateKey,
   });

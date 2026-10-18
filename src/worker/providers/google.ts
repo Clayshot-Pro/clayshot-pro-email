@@ -1,4 +1,4 @@
-import { appConfig } from "../appConfig";
+import { appOrigin } from "../config";
 import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, clearOAuthCookie } from "../deviceAuth";
 import { decryptSecret, encryptSecret } from "./crypto";
 import {
@@ -9,7 +9,7 @@ import {
   requireGoogleConfig,
 } from "./googleConfig";
 
-const redirectUri = (env: Env) => `${appConfig(env).origin}/api/accounts/gmail/callback`;
+const callbackUri = (request: Request) => `${appOrigin(request)}/api/accounts/gmail/callback`;
 const OAUTH_STATE_TTL_SECONDS = 600;
 const encoder = new TextEncoder();
 
@@ -69,16 +69,16 @@ async function revokeGoogleToken(token: string): Promise<void> {
   }
 }
 
-function redirectWithStatus(status: string): Response {
+function redirectWithStatus(request: Request, status: string): Response {
   // Construct a writable response so the OAuth callback can issue the
   // per-device HttpOnly session cookie and clear its one-time nonce.
   return new Response(null, {
     status: 303,
-    headers: { Location: `/?gmail=${encodeURIComponent(status)}`, "Cache-Control": "no-store" },
+    headers: { Location: `${appOrigin(request)}/?gmail=${encodeURIComponent(status)}`, "Cache-Control": "no-store" },
   });
 }
 
-export async function startGoogleOAuth(_request: Request, env: Env): Promise<Response> {
+export async function startGoogleOAuth(request: Request, env: Env): Promise<Response> {
   try {
     requireGoogleConfig(env);
   } catch {
@@ -103,7 +103,7 @@ export async function startGoogleOAuth(_request: Request, env: Env): Promise<Res
   `)
     .bind(
       stateHash,
-      await encryptSecret(env, { verifier }, `oauth:${stateHash}`),
+      await encryptSecret(env, { verifier, origin: appOrigin(request) }, `oauth:${stateHash}`),
       expiresAt,
       await tokenHash(nonce),
     )
@@ -111,7 +111,7 @@ export async function startGoogleOAuth(_request: Request, env: Env): Promise<Res
 
   const query = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri(env),
+    redirect_uri: callbackUri(request),
     response_type: "code",
     scope: GOOGLE_SCOPE,
     access_type: "offline",
@@ -131,7 +131,7 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   try {
     requireGoogleConfig(env);
   } catch {
-    return redirectWithStatus("configuration_error");
+    return redirectWithStatus(request, "configuration_error");
   }
 
   const url = new URL(request.url);
@@ -139,8 +139,8 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   const code = url.searchParams.get("code") ?? "";
   const oauthError = url.searchParams.get("error");
 
-  if (oauthError) return redirectWithStatus("cancelled");
-  if (!state || !code) return redirectWithStatus("invalid_callback");
+  if (oauthError) return redirectWithStatus(request, "cancelled");
+  if (!state || !code) return redirectWithStatus(request, "invalid_callback");
 
   const stateHash = await sha256Hex(state);
   const stateRow = await env.DB.prepare(`
@@ -152,27 +152,27 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   `)
     .bind(stateHash)
     .first<OAuthStateRow>();
-  if (!stateRow) return redirectWithStatus("expired");
-  if (!(await oauthNonceMatches(request, stateRow.device_nonce_hash))) return redirectWithStatus("invalid_state");
+  if (!stateRow) return redirectWithStatus(request, "expired");
+  if (!(await oauthNonceMatches(request, stateRow.device_nonce_hash))) return redirectWithStatus(request, "invalid_state");
 
   let verifier: string;
   try {
-    verifier = (
-      await decryptSecret<{ verifier: string }>(
-        env,
-        stateRow.pkce_verifier_encrypted,
-        `oauth:${stateHash}`,
-      )
-    ).verifier;
+    const saved = await decryptSecret<{ verifier: string; origin?: string }>(
+      env, stateRow.pkce_verifier_encrypted, `oauth:${stateHash}`,
+    );
+    // The callback must arrive at the same Worker hostname as initiation.
+    // Prior in-flight states expire after ten minutes and cannot cross origins.
+    if (saved.origin !== appOrigin(request)) return redirectWithStatus(request, "invalid_state");
+    verifier = saved.verifier;
   } catch {
-    return redirectWithStatus("invalid_state");
+    return redirectWithStatus(request, "invalid_state");
   }
 
   const tokenRequest = new URLSearchParams({
     code,
     client_id: env.GOOGLE_CLIENT_ID,
     client_secret: env.GOOGLE_CLIENT_SECRET,
-    redirect_uri: redirectUri(env),
+    redirect_uri: callbackUri(request),
     grant_type: "authorization_code",
     code_verifier: verifier,
   });
@@ -184,10 +184,10 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: tokenRequest,
     });
-    if (!response.ok) return redirectWithStatus("exchange_failed");
+    if (!response.ok) return redirectWithStatus(request, "exchange_failed");
     token = await response.json<TokenResponse>();
   } catch {
-    return redirectWithStatus("exchange_failed");
+    return redirectWithStatus(request, "exchange_failed");
   }
 
   const grantedScope = token.scope ?? "";
@@ -198,7 +198,7 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   ) {
     if (token.refresh_token) await revokeGoogleToken(token.refresh_token);
     else if (token.access_token) await revokeGoogleToken(token.access_token);
-    return redirectWithStatus("authorization_incomplete");
+    return redirectWithStatus(request, "authorization_incomplete");
   }
 
   let profile: GmailProfile;
@@ -209,18 +209,18 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
     );
     if (!response.ok) {
       await revokeGoogleToken(token.refresh_token);
-      return redirectWithStatus("profile_failed");
+      return redirectWithStatus(request, "profile_failed");
     }
     profile = await response.json<GmailProfile>();
   } catch {
     await revokeGoogleToken(token.refresh_token);
-    return redirectWithStatus("profile_failed");
+    return redirectWithStatus(request, "profile_failed");
   }
 
   const email = profile.emailAddress?.trim().toLowerCase();
   if (!email) {
     await revokeGoogleToken(token.refresh_token);
-    return redirectWithStatus("profile_failed");
+    return redirectWithStatus(request, "profile_failed");
   }
 
   const accountId = `gmail:${await sha256Hex(email)}`;
@@ -243,7 +243,7 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
     );
   } catch {
     await revokeGoogleToken(token.refresh_token);
-    return redirectWithStatus("storage_failed");
+    return redirectWithStatus(request, "storage_failed");
   }
 
   try {
@@ -285,11 +285,11 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
     ]);
   } catch {
     await revokeGoogleToken(token.refresh_token);
-    return redirectWithStatus("storage_failed");
+    return redirectWithStatus(request, "storage_failed");
   }
 
   const sessionCookie = await grantGoogleDeviceSession(request, env, accountId);
-  const response = redirectWithStatus("connected");
+  const response = redirectWithStatus(request, "connected");
   if (sessionCookie) response.headers.append("Set-Cookie", sessionCookie);
   response.headers.append("Set-Cookie", clearOAuthCookie());
   return response;

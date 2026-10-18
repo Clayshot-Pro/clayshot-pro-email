@@ -34,6 +34,14 @@ export const SAFE_DELIVERY_CODES = new Set([
   "E_HEADERS_TOO_LARGE",
   "E_HEADERS_TOO_MANY",
   "E_DELIVERY_UNCERTAIN",
+  "E_VALIDATION_ERROR",
+  "E_EMAIL_API_NOT_CONFIGURED",
+  "E_EMAIL_API_AUTH_FAILED",
+  "E_EMAIL_API_FORBIDDEN",
+  "E_EMAIL_SERVICE_NOT_ENTITLED",
+  "E_EMAIL_SENDING_DISABLED",
+  "E_EMAIL_DELIVERY_UNKNOWN",
+  "E_SENDER_NOT_VERIFIED",
 ]);
 
 /** Error carrying a safe delivery code; `code` matches the Cloudflare binding's shape. */

@@ -75,8 +75,22 @@ function safeDeliveryError(error: unknown): string {
 function userDeliveryError(code: string): string {
   if (code === "E_DELIVERY_UNCERTAIN") return "Delivery status is uncertain. Check Sent before trying again";
   if (code === "E_SENDER_DOMAIN_NOT_AVAILABLE") return "This mailbox's domain is not set up for sending";
+  if (code === "E_EMAIL_API_NOT_CONFIGURED") return "Email Sending API credentials are not configured";
+  if (code === "E_EMAIL_API_AUTH_FAILED" || code === "E_EMAIL_API_FORBIDDEN") {
+    return "Cloudflare Email Sending API credentials are invalid or lack Email Sending permission";
+  }
+  if (code === "E_EMAIL_SERVICE_NOT_ENTITLED" || code === "E_EMAIL_SENDING_DISABLED") {
+    return "Cloudflare Email Sending is not enabled for this account or domain";
+  }
+  if (code === "E_EMAIL_DELIVERY_UNKNOWN") return "Email delivery status is unknown. Check sent activity before retrying";
   if (code === "E_RECIPIENT_SUPPRESSED") {
     return "Recipient cannot currently receive this email";
+  }
+  if (code === "E_SENDER_NOT_VERIFIED" || code === "E_SENDER_DOMAIN_NOT_AVAILABLE") {
+    return "This sender domain is not enabled or verified for Cloudflare Email Sending";
+  }
+  if (code === "E_RECIPIENT_NOT_ALLOWED") {
+    return "Cloudflare sending is restricted to verified recipients. Configure an allowed sender address for this mailbox";
   }
   if (code === "E_CONTENT_TOO_LARGE") return "Email content is too large";
   if (code === "E_RATE_LIMIT_EXCEEDED" || code === "E_DAILY_LIMIT_EXCEEDED") {
@@ -163,9 +177,9 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Native senders need an active domain and an available transport:
-  // Cloudflare (primary always; others only when MULTI_SENDER_APPROVED) or
-  // Resend for domains the administrator switched to it.
+  // D1 resolves the authenticated, active mailbox (never a client-supplied
+  // From). It needs an active domain and an available transport: the
+  // Cloudflare Email Sending API by default, or Resend where switched on.
   if (provider.kind === "native") {
     const choice = await transportChoice(env, provider.accountId, provider.address);
     if (choice.kind === "unavailable") return Response.json({ error: choice.reason }, { status: 403 });
@@ -363,6 +377,9 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     status = "failed";
     deliveryError = safeDeliveryError(error);
     uncertain = error instanceof TransportError && error.uncertain;
+    // Log a whitelisted transport code only; never expose addresses,
+    // message contents, API credentials or provider stack traces.
+    console.warn("Outbound provider rejected message", { provider: provider.kind, code: deliveryError });
   }
 
   if (provider.kind === "native") {

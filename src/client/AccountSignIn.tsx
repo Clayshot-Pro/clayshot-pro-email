@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { unlockOwnerPasskey } from "./adminPasskey";
 import { useInstance } from "./instance";
+import { isAdminLoginEmail } from "./adminIdentity";
 
 export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: () => void; showGoogle?: boolean }) {
   const [email, setEmail] = useState("");
@@ -8,9 +9,9 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
   const [pending, setPending] = useState<"google" | "custom" | null>(null);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  // The server decides whether an address is the reserved administrator
-  // sign-in; it answers passkeyRequired and the passkey step follows.
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Client routing only: any admin@ address goes to the administrator
+  // password + passkey flow. The Worker authenticates the exact identity.
+  const isAdmin = isAdminLoginEmail(email);
   const { primaryDomain } = useInstance();
 
   async function addGoogle() {
@@ -30,7 +31,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
     event.preventDefault();
     setPending("custom"); setError("");
     try {
-      const response = await fetch("/api/device/login", {
+      const response = await fetch(isAdmin ? "/api/admin/login/password" : "/api/device/login", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -38,7 +39,6 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
       if (!response.ok) throw new Error(result.error || "Email sign-in failed");
       setPassword("");
       if (result.passkeyRequired) {
-        setIsAdmin(true);
         // A separate, server-bound passkey challenge completes the second factor.
         await unlockOwnerPasskey();
       }
@@ -91,7 +91,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
-            minLength={8}
+            minLength={1}
             maxLength={128}
             required
           />
@@ -108,7 +108,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
       </div>
       {isAdmin ? <p className="signin-admin-note">Confirm with your registered passkey to finish signing in.</p> : null}
       <button className="auth-primary signin-submit" type="submit" disabled={pending !== null}>
-        {pending === "custom" ? "Verifying…" : "Sign in to mailbox"}
+        {pending === "custom" ? "Verifying…" : isAdmin ? "Sign in as administrator" : "Sign in to mailbox"}
       </button>
     </form>
     {error ? <p className="auth-error" role="alert">{error}</p> : null}

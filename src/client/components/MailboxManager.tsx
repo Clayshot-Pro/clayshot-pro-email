@@ -13,6 +13,7 @@ type Mailbox = {
   purge_after: string | null;
   spam_filter_enabled: number;
   accent_color?: string | null;
+  sender_name?: string | null;
 };
 
 async function api(path: string, method = "GET", body?: unknown, approval?: AdminApproval): Promise<Record<string, unknown>> {
@@ -41,6 +42,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   const [quotaGB, setQuotaGB] = useState("5");
   const [spamEnabled, setSpamEnabled] = useState(false);
   const [accentColor, setAccentColor] = useState<string | null>(null);
+  const [senderName, setSenderName] = useState("");
   const [passwordFor, setPasswordFor] = useState<string | null>(null);
   const [customPassword, setCustomPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -82,6 +84,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
     setQuotaGB(String(box.quota_bytes / 1073741824));
     setSpamEnabled(box.spam_filter_enabled === 1);
     setAccentColor(box.accent_color ?? null);
+    setSenderName(box.sender_name ?? "");
   }
 
   async function create(event: FormEvent<HTMLFormElement>) {
@@ -146,8 +149,8 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   }
 
   async function submitCustomPassword(box: Mailbox) {
-    if (customPassword.length < 16 || customPassword.length > 128) {
-      setNotice("Choose a password between 16 and 128 characters"); return;
+    if (customPassword.length < 4 || customPassword.length > 32) {
+      setNotice("Choose a password between 4 and 32 characters"); return;
     }
     if (customPassword !== confirmPassword) {
       setNotice("The confirmation does not match the new password"); return;
@@ -178,6 +181,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
       await api(`/api/mailboxes/${encodeURIComponent(box.id)}`, "PATCH", {
         displayName: editName, quotaBytes: Math.round(value * 1073741824), spamFilterEnabled: spamEnabled,
         accentColor,
+        senderName: senderName.trim() || null,
       });
       setEditing(null);
     }, "Mailbox settings saved.");
@@ -275,23 +279,24 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
                   }}>
                     <label htmlFor={`password-${box.id}`}>New password
                       <input id={`password-${box.id}`} type={showPassword?"text":"password"}
-                        autoComplete="new-password" minLength={16} maxLength={128} value={customPassword}
+                        autoComplete="new-password" minLength={4} maxLength={32} value={customPassword}
                         onChange={event=>setCustomPassword(event.target.value)} required/>
                     </label>
                     <label htmlFor={`confirm-${box.id}`}>Confirm password
                       <input id={`confirm-${box.id}`} type={showPassword?"text":"password"}
-                        autoComplete="new-password" minLength={16} maxLength={128} value={confirmPassword}
+                        autoComplete="new-password" minLength={4} maxLength={32} value={confirmPassword}
                         onChange={event=>setConfirmPassword(event.target.value)} required/>
                     </label>
                     <label className="mailbox-password-show"><input type="checkbox" checked={showPassword}
                       onChange={event=>setShowPassword(event.target.checked)}/> Show passwords</label>
-                    <small>At least 16 characters. Updating this password signs out devices using this mailbox.</small>
+                    <small>4–32 characters. Updating this password signs out devices using this mailbox.</small>
                     <button className="settings-primary" type="submit" disabled={busy!==null}>Update password</button>
                   </form>
                 ) : null}
                 {editing === box.id ? (
                   <div style={{ display: "grid", gap: 7, marginTop: 10 }}>
                     <label>Display name <input value={editName} maxLength={80} onChange={e => setEditName(e.target.value)} /></label>
+                    <label>Sender name (From) <input value={senderName} maxLength={80} placeholder="Same as display name" onChange={e => setSenderName(e.target.value)} /></label>
                     <label>Quota in GB <input type="number" min="0.01" max="10" step="0.01" value={quotaGB} onChange={e => setQuotaGB(e.target.value)} /></label>
                     <label><input type="checkbox" checked={spamEnabled} onChange={e => setSpamEnabled(e.target.checked)} /> Move high-confidence suspected spam to Junk (experimental)</label>
                     <label>Mailbox colour <input type="color" value={accentColor ?? "#ff7a2f"} onChange={e => setAccentColor(e.target.value)} />

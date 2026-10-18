@@ -14,6 +14,7 @@ import {
   type DetailCacheEntry,
 } from "./appModel";
 import { ComposeModal } from "./components/ComposeModal";
+import { DeleteConfirmationDialog } from "./components/DeleteConfirmationDialog";
 import { MailList } from "./components/MailList";
 import { MessageReader } from "./components/MessageReader";
 import { MobileNav } from "./components/MobileNav";
@@ -31,6 +32,7 @@ import type {
   NotificationState,
 } from "./mailTypes";
 import { forwardSubject, replySubject } from "./mailUtils";
+import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
 import { useActiveAccountAppearance } from "./appearance";
 
@@ -47,12 +49,21 @@ export function App() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMailIds, setSelectedMailIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [folderTotalCount, setFolderTotalCount] = useState<number | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<{
+    kind: "single" | "bulk" | "draft";
+    ids: string[];
+    accountId: string;
+    folder: Folder;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [compose, setCompose] = useState<ComposeState>(EMPTY_COMPOSE);
   const [composeAccountId, setComposeAccountId] = useState(NATIVE_ACCOUNT_ID);
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
   const [draftStatus, setDraftStatus] = useState<"saving" | "saved" | null>(null);
   const [notificationState, setNotificationState] = useState<NotificationState>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
@@ -191,10 +202,12 @@ export function App() {
           messages: MessageListItem[];
           unreadCount: number;
           draftCount: number;
+          folderTotalCount?: number | null;
         };
         if (requestId !== listRequest.current) return;
         const guarded = applyMailMutationShields(activeFolder, activeAccountId, data.messages, mutationShields.current);
         setMessages(guarded);
+        setFolderTotalCount(typeof data.folderTotalCount === "number" ? data.folderTotalCount : null);
         const visibleIds = new Set(guarded.map(item => item.id));
         const shieldedUnread = data.messages.filter(item =>
           !visibleIds.has(item.id) && item.direction === "inbound" && !item.isRead).length;
@@ -265,6 +278,9 @@ export function App() {
     setMessages([]);
     setSelectionMode(false);
     setSelectedMailIds([]);
+    setPendingDeletion(null);
+    setBulkNotice(null);
+    setFolderTotalCount(null);
     setUnreadCount(0);
     setDraftCount(0);
     setLoading(true);
@@ -324,6 +340,9 @@ export function App() {
     openRequest.current += 1;
     setSelectionMode(false);
     setSelectedMailIds([]);
+    setPendingDeletion(null);
+    setBulkNotice(null);
+    setFolderTotalCount(null);
     setFolder(nextFolder);
     setSelected(null);
     setThread([]);
@@ -641,31 +660,49 @@ export function App() {
     }
   };
 
+  // Mailbox refreshes can replace the first page and remove permanently
+  // deleted records. Never keep dangling selected IDs after a completed edit.
+  useEffect(() => {
+    if (!selectionMode || bulkBusy) return;
+    const listed = new Set(messages.map(item => item.id));
+    setSelectedMailIds(current => {
+      const next = current.filter(id => listed.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [messages, selectionMode, bulkBusy]);
+
   const toggleMailSelection = (id: string) => {
+    if (bulkBusy) return;
     setSelectedMailIds((current) => current.includes(id)
       ? current.filter((value) => value !== id)
-      : current.length < 50 ? [...current, id] : current);
+      : [...current, id]);
   };
 
   const toggleAllMailSelection = (ids: string[]) => {
-    setSelectedMailIds((current) => {
-      const allSelected = ids.length > 0 && ids.every((id) => current.includes(id));
-      return allSelected
-        ? current.filter((id) => !ids.includes(id))
-        : [...new Set([...current, ...ids])].slice(0, 50);
-    });
+    if (bulkBusy) return;
+    setSelectedMailIds((current) => toggleVisibleSelection(current, ids));
   };
 
-  const performBulkAction = async (action: string) => {
-    if (bulkBusy || selectedMailIds.length === 0) return;
-    const count = selectedMailIds.length;
-    if (action === "permanent" &&
-      !confirm("Permanently delete " + count + " message(s)? This cannot be undone.")) return;
-    if (action === "deleteDraft" &&
-      !confirm("Delete " + count + " draft(s) permanently? This cannot be undone.")) return;
+  const performBulkAction = async (
+    action: string,
+    ids: string[] = selectedMailIds,
+    confirmed = false,
+  ) => {
+    if (bulkBusy || ids.length === 0) return;
+    if (!confirmed && (action === "permanent" || action === "deleteDraft")) {
+      setPendingDeletion({
+        kind: action === "permanent" ? "bulk" : "draft",
+        ids: [...ids],
+        accountId: activeAccountId,
+        folder,
+      });
+      return;
+    }
+
+    const requestedIds = [...new Set(ids)];
     setBulkBusy(true);
     setError(null);
-    const requestedIds = [...selectedMailIds];
+    setBulkNotice(null);
     const flags: MailMutationFlags =
       action === "trash" ? { isDeleted: true } :
       action === "restore" ? { isDeleted: false } :
@@ -685,28 +722,50 @@ export function App() {
         updatedAt: Date.now(),
       });
     }
+    // Invalidate stale GET requests to avoid resurrecting deleted mail.
     listRequest.current += 1;
     setMessages(current => applyMailMutationShields(folder, activeAccountId, current, mutationShields.current));
+
+    const succeeded: string[] = [];
+    const failed: Array<{ id: string; error: string }> = [];
     try {
-      const response = await fetch(
-        "/api/messages/bulk?accountId=" + encodeURIComponent(activeAccountId),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: selectedMailIds, action }),
-        },
-      );
-      const result = await response.json() as {
-        error?: string; succeeded?: string[];
-        failed?: Array<{id:string;error:string}>;
-      };
-      if (!response.ok && !result.succeeded?.length) throw new Error(result.error || result.failed?.[0]?.error || "Bulk action failed");
-      for (const failure of result.failed ?? []) {
-        mutationShields.current.delete(mailMutationKey(activeAccountId, failure.id));
+      for (const batch of chunkBulkMessageIds(requestedIds)) {
+        try {
+          const response = await fetch(
+            "/api/messages/bulk?accountId=" + encodeURIComponent(activeAccountId),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ids: batch, action }),
+              signal: AbortSignal.timeout(20_000),
+            },
+          );
+          const result = await response.json() as {
+            error?: string;
+            succeeded?: string[];
+            failed?: Array<{id:string;error:string}>;
+          };
+          const batchSuccess = new Set((result.succeeded ?? []).filter(id => batch.includes(id)));
+          if (!response.ok && batchSuccess.size === 0) {
+            throw new Error(result.error || result.failed?.[0]?.error || "Bulk action failed");
+          }
+          const failures = new Map((result.failed ?? []).map(item => [item.id, item.error]));
+          for (const id of batch) {
+            if (batchSuccess.has(id)) succeeded.push(id);
+            else failed.push({ id, error: failures.get(id) || result.error || "Message was not updated" });
+          }
+        } catch (cause) {
+          const error = cause instanceof Error ? cause.message : "Bulk action failed";
+          for (const id of batch) failed.push({ id, error });
+        }
+      }
+
+      for (const item of failed) {
+        mutationShields.current.delete(mailMutationKey(activeAccountId, item.id));
       }
       if (mailViewRef.current.accountId !== activeAccountId ||
           mailViewRef.current.folder !== folder || mailViewRef.current.search !== search) return;
-      const successIds = new Set(result.succeeded ?? []);
+      const successIds = new Set(succeeded);
       for (const id of successIds) detailCache.current.delete(detailCacheKey(id));
       if (selected && successIds.has(selected.id)) {
         openRequest.current += 1;
@@ -714,27 +773,32 @@ export function App() {
         setThread([]);
         setOpeningMessageId(null);
       }
-      setSelectedMailIds(result.failed?.map((failure) => failure.id) ?? []);
-      if (!result.failed?.length) setSelectionMode(false);
+      // Always exit selection mode after a completed attempt, including
+      // partial failures. A permanently removed message must never remain
+      // checked or count toward a future bulk action.
+      setSelectedMailIds([]);
+      setSelectionMode(false);
       await loadMessages(folder, search, true);
-      if (result.failed?.length) {
-        setError(result.failed.length + " message(s) could not be updated: " + result.failed[0].error);
+      if (failed.length) {
+        setError(`${succeeded.length} updated; ${failed.length} could not be updated: ${failed[0].error}. Select the remaining messages to retry.`);
+      } else {
+        setBulkNotice(`${succeeded.length} message(s) ${action === "permanent" ? "permanently deleted" : action === "trash" ? "moved to Trash" : "updated"}. More messages may appear from the next page.`);
       }
-    } catch (cause) {
-      for (const id of requestedIds) mutationShields.current.delete(mailMutationKey(activeAccountId, id));
-      if (mailViewRef.current.accountId === activeAccountId && mailViewRef.current.folder === folder) {
-        void loadMessages(folder, search, true);
-      }
-      setError(cause instanceof Error ? cause.message : "Bulk action failed");
     } finally {
+      // A timed-out or interrupted batch must not leave every checkbox
+      // permanently disabled. Refresh the authoritative server state so
+      // already-committed deletes can be reconciled.
       setBulkBusy(false);
     }
   };
 
-  const permanentlyDeleteSelected = async () => {
-    if (!selected || activeAccountId.startsWith("gmail:")) return;
-    if (!confirm("Permanently delete this message? This cannot be undone.")) return;
-    const id = selected.id;
+  const permanentlyDeleteSelected = async (confirmed = false, targetId = selected?.id) => {
+    if (!selected || !targetId || selected.id !== targetId || activeAccountId.startsWith("gmail:")) return;
+    if (!confirmed) {
+      setPendingDeletion({ kind: "single", ids: [targetId], accountId: activeAccountId, folder });
+      return;
+    }
+    const id = targetId;
     const shieldKey = mailMutationKey(activeAccountId, id);
     mutationShields.current.set(shieldKey, { flags: {}, hide: true, updatedAt: Date.now() });
     listRequest.current += 1;
@@ -848,6 +912,7 @@ export function App() {
 
   const submitCompose = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setComposeError(null);
     setSending(true);
     try {
       const form = new FormData();
@@ -876,6 +941,7 @@ export function App() {
         localStorage.removeItem(draftSenderKey(compose.draftId));
       }
       setComposeOpen(false);
+      setComposeError(null);
       setCompose(EMPTY_COMPOSE);
       setFiles([]);
       if (composeAccountId !== activeAccountId) {
@@ -887,7 +953,9 @@ export function App() {
       setThread([]);
       setOpeningMessageId(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Email could not be sent");
+      const message = caught instanceof Error ? caught.message : "Email could not be sent";
+      setError(message);
+      setComposeError(message);
     } finally {
       setSending(false);
     }
@@ -942,10 +1010,14 @@ export function App() {
           selectionMode={selectionMode}
           selectedIds={selectedMailIds}
           bulkBusy={bulkBusy}
+          folderTotalCount={folderTotalCount}
+          bulkNotice={bulkNotice}
           canPermanentlyDelete={accounts.find((account) => account.id === activeAccountId)?.provider === "native"}
           onToggleSelection={() => {
+            if (bulkBusy) return;
             setSelectionMode((current) => !current);
             setSelectedMailIds([]);
+            setBulkNotice(null);
           }}
           onToggleMailSelected={toggleMailSelection}
           onToggleSelectAll={toggleAllMailSelection}
@@ -986,11 +1058,12 @@ export function App() {
         compose={compose}
         files={files}
         sending={sending}
+        sendError={composeError}
         draftStatus={draftStatus}
         accounts={accounts}
         senderAccountId={composeAccountId}
-        onSenderAccountChange={changeComposeAccount}
-        onChange={setCompose}
+        onSenderAccountChange={(id) => { setComposeError(null); changeComposeAccount(id); }}
+        onChange={(next) => { setComposeError(null); setCompose(next); }}
         onFilesChange={setFiles}
         onClose={closeCompose}
         onDiscard={() => void discardCompose()}
@@ -1050,6 +1123,23 @@ export function App() {
           void refreshAccounts();
         }}
       />
+      {pendingDeletion ? (
+        <DeleteConfirmationDialog
+          kind={pendingDeletion.kind}
+          count={pendingDeletion.ids.length}
+          onCancel={() => setPendingDeletion(null)}
+          onConfirm={() => {
+            const target = pendingDeletion;
+            setPendingDeletion(null);
+            if (bulkBusy || target.accountId !== activeAccountId || target.folder !== folder) return;
+            if (target.kind === "single") {
+              void permanentlyDeleteSelected(true, target.ids[0]);
+            } else {
+              void performBulkAction(target.kind === "draft" ? "deleteDraft" : "permanent", target.ids, true);
+            }
+          }}
+        />
+      ) : null}
       {error ? <div className="toast-error" role="alert">{error}</div> : null}
     </main>
   );

@@ -1,6 +1,8 @@
 import "../admin-domains.css";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { adminActionFetch } from "../adminActions";
+import { THEMES, type ThemeId } from "../../worker/customization";
+import { THEME_LABELS } from "./AppearanceSettings";
 
 export type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
 export type Transport = "cloudflare" | "resend" | "none";
@@ -10,13 +12,14 @@ export type Domain = {
   isPrimary: boolean;
   outboundTransport: Transport;
   postmasterMailboxId: string | null;
+  theme: ThemeId | null;
   dnsCheckedAt: string | null;
   dnsReport: { checkedAt: string; checks: DnsCheck[]; canActivate: boolean } | null;
   mailboxCount: number;
 };
 type DomainsPayload = {
   domains: Domain[];
-  transports: { cloudflare: { multiSenderApproved: boolean }; resend: { available: boolean; webhookConfigured: boolean } };
+  transports: { cloudflare: { available: boolean }; resend: { available: boolean; webhookConfigured: boolean } };
   webhookUrl: string;
 };
 type MailboxOption = { id: string; email_address: string; status: string; deleted_at: string | null };
@@ -186,6 +189,14 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
                     </select>
                   </label>
                   <label>
+                    Theme for this domain's mailboxes
+                    <select value={domain.theme ?? ""} disabled={busy !== null}
+                      onChange={event => void update(domain, { theme: event.target.value || null }, "Domain theme saved. It applies when one of its mailboxes is open.")}>
+                      <option value="">Instance default</option>
+                      {THEMES.map(theme => <option key={theme} value={theme}>{THEME_LABELS[theme]}</option>)}
+                    </select>
+                  </label>
+                  <label>
                     Postmaster and abuse mail
                     <select value={domain.postmasterMailboxId ?? ""} disabled={busy !== null}
                       onChange={event => void update(domain, { postmasterMailboxId: event.target.value || null }, "Postmaster mailbox updated.")}>
@@ -195,10 +206,11 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
                   </label>
                 </div>
 
-                {domain.outboundTransport === "cloudflare" && !data.transports.cloudflare.multiSenderApproved && (
+                {domain.outboundTransport === "cloudflare" && (
                   <p className="admin-domain-note">
-                    Only the primary address can send through Cloudflare until MULTI_SENDER_APPROVED=true. Enable it only if
-                    Cloudflare's terms allow your use.
+                    {data.transports.cloudflare.available
+                      ? "Every active mailbox on this domain sends through the Cloudflare Email Sending API once the domain is onboarded for Email Sending."
+                      : "Cloudflare Email Sending is not configured: set CF_EMAIL_SENDING_TOKEN and run npm run secrets:push."}
                   </p>
                 )}
                 {domain.outboundTransport === "resend" && (

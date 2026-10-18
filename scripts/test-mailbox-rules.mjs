@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { aliasTarget, normalizeMailboxAddress as normalize } from "../src/worker/mailboxRules.ts";
 import { suspectedJunk } from "../src/worker/email/junk.ts";
 import { adminPasswordError, mailboxPasswordError } from "../src/worker/mailboxPasswordPolicy.ts";
@@ -34,12 +35,20 @@ assert.equal(suspectedJunk("Lottery winner!!!", "unknown@contest.test", "Click h
 assert.equal(suspectedJunk("Urgent schedule change", "professor@university.ca", "Please see the course schedule"), false);
 console.log("PASS: address normalization and conservative Junk classification");
 
-assert.equal(mailboxPasswordError("correct-horse-battery-staple-2026"),null);
-assert.match(mailboxPasswordError("short")??"",/at least 16/);
+assert.equal(mailboxPasswordError("correct-horse-battery-2026"),null);
+assert.equal(mailboxPasswordError("Ab1!"), null);
+assert.match(mailboxPasswordError("Ab!") ?? "", /at least 4/);
+assert.match(mailboxPasswordError("X".repeat(33)) ?? "", /at most 32/);
 assert.match(mailboxPasswordError("z".repeat(20))??"",/repetitive/);
 assert.match(mailboxPasswordError("password-with-newline"+String.fromCharCode(10)+"2026")??"",/control/);
 console.log("PASS: admin login address reserved and custom password policy validated");
 
 assert.equal(adminPasswordError("Abcd?789"),null);
-assert.match(adminPasswordError("short")??"",/at least 8/);
+assert.equal(adminPasswordError("Ab1!"), null);
+assert.match(adminPasswordError("Ab!") ?? "", /at least 4/);
 assert.match(adminPasswordError("X".repeat(33))??"",/at most 32/);
+
+const source = path => readFileSync(new URL("../" + path, import.meta.url), "utf8");
+assert.match(source("src/worker/mailboxes.ts"), /crypto\.getRandomValues\(new Uint8Array\(24\)\)/);
+assert.match(source("src/worker/deviceAuth.ts"), /rotateMailboxPassword[\s\S]*?new Uint8Array\(24\)/);
+console.log("PASS: generated mailbox passwords remain within 4–32 characters");

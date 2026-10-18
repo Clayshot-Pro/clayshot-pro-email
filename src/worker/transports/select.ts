@@ -3,15 +3,15 @@
  * handler both use this, so they always agree on whether a mailbox can send.
  */
 export type TransportChoice =
-  | { kind: "cloudflare"; binding: "EMAIL" | "EMAIL_MULTI" }
+  | { kind: "cloudflare" }
   | { kind: "resend" }
   | { kind: "unavailable"; reason: string };
 
 export type SelectionInput = {
-  isPrimaryMailbox: boolean;
   domainStatus: "pending" | "active" | "disabled" | null;
   domainTransport: "cloudflare" | "resend" | "none" | null;
-  multiSenderApproved: boolean;
+  /** CF_EMAIL_SENDING_ACCOUNT_ID and CF_EMAIL_SENDING_TOKEN are present. */
+  emailApiConfigured: boolean;
   resendConfigured: boolean;
 };
 
@@ -21,10 +21,10 @@ export function selectTransport(input: SelectionInput): TransportChoice {
   }
   switch (input.domainTransport) {
     case "cloudflare":
-      if (input.isPrimaryMailbox) return { kind: "cloudflare", binding: "EMAIL" };
-      return input.multiSenderApproved
-        ? { kind: "cloudflare", binding: "EMAIL_MULTI" }
-        : { kind: "unavailable", reason: "Sending from this mailbox is not enabled yet" };
+      // Every active mailbox on an onboarded domain sends through the API.
+      return input.emailApiConfigured
+        ? { kind: "cloudflare" }
+        : { kind: "unavailable", reason: "Cloudflare Email Sending is not configured (set CF_EMAIL_SENDING_TOKEN)" };
     case "resend":
       return input.resendConfigured
         ? { kind: "resend" }

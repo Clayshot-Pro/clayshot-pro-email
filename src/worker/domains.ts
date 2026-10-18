@@ -1,4 +1,6 @@
-import { appConfig, isValidDomain } from "./appConfig";
+import { appConfig, isValidAddress, isValidDomain } from "./appConfig";
+import { appOrigin } from "./config";
+import { THEMES, type ThemeId } from "./customization";
 import { evaluateDns, CLOUDFLARE_DKIM_SELECTORS, RESEND_DKIM_SELECTORS, type DnsAnswers, type OutboundTransportKind } from "./domainDns";
 import type { AddressRules } from "./mailboxRules";
 
@@ -13,6 +15,7 @@ export type DomainRow = {
   postmaster_mailbox_id: string | null;
   dns_checked_at: string | null;
   dns_report: string | null;
+  theme: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -20,34 +23,83 @@ export type DomainRow = {
 const PRIMARY_MAILBOX_ID = "native:primary";
 const TRANSPORTS = new Set<OutboundTransportKind>(["cloudflare", "resend", "none"]);
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
+const validTheme = (value: unknown): value is ThemeId =>
+  typeof value === "string" && (THEMES as readonly string[]).includes(value);
+
+/** The primary mail domain, or null on a fresh install that has not run setup. */
+export async function primaryDomain(env: Env): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT domain FROM domains WHERE is_primary = 1 LIMIT 1")
+    .first<{ domain: string }>().catch(() => null);
+  return row?.domain.toLowerCase() ?? null;
+}
 
 /**
- * Create the primary domain (always active) and any MAIL_DOMAINS seeds
- * (pending). Removing a seed from .env never disables a domain.
+ * An install is established once it holds data or an owner passkey. Migration
+ * 0010 seeds native:primary with a placeholder address, so a fresh install
+ * stays uninitialized until first-run setup chooses the real address.
+ */
+async function established(env: Env): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT
+      EXISTS (SELECT 1 FROM messages WHERE mailbox_id = ?1)
+      OR EXISTS (SELECT 1 FROM drafts WHERE mailbox_id = ?1)
+      OR EXISTS (SELECT 1 FROM native_mailbox_credentials WHERE mailbox_id = ?1)
+      OR EXISTS (SELECT 1 FROM auth_credentials) AS yes`).bind(PRIMARY_MAILBOX_ID).first<{ yes: number }>();
+  return Boolean(row?.yes);
+}
+
+/**
+ * Keep native_mailboxes.domain in sync and, for an install upgraded from v2,
+ * adopt the primary mailbox's domain as the primary domain.
  */
 export async function ensureDomains(env: Env): Promise<void> {
-  const config = appConfig(env);
+  await env.DB.prepare(`UPDATE native_mailboxes SET domain = lower(substr(email_address, instr(email_address, '@') + 1))
+    WHERE domain IS NULL OR domain != lower(substr(email_address, instr(email_address, '@') + 1))`).run();
+  if (await primaryDomain(env) || !(await established(env))) return;
+  const box = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = ?1")
+    .bind(PRIMARY_MAILBOX_ID).first<{ email_address: string }>();
+  const domain = box?.email_address.slice(box.email_address.lastIndexOf("@") + 1).toLowerCase();
+  if (!domain || !isValidDomain(domain)) return;
+  await env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
+    ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain).run();
+}
+
+export async function isInitialized(env: Env): Promise<boolean> {
+  return Boolean(await primaryDomain(env));
+}
+
+/**
+ * First-run setup: choose the primary mailbox address. Allowed only while the
+ * instance is uninitialized; the caller has already verified AUTH_SETUP_TOKEN.
+ * Returns an error message, or null on success.
+ */
+export async function initializeInstance(env: Env, address: string, displayName: string): Promise<string | null> {
+  const normalized = address.trim().toLowerCase();
+  if (!isValidAddress(normalized) || normalized.startsWith("admin@")) {
+    return "Enter a valid address for the primary mailbox (admin@ is reserved)";
+  }
+  if (await primaryDomain(env) || await established(env)) return "This instance is already set up";
+  const domain = normalized.slice(normalized.indexOf("@") + 1);
   await env.DB.batch([
-    env.DB.prepare("UPDATE domains SET is_primary = 0 WHERE is_primary = 1 AND domain != ?1").bind(config.primaryDomain),
+    env.DB.prepare(`INSERT INTO native_mailboxes (id, email_address, display_name, domain) VALUES (?1, ?2, ?3, ?4)
+      ON CONFLICT(id) DO UPDATE SET email_address = excluded.email_address, display_name = excluded.display_name,
+      domain = excluded.domain, updated_at = CURRENT_TIMESTAMP`).bind(PRIMARY_MAILBOX_ID, normalized, displayName, domain),
+    env.DB.prepare("UPDATE domains SET is_primary = 0 WHERE is_primary = 1"),
     env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
-      ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP
-      WHERE domains.status != 'active' OR domains.is_primary != 1`).bind(config.primaryDomain),
-    ...config.mailDomains.map(domain =>
-      env.DB.prepare("INSERT OR IGNORE INTO domains (domain, status) VALUES (?1, 'pending')").bind(domain)),
-    env.DB.prepare(`UPDATE native_mailboxes SET domain = lower(substr(email_address, instr(email_address, '@') + 1))
-      WHERE domain IS NULL OR domain != lower(substr(email_address, instr(email_address, '@') + 1))`),
+      ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain),
   ]);
+  return null;
 }
 
 /** Domains addresses may use: active for routing/sign-in, active + pending for creation. */
 export async function addressRules(env: Env, scope: RulesScope = "routing"): Promise<AddressRules> {
-  const config = appConfig(env);
   const statuses = scope === "create" ? ["active", "pending"] : ["active"];
-  const rows = await env.DB.prepare(`SELECT domain FROM domains WHERE status IN (${statuses.map(() => "?").join(",")})`)
-    .bind(...statuses).all<{ domain: string }>().catch(() => ({ results: [] as { domain: string }[] }));
+  const rows = await env.DB.prepare(`SELECT domain, is_primary FROM domains WHERE status IN (${statuses.map(() => "?").join(",")})`)
+    .bind(...statuses).all<{ domain: string; is_primary: number }>()
+    .catch(() => ({ results: [] as { domain: string; is_primary: number }[] }));
   const domains = new Set(rows.results.map(row => row.domain.toLowerCase()));
-  domains.add(config.primaryDomain);
-  return { domains, defaultDomain: config.primaryDomain, adminAddress: config.adminAddress };
+  const primary = rows.results.find(row => row.is_primary === 1)?.domain.toLowerCase() ?? "";
+  // The admin local part is reserved on every domain (mailboxRules RESERVED).
+  return { domains, defaultDomain: primary };
 }
 
 export async function domainRow(env: Env, domain: string): Promise<DomainRow | null> {
@@ -64,10 +116,8 @@ export async function postmasterMailboxId(env: Env, domain: string): Promise<str
 
 /** Outbound policy for a sender address's domain. */
 export async function sendingDomain(env: Env, address: string): Promise<{ status: DomainStatus; transport: OutboundTransportKind } | null> {
-  const domain = address.slice(address.lastIndexOf("@") + 1).toLowerCase();
-  const row = await domainRow(env, domain);
-  if (row) return { status: row.status, transport: row.outbound_transport };
-  return domain === appConfig(env).primaryDomain ? { status: "active", transport: "cloudflare" } : null;
+  const row = await domainRow(env, address.slice(address.lastIndexOf("@") + 1).toLowerCase());
+  return row ? { status: row.status, transport: row.outbound_transport } : null;
 }
 
 function present(row: DomainRow & { mailbox_count?: number }) {
@@ -79,6 +129,7 @@ function present(row: DomainRow & { mailbox_count?: number }) {
     isPrimary: row.is_primary === 1,
     outboundTransport: row.outbound_transport,
     postmasterMailboxId: row.postmaster_mailbox_id,
+    theme: validTheme(row.theme) ? row.theme : null,
     dnsCheckedAt: row.dns_checked_at,
     dnsReport: report,
     mailboxCount: row.mailbox_count ?? 0,
@@ -86,17 +137,17 @@ function present(row: DomainRow & { mailbox_count?: number }) {
   };
 }
 
-export async function listDomainsResponse(env: Env): Promise<Response> {
+export async function listDomainsResponse(request: Request, env: Env): Promise<Response> {
   const config = appConfig(env);
   const rows = await env.DB.prepare(`SELECT d.*, (SELECT COUNT(*) FROM native_mailboxes m WHERE m.domain = d.domain) AS mailbox_count
     FROM domains d ORDER BY d.is_primary DESC, d.domain`).all<DomainRow & { mailbox_count: number }>();
   return Response.json({
     domains: rows.results.map(present),
     transports: {
-      cloudflare: { available: true, multiSenderApproved: config.features.multiSender },
+      cloudflare: { available: config.features.emailApi },
       resend: { available: config.features.resend, webhookConfigured: config.features.resendWebhook },
     },
-    webhookUrl: `${config.origin}/api/webhooks/resend`,
+    webhookUrl: `${appOrigin(request)}/api/webhooks/resend`,
   });
 }
 
@@ -104,7 +155,7 @@ export async function createDomain(request: Request, env: Env): Promise<Response
   const body = await request.json<{ domain?: unknown }>().catch(() => null);
   const domain = typeof body?.domain === "string" ? body.domain.trim().toLowerCase().replace(/\.$/, "") : "";
   if (!isValidDomain(domain)) return jsonError("Enter a valid ASCII or punycode domain such as example.org", 400);
-  if (domain === new URL(appConfig(env).origin).hostname) return jsonError("Use the mail domain, not the web app host", 400);
+  if (domain === new URL(request.url).hostname.toLowerCase()) return jsonError("Use the mail domain, not the web app host", 400);
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM domains").first<{ n: number }>();
   if ((count?.n ?? 0) >= 50) return jsonError("Domain limit reached", 409);
   const inserted = await env.DB.prepare("INSERT OR IGNORE INTO domains (domain, status) VALUES (?1, 'pending')").bind(domain).run();
@@ -115,8 +166,10 @@ export async function createDomain(request: Request, env: Env): Promise<Response
 export async function updateDomain(request: Request, env: Env, domain: string): Promise<Response> {
   const row = await domainRow(env, domain);
   if (!row) return jsonError("Domain not found", 404);
-  const body = await request.json<{ status?: unknown; postmasterMailboxId?: unknown; outboundTransport?: unknown }>().catch(() => null);
-  if (!body || (body.status === undefined && body.postmasterMailboxId === undefined && body.outboundTransport === undefined)) {
+  const body = await request.json<{ status?: unknown; postmasterMailboxId?: unknown; outboundTransport?: unknown; theme?: unknown }>()
+    .catch(() => null);
+  if (!body || (body.status === undefined && body.postmasterMailboxId === undefined
+    && body.outboundTransport === undefined && body.theme === undefined)) {
     return jsonError("No changes requested", 400);
   }
   let status = row.status;
@@ -151,8 +204,13 @@ export async function updateDomain(request: Request, env: Env, domain: string): 
       return jsonError("Set RESEND_API_KEY and run npm run secrets:push before switching a domain to Resend", 409);
     }
   }
-  await env.DB.prepare(`UPDATE domains SET status = ?2, postmaster_mailbox_id = ?3, outbound_transport = ?4,
-    updated_at = CURRENT_TIMESTAMP WHERE domain = ?1`).bind(row.domain, status, postmaster, transport).run();
+  let theme = validTheme(row.theme) ? row.theme : null;
+  if (body.theme !== undefined) {
+    if (body.theme !== null && !validTheme(body.theme)) return jsonError("Unknown theme", 400);
+    theme = body.theme;
+  }
+  await env.DB.prepare(`UPDATE domains SET status = ?2, postmaster_mailbox_id = ?3, outbound_transport = ?4, theme = ?5,
+    updated_at = CURRENT_TIMESTAMP WHERE domain = ?1`).bind(row.domain, status, postmaster, transport, theme).run();
   return Response.json({ domain: present((await domainRow(env, row.domain))!) });
 }
 

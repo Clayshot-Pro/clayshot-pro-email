@@ -1,4 +1,5 @@
-import { appConfig, publicInstanceInfo } from "./appConfig";
+import { appConfig } from "./appConfig";
+import { primaryDomain } from "./domains";
 import { brandNames, instanceSettings } from "./branding";
 import { THEME_BACKGROUNDS } from "./customization";
 
@@ -14,7 +15,7 @@ const DEFAULT_THEME_COLOR = "#0d0c0b";
 
 export async function instanceBranding(env: Env): Promise<InstanceBranding> {
   const settings = await instanceSettings(env);
-  const names = brandNames(env, settings);
+  const names = brandNames(settings);
   return {
     name: names.name,
     shortName: names.shortName,
@@ -26,12 +27,17 @@ export async function instanceBranding(env: Env): Promise<InstanceBranding> {
 
 export async function instanceResponse(env: Env): Promise<Response> {
   const settings = await instanceSettings(env);
-  const names = brandNames(env, settings);
+  const names = brandNames(settings);
+  const features = appConfig(env).features;
+  const domain = await primaryDomain(env);
+  // Public and unauthenticated: never addresses or secrets.
   return Response.json({
-    ...publicInstanceInfo(appConfig(env)),
     brandName: names.name,
     brandShortName: names.shortName,
-    brandingSource: appConfig(env).brandingSource,
+    primaryDomain: domain ?? "",
+    initialized: Boolean(domain),
+    setupAvailable: !domain && features.setup,
+    features: { gmail: features.gmail, push: features.push },
     logoVersion: settings.logoVersion,
     accent: settings.accent,
     defaultTheme: settings.defaultTheme,

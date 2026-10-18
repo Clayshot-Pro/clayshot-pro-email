@@ -23,6 +23,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [owner, setOwner] = useState<AuthStatus | null>(null);
   const [setupToken, setSetupToken] = useState("");
+  const [primaryAddress, setPrimaryAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const instance = useInstance();
@@ -57,8 +58,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
   async function initialSetup() {
     if (!setupToken.trim()) { setError("Enter the original setup secret first."); return; }
+    if (needsInstanceSetup && !primaryAddress.trim()) { setError("Choose the primary mailbox address first."); return; }
     setBusy(true); setError("");
     try {
+      // A fresh install first records its primary mailbox (and so its primary
+      // domain) in D1; the Worker has no instance configuration of its own.
+      if (needsInstanceSetup) {
+        await apiJson<{ ok: boolean }>("/api/setup", {
+          method: "POST", body: JSON.stringify({ setupToken, primaryAddress: primaryAddress.trim() }),
+        });
+        instance.refresh();
+      }
       const registration = await apiJson<Registration>("/api/auth/register/options", {
         method:"POST",body:JSON.stringify({setupToken}),
       });
@@ -71,6 +81,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     } catch(cause) { setError(cause instanceof Error ? cause.message : "Setup failed"); }
     finally { setBusy(false); }
   }
+
+  const needsInstanceSetup = instance.loaded && instance.initialized === false;
 
   if (device?.isAdmin) return <AdminPanel />;
   if (device?.authenticated && device.accountCount > 0) return <>{children}</>;
@@ -93,6 +105,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
           </button>
         ) : !owner.configured && owner.setupAvailable ? (
           <div className="auth-setup">
+            {needsInstanceSetup && <>
+              <label htmlFor="setup-primary">Primary mailbox address</label>
+              <input id="setup-primary" type="email" value={primaryAddress} autoComplete="off" autoCapitalize="none"
+                spellCheck={false} placeholder="hello@example.com" onChange={event=>setPrimaryAddress(event.target.value)} />
+              <p className="auth-intro">Its domain becomes the primary mail domain. You can add more domains later.</p>
+            </>}
             <label htmlFor="setup-token">One-time administrator setup secret</label>
             <input id="setup-token" type="password" value={setupToken} autoComplete="off"
               onChange={event=>setSetupToken(event.target.value)} />

@@ -1,11 +1,11 @@
-// Render the gitignored wrangler.jsonc from wrangler.template.jsonc and .env /
-// build variables. Strict mode (Workers Builds on main, or --strict) requires
-// real values and a resolved D1 database; otherwise example values are used so
-// CI can typecheck and bundle without instance configuration.
+// Render the gitignored wrangler.jsonc from wrangler.template.jsonc. There
+// are no instance vars to supply: strict mode (Workers Builds on main, or
+// --strict) only requires the Cloudflare deploy keys and a resolved D1
+// database; other builds use a placeholder database ID for typecheck/bundle.
 import { readFile, writeFile } from "node:fs/promises";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import {
-  PLACEHOLDER_DATABASE_ID, renderWrangler, withPlaceholders,
+  PLACEHOLDER_DATABASE_ID, renderWrangler,
   databaseIdFromDeployedWorker, databaseIdByName, isWorkersBuildOnMain,
 } from "./config-lib.mjs";
 
@@ -13,16 +13,13 @@ const TEMPLATE = new URL("../wrangler.template.jsonc", import.meta.url);
 const OUTPUT = new URL("../wrangler.jsonc", import.meta.url);
 
 const strict = process.argv.includes("--strict") || isWorkersBuildOnMain();
-let { values } = loadConfigValues();
+const { values } = loadConfigValues();
 
-const missing = missingRequired(values, strict ? ["var", "deploy"] : ["var"]);
-if (missing.length) {
-  if (strict) {
+if (strict) {
+  const missing = missingRequired(values, ["deploy"]);
+  if (missing.length) {
     throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env or as build variables.`);
   }
-  const filled = withPlaceholders(values);
-  values = filled.values;
-  console.warn(`config:render using example values for ${filled.used.join(", ")} (not deployable).`);
 }
 
 let databaseId = values.D1_DATABASE_ID?.trim() || "";

@@ -3,6 +3,7 @@ import { MailboxManager } from "./MailboxManager";
 import { DomainManager } from "./DomainManager";
 import { SuppressionManager } from "./SuppressionManager";
 import { BrandingManager } from "./BrandingManager";
+import { MailSettingsManager } from "./MailSettingsManager";
 import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
@@ -17,16 +18,14 @@ export function AdminPanel() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [primaryMismatch, setPrimaryMismatch] = useState<{ stored: string; configured: string } | null>(null);
   const [domainVersion, setDomainVersion] = useState(0);
 
   useEffect(() => {
     fetch("/api/admin/status", { cache: "no-store" })
       .then(async response => {
         if (!response.ok) throw new Error("Unable to load administrator settings");
-        const status = await response.json() as { passwordConfigured: boolean; primaryMismatch?: { stored: string; configured: string } | null };
+        const status = await response.json() as { passwordConfigured: boolean };
         setConfigured(status.passwordConfigured);
-        setPrimaryMismatch(status.primaryMismatch ?? null);
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Unable to load administrator settings"));
   }, []);
@@ -37,8 +36,8 @@ export function AdminPanel() {
       setError("Passwords do not match");
       return;
     }
-    if (newPassword.length < 8 || newPassword.length > 32) {
-      setError("Choose a password between 8 and 32 characters");
+    if (newPassword.length < 4 || newPassword.length > 32) {
+      setError("Choose a password between 4 and 32 characters");
       return;
     }
     setError("");
@@ -114,7 +113,7 @@ export function AdminPanel() {
                   id="admin-new-password" type="password" value={newPassword}
                   onChange={event => setNewPassword(event.target.value)}
                   autoComplete="new-password" autoCapitalize="none" spellCheck={false}
-                  minLength={8} maxLength={32} required
+                  minLength={4} maxLength={32} required
                 />
               </label>
               <label htmlFor="admin-confirm-password">
@@ -123,10 +122,10 @@ export function AdminPanel() {
                   id="admin-confirm-password" type="password" value={confirmPassword}
                   onChange={event => setConfirmPassword(event.target.value)}
                   autoComplete="new-password" autoCapitalize="none" spellCheck={false}
-                  minLength={8} maxLength={32} required
+                  minLength={4} maxLength={32} required
                 />
               </label>
-              <p className="admin-password-hint">8–32 characters. Special characters like ? and ! are supported.</p>
+              <p className="admin-password-hint">4–32 characters. Special characters like ? and ! are supported.</p>
               <button type="submit" className="settings-primary" disabled={busy}>
                 {busy ? "Saving…" : configured ? "Update password and sign out" : "Save password and sign out"}
               </button>
@@ -161,21 +160,17 @@ export function AdminPanel() {
         <nav className="admin-home-nav" aria-label="Administrator sections">
           {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
+          {configured && <a href="#admin-mail-settings">Mail</a>}
           {configured && <a href="#admin-suppressions">Deliverability</a>}
           {configured && <a href="#admin-branding">Branding</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
         </nav>
 
-        {primaryMismatch && (
-          <p className="admin-config-warning" role="alert">
-            PRIMARY_ADDRESS is {primaryMismatch.configured}, but the primary mailbox already holds mail as {primaryMismatch.stored}.
-            It was not renamed automatically. Set PRIMARY_ADDRESS back, or plan an explicit migration.
-          </p>
-        )}
         {configured === false && passwordSection}
         {configured && <DomainManager onChanged={() => setDomainVersion(version => version + 1)} />}
         {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
+        {configured && <MailSettingsManager />}
         {configured && <SuppressionManager />}
         {configured && <BrandingManager />}
         {configured === true && passwordSection}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Proves that the CSS tokenization did not change the default render.
 //
-//   node scripts/verify-css-equivalence.mjs [base-ref]     (default 8215a7f)
+//   node scripts/verify-css-equivalence.mjs [base-ref]     (default 6c0811a, v2.08)
 //
 // 1. Reads the CSS import order from src/client/main.tsx at <base-ref> (via
 //    `git show`) and from the working tree.
@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-const base = process.argv[2] ?? "8215a7f";
+const base = process.argv[2] ?? "6c0811a";
 const git = path => execFileSync("git", ["show", `${base}:${path}`], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
 
 // ---------------------------------------------------------------------------

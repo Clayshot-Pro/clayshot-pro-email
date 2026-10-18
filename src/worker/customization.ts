@@ -41,6 +41,15 @@ export type Lock = {
   allowedThemes: ThemeId[];
 };
 
+/** Operational mail settings, editable by the admin (formerly Worker vars). */
+export type MailSettings = {
+  /** Copy of primary-mailbox mail to this address (must be verified in Email Routing). */
+  forwardTo: string | null;
+  maxMailboxes: number;
+  /** Daily cron permanently purges mailboxes past their 30-day grace period. */
+  purgeEnabled: boolean;
+};
+
 export type InstanceSettings = {
   brandName: string | null;
   brandShortName: string | null;
@@ -49,6 +58,7 @@ export type InstanceSettings = {
   defaultTheme: ThemeId;
   defaultIconSet: IconSetId;
   lock: Lock;
+  mail: MailSettings;
 };
 
 export type Preferences = Partial<{
@@ -68,10 +78,14 @@ export const DEFAULT_SETTINGS: InstanceSettings = {
   defaultTheme: "ltm-dark",
   defaultIconSet: "ltm",
   lock: { theme: false, accent: false, iconSet: false, density: false, textSize: false, allowedThemes: [...THEMES] },
+  mail: { forwardTo: null, maxMailboxes: 100, purgeEnabled: false },
 };
 
+const ADDRESS = /^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?.)+[a-z][a-z0-9-]*$/;
+export const isMailAddress = (value: string): boolean => value.length <= 254 && ADDRESS.test(value);
+
 const HEX = /^#[0-9a-f]{6}$/;
-const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
+export const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
   typeof value === "string" && (list as readonly string[]).includes(value);
 
 function luminance(hex: string): number {
@@ -120,6 +134,9 @@ export function readSettings(raw: unknown): InstanceSettings {
     ? THEMES.filter(theme => (lockInput.allowedThemes as unknown[]).includes(theme))
     : [...THEMES];
   const defaultTheme = isOneOf(THEMES, input.defaultTheme) ? input.defaultTheme : DEFAULT_SETTINGS.defaultTheme;
+  const mailInput = (input.mail && typeof input.mail === "object" ? input.mail : {}) as Record<string, unknown>;
+  const forwardTo = typeof mailInput.forwardTo === "string" ? mailInput.forwardTo.trim().toLowerCase() : "";
+  const maxMailboxes = Number(mailInput.maxMailboxes);
   return {
     brandName: label(input.brandName, 40),
     brandShortName: label(input.brandShortName, 20),
@@ -136,18 +153,22 @@ export function readSettings(raw: unknown): InstanceSettings {
       // The default theme is always allowed.
       allowedThemes: allowed.includes(defaultTheme) ? allowed : [defaultTheme, ...allowed],
     },
+    mail: {
+      forwardTo: isMailAddress(forwardTo) ? forwardTo : null,
+      maxMailboxes: Number.isInteger(maxMailboxes) && maxMailboxes >= 1 && maxMailboxes <= 10_000 ? maxMailboxes : DEFAULT_SETTINGS.mail.maxMailboxes,
+      purgeEnabled: mailInput.purgeEnabled === true,
+    },
   };
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string; status: number };
 
-/** Validate an admin update. `brandingFromEnv` makes name fields read-only. */
-export function updateSettings(current: InstanceSettings, input: unknown, brandingFromEnv: boolean): Result<InstanceSettings> {
+/** Validate an admin update (branding, lock and mail settings). */
+export function updateSettings(current: InstanceSettings, input: unknown): Result<InstanceSettings> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "Invalid settings", status: 400 };
   const body = input as Record<string, unknown>;
   const next: InstanceSettings = structuredClone(current);
   if ("brandName" in body || "brandShortName" in body) {
-    if (brandingFromEnv) return { ok: false, error: "Branding is managed by deployment configuration (BRANDING_SOURCE=env)", status: 409 };
     if ("brandName" in body) {
       if (body.brandName !== null && typeof body.brandName !== "string") return { ok: false, error: "Invalid name", status: 400 };
       next.brandName = label(body.brandName, 40);
@@ -189,6 +210,26 @@ export function updateSettings(current: InstanceSettings, input: unknown, brandi
         return { ok: false, error: "Unknown theme in allowedThemes", status: 400 };
       }
       next.lock.allowedThemes = THEMES.filter(theme => (lock.allowedThemes as string[]).includes(theme));
+    }
+  }
+  if ("mail" in body) {
+    const mail = body.mail as Record<string, unknown> | null;
+    if (!mail || typeof mail !== "object" || Array.isArray(mail)) return { ok: false, error: "Invalid mail settings", status: 400 };
+    if ("forwardTo" in mail) {
+      if (mail.forwardTo === null || mail.forwardTo === "") next.mail.forwardTo = null;
+      else if (typeof mail.forwardTo !== "string" || !isMailAddress(mail.forwardTo.trim().toLowerCase())) {
+        return { ok: false, error: "Forwarding address must be a valid email address", status: 400 };
+      } else next.mail.forwardTo = mail.forwardTo.trim().toLowerCase();
+    }
+    if ("maxMailboxes" in mail) {
+      if (!Number.isInteger(mail.maxMailboxes) || Number(mail.maxMailboxes) < 1 || Number(mail.maxMailboxes) > 10_000) {
+        return { ok: false, error: "Mailbox limit must be between 1 and 10000", status: 400 };
+      }
+      next.mail.maxMailboxes = Number(mail.maxMailboxes);
+    }
+    if ("purgeEnabled" in mail) {
+      if (typeof mail.purgeEnabled !== "boolean") return { ok: false, error: "Invalid purge setting", status: 400 };
+      next.mail.purgeEnabled = mail.purgeEnabled;
     }
   }
   if (!next.lock.allowedThemes.includes(next.defaultTheme)) next.lock.allowedThemes.unshift(next.defaultTheme);
@@ -277,10 +318,15 @@ export type EffectiveAppearance = {
 };
 
 /** What the client applies: instance defaults, then unlocked user choices. */
-export function effectiveAppearance(settings: InstanceSettings, prefs: Preferences): EffectiveAppearance {
+export function effectiveAppearance(
+  settings: InstanceSettings, prefs: Preferences, domainTheme: ThemeId | null = null,
+): EffectiveAppearance {
   const { lock } = settings;
+  // The admin's theme for the mailbox's domain wins over the instance default,
+  // so the look switches with the mailbox. Users override it only if unlocked.
+  const baseTheme = domainTheme ?? settings.defaultTheme;
   const theme = !lock.theme && prefs.theme && (prefs.theme === "system" || lock.allowedThemes.includes(prefs.theme))
-    ? prefs.theme : settings.defaultTheme;
+    ? prefs.theme : baseTheme;
   return {
     theme,
     accent: (!lock.accent && prefs.accent) || settings.accent,

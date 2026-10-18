@@ -10,7 +10,8 @@ import type {
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
-import { appConfig } from "./appConfig";
+import { adminLoginAddress, appOrigin, passkeyRpId } from "./config";
+import { brandNames, instanceSettings } from "./branding";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { OWNER_IDLE_TTL_SECONDS, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS, readOwnerSessionToken } from "./ownerSessionPolicy";
 
@@ -214,11 +215,11 @@ export async function registrationOptions(request: Request, env: Env): Promise<R
   ).all<{ id: string; transports: string | null }>();
 
   const options = await generateRegistrationOptions({
-    rpName: appConfig(env).brand.name,
-    rpID: appConfig(env).rpId,
+    rpName: brandNames(await instanceSettings(env)).name,
+    rpID: passkeyRpId(request),
     userID: OWNER_USER_ID,
-    userName: appConfig(env).primaryAddress,
-    userDisplayName: `${appConfig(env).brand.name} owner`,
+    userName: adminLoginAddress(request),
+    userDisplayName: `${brandNames(await instanceSettings(env)).name} owner`,
     attestationType: "none",
     authenticatorSelection: {
       residentKey: "required",
@@ -263,8 +264,8 @@ export async function verifyRegistration(request: Request, env: Env): Promise<Re
     const verification = await verifyRegistrationResponse({
       response: body.response,
       expectedChallenge: challenge.challenge,
-      expectedOrigin: appConfig(env).origin,
-      expectedRPID: appConfig(env).rpId,
+      expectedOrigin: appOrigin(request),
+      expectedRPID: passkeyRpId(request),
       requireUserVerification: true,
     });
     if (!verification.verified || !verification.registrationInfo) {
@@ -313,7 +314,7 @@ export async function authenticationOptions(request: Request, env: Env): Promise
   if (!credentials.results.length) return jsonError("Passkey setup required", 409);
 
   const options = await generateAuthenticationOptions({
-    rpID: appConfig(env).rpId,
+    rpID: passkeyRpId(request),
     userVerification: "required",
     allowCredentials: credentials.results.map((credential) => ({
       id: credential.id,
@@ -363,8 +364,8 @@ export async function verifyAuthentication(request: Request, env: Env): Promise<
     const verification = await verifyAuthenticationResponse({
       response: body.response,
       expectedChallenge: challenge.challenge,
-      expectedOrigin: appConfig(env).origin,
-      expectedRPID: appConfig(env).rpId,
+      expectedOrigin: appOrigin(request),
+      expectedRPID: passkeyRpId(request),
       credential: {
         id: stored.id,
         publicKey: new Uint8Array(stored.public_key),

@@ -1,4 +1,5 @@
 import { resolveProvider } from "../providers/registry";
+import { permanentlyDeleteNativeTrashBatch } from "./nativeBulkTrash";
 import type { ProviderMutation } from "../providers/types";
 
 const MAX_BULK_MESSAGES = 50;
@@ -88,7 +89,7 @@ export async function permanentlyDeleteMessage(env: Env, accountId: string, id: 
   });
 }
 
-export async function bulkMailAction(request: Request, env: Env): Promise<Response> {
+export async function bulkMailAction(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const accountId = new URL(request.url).searchParams.get("accountId");
   if (!accountId) return errorResponse("Account is required", 400);
   const payload = await request.json().catch(() => null) as { ids?: unknown; action?: unknown } | null;
@@ -104,6 +105,15 @@ export async function bulkMailAction(request: Request, env: Env): Promise<Respon
   if (!provider) return errorResponse("Account is unavailable", 404);
   if (action === "permanent" && provider.kind === "gmail") {
     return errorResponse("Permanent deletion of Gmail mail is unavailable with current Google permissions.", 409);
+  }
+  if (action === "permanent" && provider.kind === "native") {
+    try {
+      const result = await permanentlyDeleteNativeTrashBatch(env, provider.accountId, ids as string[], ctx);
+      return Response.json({ ok: result.failed.length === 0, ...result },
+        { status: result.failed.length && !result.succeeded.length ? 409 : 200 });
+    } catch {
+      return errorResponse("Bulk deletion could not finish. Refresh Trash and retry.", 503);
+    }
   }
   const successes: string[] = [];
   const failures: Array<{ id: string; error: string }> = [];

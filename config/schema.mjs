@@ -1,47 +1,32 @@
-// Single source of truth for instance configuration keys.
+// Single source of truth for the keys in .env.
 //
-// kind:
-//   "var"    plain Worker var, rendered into wrangler.jsonc "vars"
-//   "secret" Worker secret, uploaded with `wrangler secret bulk`, never rendered
-//   "deploy" used only by local/CI scripts, never sent to the Worker
+// The Worker has no instance vars. The app origin and admin sign-in come from
+// the request URL; the primary mailbox, domains, branding and mail settings
+// live in D1 (first-run setup and the admin panel). .env only holds:
+//   "secret" Worker secrets, uploaded with `wrangler secret bulk`, never rendered
+//   "deploy" values used by local/CI scripts, never sent to the Worker as secrets
+//            (CLOUDFLARE_ACCOUNT_ID is also rendered as the non-secret
+//             CF_EMAIL_SENDING_ACCOUNT_ID so the Email Sending API needs no extra key)
 import { readFileSync, existsSync } from "node:fs";
 
 export const CONFIG = [
-  { key: "APP_ORIGIN", kind: "var", required: true, example: "https://mail.example.com",
-    group: "Instance", help: "Public origin of the web app. Passkeys are bound to this host; do not change it after setup." },
-  { key: "PRIMARY_ADDRESS", kind: "var", required: true, example: "hello@example.com",
-    group: "Instance", help: "The primary native mailbox. Its domain is the primary mail domain." },
-  { key: "ADMIN_ADDRESS", kind: "var", required: true, example: "admin@example.com",
-    group: "Instance", help: "Reserved administrator sign-in (password + passkey). Not a mailbox." },
-  { key: "BRAND_NAME", kind: "var", example: "Example Mail", group: "Branding", help: "App name shown in the UI, tab title and PWA." },
-  { key: "BRAND_SHORT_NAME", kind: "var", example: "Mail", group: "Branding", help: "Short PWA name (home screen label)." },
-  { key: "OWNER_DISPLAY_NAME", kind: "var", example: "Alex", group: "Branding", help: "Sender name used for the primary mailbox." },
-  { key: "PRIMARY_DISPLAY_NAME", kind: "var", example: "Example Mail", group: "Branding", help: "Label for the primary mailbox in account lists." },
-  { key: "BRANDING_SOURCE", kind: "var", example: "admin", group: "Branding",
-    help: "admin = branding editable in the admin panel; env = these values always win and the admin UI is read-only." },
-  { key: "MAIL_DOMAINS", kind: "var", example: "", group: "Mail",
-    help: "Optional comma-separated extra mail domains, created as pending. Removing one here never disables it." },
-  { key: "FORWARD_TO", kind: "var", example: "", group: "Mail", help: "Optional address that receives a copy of primary-mailbox mail." },
-  { key: "MAX_MAILBOXES", kind: "var", example: "100", group: "Mail", help: "Maximum native mailboxes across all domains." },
-  { key: "MULTI_SENDER_APPROVED", kind: "var", example: "false", group: "Mail",
-    help: "true lets non-primary mailboxes send through Cloudflare Email Sending. Only enable if Cloudflare's terms allow your use." },
-  { key: "MAILBOX_PURGE_ENABLED", kind: "var", example: "false", group: "Mail",
-    help: "true lets the daily cron permanently purge mailboxes past their 30-day grace period." },
-  { key: "AUTH_SETUP_TOKEN", kind: "secret", example: "", group: "Secrets",
-    help: "One-time secret for registering the owner passkey. Remove after setup." },
-  { key: "PROVIDER_CREDENTIAL_KEY", kind: "secret", example: "", group: "Secrets",
+  { key: "CF_EMAIL_SENDING_TOKEN", kind: "secret", example: "", group: "Sending",
+    help: "Cloudflare API token with Email Sending permission. All Cloudflare sending goes through the Email Sending API." },
+  { key: "AUTH_SETUP_TOKEN", kind: "secret", example: "", group: "First-run setup",
+    help: "One-time secret for choosing the primary mailbox and registering the owner passkey. Remove after setup." },
+  { key: "PROVIDER_CREDENTIAL_KEY", kind: "secret", example: "", group: "Connected Gmail (optional)",
     help: "Encrypts stored Gmail OAuth tokens. Required for Gmail. Changing it invalidates connected accounts." },
-  { key: "GOOGLE_CLIENT_ID", kind: "secret", example: "", group: "Secrets", help: "Google OAuth client for connected Gmail accounts." },
-  { key: "GOOGLE_CLIENT_SECRET", kind: "secret", example: "", group: "Secrets", help: "Google OAuth client secret." },
-  { key: "VAPID_PUBLIC_KEY", kind: "secret", example: "", group: "Secrets", help: "Web Push public key (base64url)." },
-  { key: "VAPID_PRIVATE_KEY", kind: "secret", example: "", group: "Secrets", help: "Web Push private key (base64url)." },
-  { key: "RESEND_API_KEY", kind: "secret", example: "", group: "Secrets",
-    help: "Optional Resend API key (sending access only). Enables the Resend transport for domains switched to it." },
-  { key: "RESEND_WEBHOOK_SECRET", kind: "secret", example: "", group: "Secrets", help: "Resend webhook signing secret (whsec_...)." },
+  { key: "GOOGLE_CLIENT_ID", kind: "secret", example: "", group: "Connected Gmail (optional)", help: "Google OAuth client ID." },
+  { key: "GOOGLE_CLIENT_SECRET", kind: "secret", example: "", group: "Connected Gmail (optional)", help: "Google OAuth client secret." },
+  { key: "VAPID_PUBLIC_KEY", kind: "secret", example: "", group: "Push notifications (optional)", help: "Web Push public key (base64url)." },
+  { key: "VAPID_PRIVATE_KEY", kind: "secret", example: "", group: "Push notifications (optional)", help: "Web Push private key (base64url)." },
+  { key: "RESEND_API_KEY", kind: "secret", example: "", group: "Resend (optional)",
+    help: "Resend API key (sending access only). Enables Resend for domains the admin switches to it." },
+  { key: "RESEND_WEBHOOK_SECRET", kind: "secret", example: "", group: "Resend (optional)", help: "Resend webhook signing secret (whsec_...)." },
   { key: "CLOUDFLARE_ACCOUNT_ID", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
-    help: "Cloudflare account ID. Used by scripts only." },
+    help: "Cloudflare account ID. Used by scripts and for the Email Sending API." },
   { key: "CLOUDFLARE_API_TOKEN", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
-    help: "API token with Workers Scripts edit, D1 edit, R2 edit and Account Settings read. Used by scripts only." },
+    help: "Deploy token with Workers Scripts edit, D1 edit, R2 edit and Account Settings read. Used by scripts only." },
   { key: "WORKER_NAME", kind: "deploy", default: "ltm-email-service", example: "ltm-email-service", group: "Cloudflare deployment" },
   { key: "D1_DATABASE_NAME", kind: "deploy", default: "ltm-email-service", example: "ltm-email-service", group: "Cloudflare deployment" },
   { key: "D1_DATABASE_ID", kind: "deploy", example: "", group: "Cloudflare deployment",
@@ -84,19 +69,21 @@ export function loadConfigValues(envFile = new URL("../.env", import.meta.url)) 
   return { values, hasFile: existsSync(envFile) };
 }
 
-export function missingRequired(values, kinds = ["var", "secret", "deploy"]) {
+export function missingRequired(values, kinds = ["secret", "deploy"]) {
   return CONFIG.filter(entry => entry.required && kinds.includes(entry.kind) && !String(values[entry.key] ?? "").trim())
     .map(entry => entry.key);
 }
 
 export function renderEnvExample() {
   const lines = [
-    "# Instance configuration. Copy to .env and fill in; .env is gitignored.",
+    "# Deployment credentials and Worker secrets. Copy to .env and fill in; .env is gitignored.",
     "# Generated from config/schema.mjs by `npm run config:example`. Do not edit by hand.",
     "#",
-    "# var    -> plain Worker var (rendered into wrangler.jsonc)",
-    "# secret -> uploaded as a Worker secret by `npm run secrets:push`, never written to wrangler.jsonc",
-    "# deploy -> used by local scripts only",
+    "# Instance settings (primary mailbox, domains, branding, forwarding, limits) are not",
+    "# configured here: choose them in first-run setup and the admin panel (stored in D1).",
+    "#",
+    "# secret -> uploaded as a Worker secret by `npm run secrets:push`",
+    "# deploy -> used by local scripts and the Workers Builds build only",
   ];
   let group = "";
   for (const entry of CONFIG) {

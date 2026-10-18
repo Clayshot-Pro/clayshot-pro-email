@@ -17,5 +17,5 @@ assert.match(admin, /href="#admin-security"/);
 assert.match(mailbox, /id="admin-mailboxes"/);
 assert.match(mailbox, /admin-mailbox-more/);
 assert.match(mailbox, /admin-mailbox-stats/);
-assert.match(admin, /minLength=\{8\} maxLength=\{32\}/);
+assert.match(admin, /minLength=\{4\} maxLength=\{32\}/);
 console.log("PASS: admin scrolling, navigation, mobile layout hooks and mailbox controls");

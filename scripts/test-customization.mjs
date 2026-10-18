@@ -29,19 +29,30 @@ assert.deepEqual(dirty.lock.allowedThemes, ["ltm-dark", "light"], "the default t
 
 // Admin updates.
 let result = updateSettings(DEFAULT_SETTINGS, { brandName: "Acme Mail", defaultTheme: "light", accent: "#5b8def",
-  lock: { theme: true, allowedThemes: ["graphite"] } }, false);
+  lock: { theme: true, allowedThemes: ["graphite"] } });
 assert.ok(result.ok);
 assert.equal(result.value.brandName, "Acme Mail");
 assert.deepEqual(result.value.lock.allowedThemes, ["light", "graphite"]);
-assert.equal(updateSettings(DEFAULT_SETTINGS, { brandName: "X" }, true).status, 409, "BRANDING_SOURCE=env makes names read-only");
-assert.ok(updateSettings(DEFAULT_SETTINGS, { accent: "#5b8def" }, true).ok, "env branding still allows accent and locks");
-assert.equal(updateSettings(DEFAULT_SETTINGS, { defaultTheme: "neon" }, false).status, 400);
-assert.equal(updateSettings(DEFAULT_SETTINGS, { accent: "red" }, false).status, 400);
-assert.equal(updateSettings(DEFAULT_SETTINGS, { accent: "#fefefe", defaultTheme: "light" }, false).status, 400);
-assert.equal(updateSettings(DEFAULT_SETTINGS, { lock: { theme: 1 } }, false).status, 400);
-assert.equal(updateSettings(DEFAULT_SETTINGS, [], false).status, 400);
-assert.notEqual(updateSettings(DEFAULT_SETTINGS, { brandName: "Y" }, false).value, DEFAULT_SETTINGS, "updates never mutate input");
+assert.equal(updateSettings(DEFAULT_SETTINGS, { defaultTheme: "neon" }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { accent: "red" }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { accent: "#fefefe", defaultTheme: "light" }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { lock: { theme: 1 } }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, []).status, 400);
+assert.notEqual(updateSettings(DEFAULT_SETTINGS, { brandName: "Y" }).value, DEFAULT_SETTINGS, "updates never mutate input");
 assert.equal(DEFAULT_SETTINGS.brandName, null);
+
+// Mail settings (formerly Worker vars) live in D1 and are validated.
+assert.deepEqual(DEFAULT_SETTINGS.mail, { forwardTo: null, maxMailboxes: 100, purgeEnabled: false });
+result = updateSettings(DEFAULT_SETTINGS, { mail: { forwardTo: " Me@Example.NET ", maxMailboxes: 25, purgeEnabled: true } });
+assert.ok(result.ok);
+assert.deepEqual(result.value.mail, { forwardTo: "me@example.net", maxMailboxes: 25, purgeEnabled: true });
+assert.equal(updateSettings(result.value, { mail: { forwardTo: "" } }).value.mail.forwardTo, null, "an empty address clears forwarding");
+assert.equal(updateSettings(DEFAULT_SETTINGS, { mail: { forwardTo: "not an address" } }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { mail: { maxMailboxes: 0 } }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { mail: { maxMailboxes: 1.5 } }).status, 400);
+assert.equal(updateSettings(DEFAULT_SETTINGS, { mail: { purgeEnabled: "yes" } }).status, 400);
+assert.deepEqual(readSettings({ mail: { forwardTo: "x", maxMailboxes: -3, purgeEnabled: "true" } }).mail, DEFAULT_SETTINGS.mail,
+  "stored values that fail validation fall back to defaults");
 
 // User preferences are bounded by the lock, enforced server-side.
 const locked = { ...DEFAULT_SETTINGS, lock: { ...DEFAULT_SETTINGS.lock, theme: true, accent: true } };
@@ -66,6 +77,14 @@ const allLocked = { ...DEFAULT_SETTINGS, accent: "#ff8a3d", lock: { theme: true,
 assert.deepEqual(effectiveAppearance(allLocked, prefs), { theme: "ltm-dark", accent: "#ff8a3d", density: "comfortable", textSize: "md", iconSet: "ltm" });
 assert.equal(effectiveAppearance({ ...DEFAULT_SETTINGS, lock: { ...DEFAULT_SETTINGS.lock, allowedThemes: ["ltm-dark"] } }, prefs).theme, "ltm-dark",
   "a theme removed from allowedThemes falls back to the default");
+
+// The admin's per-domain theme follows the mailbox; users override only if unlocked.
+assert.equal(effectiveAppearance(DEFAULT_SETTINGS, {}, "graphite").theme, "graphite", "domain theme beats the instance default");
+assert.equal(effectiveAppearance(DEFAULT_SETTINGS, {}, null).theme, "ltm-dark");
+assert.equal(effectiveAppearance(DEFAULT_SETTINGS, { theme: "light" }, "graphite").theme, "light", "an unlocked user choice wins");
+const themeLocked = { ...DEFAULT_SETTINGS, lock: { ...DEFAULT_SETTINGS.lock, theme: true } };
+assert.equal(effectiveAppearance(themeLocked, { theme: "light" }, "graphite").theme, "graphite", "with the theme locked, the domain theme applies");
+assert.equal(effectiveAppearance(themeLocked, { theme: "light" }, "ltm-ember").theme, "ltm-ember", "switching mailbox switches theme");
 
 // PNG checks without decoding.
 const png = new Uint8Array(33);

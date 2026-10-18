@@ -49,7 +49,7 @@ assert.deepEqual(suppressionTargets({ data: { to: "b@example.net" } }), []);
 // The webhook is the only same-origin exemption, and it sits before the check.
 const router = readFileSync(new URL("../src/worker/index.ts", import.meta.url), "utf8");
 const webhook = router.indexOf('if (url.pathname === "/api/webhooks/resend" && request.method === "POST")');
-assert.ok(webhook > 0 && webhook < router.indexOf("if (!sameOrigin(request, config.origin))"));
+assert.ok(webhook > 0 && webhook < router.indexOf("if (!sameOrigin(request))"));
 assert.equal((router.match(/\/api\/webhooks\//g) ?? []).length, 1, "no other webhook routes bypass the origin check");
 const handler = readFileSync(new URL("../src/worker/webhooks/resend.ts", import.meta.url), "utf8");
 assert.match(handler, /INSERT OR IGNORE INTO webhook_receipts/, "replayed events are deduplicated");

@@ -1,6 +1,6 @@
 import { aliasTarget, normalizeMailboxAddress } from "./mailboxRules";
 import { credentialForMailbox } from "./deviceAuth";
-import { appConfig } from "./appConfig";
+import { instanceSettings } from "./branding";
 import { addressRules, postmasterMailboxId } from "./domains";
 import { normalizeHex } from "./customization";
 /**
@@ -24,12 +24,13 @@ export type NativeMailbox = {
   purge_after: string | null;
   spam_filter_enabled: number;
   accent_color: string | null;
+  sender_name: string | null;
   usage_version: number;
 };
 
 export async function mailboxById(env: Env, id: string): Promise<NativeMailbox | null> {
   return env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color FROM native_mailboxes WHERE id = ?1"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE id = ?1"
   ).bind(id).first<NativeMailbox>();
 }
 
@@ -38,7 +39,7 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
   if (!normalized) return null;
   // Exact mailbox routing has priority over plus-address aliases.
   const exact = await env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color FROM native_mailboxes WHERE email_address = ?1"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE email_address = ?1"
   ).bind(normalized).first<NativeMailbox>();
   // An explicitly disabled address must not be revived by plus-alias fallback.
   if (exact) return exact.status === "active" && !exact.deleted_at ? exact : null;
@@ -52,13 +53,13 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
     return box?.status === "active" && !box.deleted_at ? box : null;
   }
   return env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color FROM native_mailboxes WHERE email_address=?1 AND status='active' AND deleted_at IS NULL"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes WHERE email_address=?1 AND status='active' AND deleted_at IS NULL"
   ).bind(alias.parent).first<NativeMailbox>();
 }
 
 export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
   const result = await env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color FROM native_mailboxes ORDER BY CASE WHEN id='native:primary' THEN 0 ELSE 1 END, created_at"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes ORDER BY CASE WHEN id='native:primary' THEN 0 ELSE 1 END, created_at"
   ).all<NativeMailbox>();
   return result.results;
 }
@@ -72,9 +73,9 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
   }
   const displayName = typeof body?.displayName === "string" ? safeDisplayName(body.displayName) : "";
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM native_mailboxes").first<{ n: number }>();
-  if ((count?.n ?? 0) >= appConfig(env).limits.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
+  if ((count?.n ?? 0) >= (await instanceSettings(env)).mail.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
   const id = `native:${crypto.randomUUID()}`;
-  const random = crypto.getRandomValues(new Uint8Array(32));
+  const random = crypto.getRandomValues(new Uint8Array(24));
   const password = btoa(String.fromCharCode(...random))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const credential = await credentialForMailbox(id,password);
@@ -102,14 +103,15 @@ async function audit(env: Env, id: string, action: string) {
 }
 
 export async function updateNativeMailbox(request: Request, env: Env, id: string): Promise<Response> {
-  const body = await request.json<{ status?: unknown; displayName?: unknown; quotaBytes?: unknown; spamFilterEnabled?: unknown; accentColor?: unknown }>().catch(() => null);
+  const body = await request.json<{ status?: unknown; displayName?: unknown; senderName?: unknown; quotaBytes?: unknown; spamFilterEnabled?: unknown; accentColor?: unknown }>().catch(() => null);
   if (!body || (body.status !== undefined && body.status !== "active" && body.status !== "disabled")
     || (body.displayName !== undefined && typeof body.displayName !== "string")
+    || (body.senderName !== undefined && body.senderName !== null && typeof body.senderName !== "string")
     || (body.quotaBytes !== undefined && (!Number.isSafeInteger(body.quotaBytes) || Number(body.quotaBytes) < 10485760 || Number(body.quotaBytes) > 10737418240))
     || (body.spamFilterEnabled !== undefined && typeof body.spamFilterEnabled !== "boolean")
     || (body.accentColor !== undefined && body.accentColor !== null && !normalizeHex(body.accentColor)))
     return Response.json({ error: "Invalid mailbox update" }, { status: 400 });
-  if (body.status === undefined && body.displayName === undefined && body.quotaBytes === undefined && body.spamFilterEnabled === undefined && body.accentColor === undefined)
+  if (body.status === undefined && body.displayName === undefined && body.quotaBytes === undefined && body.spamFilterEnabled === undefined && body.accentColor === undefined && body.senderName === undefined)
     return Response.json({ error: "No changes requested" }, { status: 400 });
   if (id === PRIMARY_MAILBOX_ID && body.status === "disabled")
     return Response.json({ error: "Primary mailbox cannot be disabled" }, { status: 403 });
@@ -121,8 +123,10 @@ export async function updateNativeMailbox(request: Request, env: Env, id: string
   const quota = typeof body.quotaBytes === "number" ? body.quotaBytes : old.quota_bytes;
   const spam = typeof body.spamFilterEnabled === "boolean" ? Number(body.spamFilterEnabled) : old.spam_filter_enabled;
   const accent = body.accentColor === undefined ? old.accent_color : normalizeHex(body.accentColor);
-  await env.DB.prepare("UPDATE native_mailboxes SET status=?2, display_name=?3, quota_bytes=?4, spam_filter_enabled=?5, accent_color=?6, updated_at=CURRENT_TIMESTAMP WHERE id=?1")
-    .bind(id, status, displayName, quota, spam, accent).run();
+  const senderName = typeof body.senderName === "string" ? safeDisplayName(body.senderName) || null
+    : body.senderName === null ? null : old.sender_name;
+  await env.DB.prepare("UPDATE native_mailboxes SET status=?2, display_name=?3, quota_bytes=?4, spam_filter_enabled=?5, accent_color=?6, sender_name=?7, updated_at=CURRENT_TIMESTAMP WHERE id=?1")
+    .bind(id, status, displayName, quota, spam, accent, senderName).run();
   await audit(env, id, "update");
   return Response.json({ mailbox: await mailboxById(env, id) });
 }

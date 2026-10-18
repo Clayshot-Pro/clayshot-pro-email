@@ -7,7 +7,9 @@ export type InstanceInfo = {
   brandShortName: string;
   primaryDomain: string;
   features: { gmail: boolean; push: boolean };
-  brandingSource?: "admin" | "env";
+  /** False on a fresh install until first-run setup chooses the primary mailbox. */
+  initialized?: boolean;
+  setupAvailable?: boolean;
   logoVersion?: string | null;
   accent?: string | null;
   defaultTheme?: ThemeId;

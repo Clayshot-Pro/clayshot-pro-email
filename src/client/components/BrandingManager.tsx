@@ -6,7 +6,7 @@ import { ICON_SET_LABELS } from "./Icon";
 import { THEME_LABELS } from "./AppearanceSettings";
 import "../customization.css";
 
-type Payload = { settings: InstanceSettings; brandingSource: "admin" | "env"; effectiveNames: { name: string; shortName: string } };
+type Payload = { settings: InstanceSettings; effectiveNames: { name: string; shortName: string } };
 const ICON_SIZES = [32, 180, 192, 512] as const;
 const LOCK_LABELS: Record<"theme" | "accent" | "iconSet" | "density" | "textSize", string> = {
   theme: "Theme", accent: "Accent and mailbox colours", iconSet: "Icon set", density: "Density", textSize: "Text size",
@@ -78,10 +78,8 @@ export function BrandingManager() {
     const body: Record<string, unknown> = {
       accent: draft.accent, defaultTheme: draft.defaultTheme, defaultIconSet: draft.defaultIconSet, lock: draft.lock,
     };
-    if (data.brandingSource === "admin") {
-      body.brandName = draft.brandName;
-      body.brandShortName = draft.brandShortName;
-    }
+    body.brandName = draft.brandName;
+    body.brandShortName = draft.brandShortName;
     void run("save", () => adminActionFetch("/api/admin/instance", "PUT", JSON.stringify(body)), "Branding saved.");
   }
 
@@ -104,7 +102,6 @@ export function BrandingManager() {
     );
   }
 
-  const envNames = data.brandingSource === "env";
   const set = (patch: Partial<InstanceSettings>) => setDraft(current => current ? { ...current, ...patch } : current);
   const setLock = (patch: Partial<InstanceSettings["lock"]>) => setDraft(current => current ? { ...current, lock: { ...current.lock, ...patch } } : current);
 
@@ -136,12 +133,12 @@ export function BrandingManager() {
       <div className="branding-grid">
         <label>
           App name
-          <input type="text" maxLength={40} disabled={envNames} value={envNames ? data.effectiveNames.name : draft.brandName ?? ""}
+          <input type="text" maxLength={40} value={draft.brandName ?? ""}
             placeholder={data.effectiveNames.name} onChange={event => set({ brandName: event.target.value || null })} />
         </label>
         <label>
           Short name (home screen)
-          <input type="text" maxLength={20} disabled={envNames} value={envNames ? data.effectiveNames.shortName : draft.brandShortName ?? ""}
+          <input type="text" maxLength={20} value={draft.brandShortName ?? ""}
             placeholder={data.effectiveNames.shortName} onChange={event => set({ brandShortName: event.target.value || null })} />
         </label>
         <label>
@@ -164,7 +161,6 @@ export function BrandingManager() {
           </span>
         </label>
       </div>
-      {envNames && <p className="branding-note">The app name is managed by deployment configuration (BRANDING_SOURCE=env).</p>}
 
       <div className="branding-locks">
         <strong>What users may change</strong>
@@ -194,7 +190,7 @@ export function BrandingManager() {
         )}
       </div>
 
-      <div className="admin-domain-actions" style={{ marginTop: 14 }}>
+      <div className="admin-domain-actions branding-actions">
         <button type="button" className="settings-primary" disabled={busy !== null} onClick={save}>
           {busy === "save" ? "Saving…" : "Save branding"}
         </button>

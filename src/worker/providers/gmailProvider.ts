@@ -1,4 +1,5 @@
 import { sanitizeEmailHtml } from "../email/html";
+import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { getGoogleAccessToken } from "./googleCredentials";
 import { gmailMatchesFolder } from "./gmailFolder";
 import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
@@ -298,6 +299,7 @@ export async function gmailFullMessage(env: Env, accountId: string, id: string, 
     inReplyTo: header(raw, "In-Reply-To") || null,
     references: header(raw, "References") || null,
     messageId: header(raw, "Message-ID") || null,
+    unsubscribeUrl: listUnsubscribeUrl(header(raw, "List-Unsubscribe")),
     deliveryError: null,
     attachments,
   };
@@ -320,6 +322,7 @@ export async function gmailThread(env: Env, accountId: string, threadId: string,
       inReplyTo: header(message, "In-Reply-To") || null,
       references: header(message, "References") || null,
       messageId: header(message, "Message-ID") || null,
+      unsubscribeUrl: listUnsubscribeUrl(header(message, "List-Unsubscribe")),
       deliveryError: null,
       attachments: parts(message.payload)
         .filter((part) => part.filename && part.body?.attachmentId)

@@ -32,9 +32,11 @@ import {
   verifyAuthentication,
   verifyRegistration,
 } from "./auth";
-import { appConfig, ConfigError } from "./appConfig";
+import { appOrigin } from "./config";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
-import { bootstrapInstance, primaryAddressMismatch } from "./bootstrap";
+import { bootstrapInstance } from "./bootstrap";
+import { setupInstance } from "./setup";
+import { instanceSettings } from "./branding";
 import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
 import { addSuppression, listSuppressions, pruneWebhookReceipts, removeSuppression, resendWebhook } from "./webhooks/resend";
 import {
@@ -48,6 +50,7 @@ import { authRateLimitBucket, checkAuthRateLimit } from "./security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_POSTS = new Set([
+  "/api/setup",
   "/api/auth/register/options",
   "/api/auth/register/verify",
   "/api/auth/login/options",
@@ -62,8 +65,14 @@ const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
 const jsonError = (message: string, status: number, headers?: HeadersInit) =>
   Response.json({ error: message }, { status, headers });
 
-const sameOrigin = (request: Request, origin: string) =>
-  SAFE_METHODS.has(request.method) || request.headers.get("Origin") === origin;
+const sameOrigin = (request: Request): boolean => {
+  try {
+    const origin = appOrigin(request);
+    return SAFE_METHODS.has(request.method) || request.headers.get("Origin") === origin;
+  } catch {
+    return false;
+  }
+};
 
 function requestTooLarge(request: Request): boolean {
   const raw = request.headers.get("Content-Length");
@@ -108,12 +117,11 @@ function decodedRouteId(match: RegExpMatchArray): string | null {
   return match[1] ? decodePathSegment(match[1]) : null;
 }
 
-async function routeApi(request: Request, env: Env, url: URL): Promise<Response> {
-  const config = appConfig(env);
+async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
   // Provider webhooks are server-to-server: exempt from the same-origin and
   // session checks for this exact path only, authenticated by signature.
   if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
-  if (!sameOrigin(request, config.origin)) return jsonError("Cross-origin request rejected", 403);
+  if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
   if (!SAFE_METHODS.has(request.method) && requestTooLarge(request)) {
     return jsonError("Request body too large", 413);
   }
@@ -136,6 +144,9 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
   if (url.pathname === "/api/device/login" && request.method === "POST") return deviceLogin(request, env);
   if (url.pathname === "/api/admin/login/password" && request.method === "POST") return beginAdminLogin(request, env);
   if (url.pathname === "/api/device/logout" && request.method === "POST") return deviceLogout(request, env);
+
+  // First-run setup (AUTH_SETUP_TOKEN, uninitialized instance only).
+  if (url.pathname === "/api/setup" && request.method === "POST") return setupInstance(request, env);
 
   // Authentication routes that must be reachable before a session exists.
   if (url.pathname === "/api/auth/status" && request.method === "GET") return authStatus(request, env);
@@ -184,12 +195,9 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     }
   }
   if (url.pathname === "/api/admin/status" && request.method === "GET") {
-    const [passwordConfigured, primaryMismatch] = await Promise.all([
-      adminPasswordConfigured(env), primaryAddressMismatch(env),
-    ]);
-    return Response.json({ passwordConfigured, primaryMismatch });
+    return Response.json({ passwordConfigured: await adminPasswordConfigured(env) });
   }
-  if (url.pathname === "/api/admin/domains" && request.method === "GET") return listDomainsResponse(env);
+  if (url.pathname === "/api/admin/domains" && request.method === "GET") return listDomainsResponse(request, env);
   if (url.pathname === "/api/admin/domains" && request.method === "POST") return createDomain(request, env);
   const domainRoute = url.pathname.match(/^\/api\/admin\/domains\/([^/]+)(\/dns)?$/);
   if (domainRoute) {
@@ -351,7 +359,7 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     return jsonError("Method not allowed", 405);
   }
 
-  if (url.pathname === "/api/messages/bulk" && request.method === "POST") return bulkMailAction(request, env);
+  if (url.pathname === "/api/messages/bulk" && request.method === "POST") return bulkMailAction(request, env, ctx);
 
   const messageMatch = url.pathname.match(/^\/api\/messages\/([^/]+)$/);
   if (messageMatch) {
@@ -381,19 +389,11 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
-      try {
-        appConfig(env);
-      } catch (error) {
-        if (!(error instanceof ConfigError)) throw error;
-        // Key names only; never values.
-        console.error("instance_config_invalid", error.problems.join("; "));
-        return secureApiResponse(jsonError("Instance is not configured", 503));
-      }
       await bootstrapInstance(env);
-      const response = await routeApi(request, env, url);
+      const response = await routeApi(request, env, url, ctx);
       if (isApprovedAdminMutation(request.method, url.pathname)) {
         // Never retain request payload, mailbox passwords, cookies or assertions.
         const token = readOwnerSessionToken(request);
@@ -436,7 +436,7 @@ export default {
     // Retry receipts only exist to prevent duplicate ingestion after transport
     // retries; they are not permanent message records.
     ctx.waitUntil(env.DB.prepare("DELETE FROM inbound_receipts WHERE first_seen_at<datetime('now','-7 days')").run().then(() => undefined));
-    if (appConfig(env).features.purge) {
+    if ((await instanceSettings(env)).mail.purgeEnabled) {
       ctx.waitUntil(purgeExpiredNativeMailboxes(env));
     }
     ctx.waitUntil(pruneAdminSecurityEvents(env));

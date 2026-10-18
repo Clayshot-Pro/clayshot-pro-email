@@ -21,6 +21,8 @@ type Props = {
   selectionMode: boolean;
   selectedIds: string[];
   bulkBusy: boolean;
+  folderTotalCount: number | null;
+  bulkNotice: string | null;
   canPermanentlyDelete: boolean;
   onToggleSelection: () => void;
   onToggleMailSelected: (id: string) => void;
@@ -62,6 +64,8 @@ export function MailList({
   selectionMode,
   selectedIds,
   bulkBusy,
+  folderTotalCount,
+  bulkNotice,
   canPermanentlyDelete,
   onToggleSelection,
   onToggleMailSelected,
@@ -210,7 +214,10 @@ export function MailList({
     {filtersEnabled ? <div className="mail-filter-tabs" role="tablist" aria-label="Message filters"><button type="button" className={listFilter === "all" ? "active" : ""} onClick={() => setListFilter("all")}>All</button><button type="button" className={listFilter === "unread" ? "active" : ""} onClick={() => setListFilter("unread")}>Unread</button><button type="button" className={listFilter === "starred" ? "active" : ""} onClick={() => setListFilter("starred")}>Starred</button></div> : <div className="draft-list-label">Autosaved drafts</div>}
     <div className="mail-bulk-bar">
       {!selectionMode ? (
-        <button className="mail-select-toggle" type="button" onClick={onToggleSelection}>Select</button>
+        <>
+          {bulkNotice ? <span className="mail-bulk-notice" role="status">{bulkNotice}</span> : null}
+          <button className="mail-select-toggle" type="button" onClick={onToggleSelection}>Select</button>
+        </>
       ) : (
         <>
           <label className="mail-select-all">
@@ -220,9 +227,11 @@ export function MailList({
               checked={visible.length > 0 && visible.every((message) => selectedIds.includes(message.id))}
               onChange={() => onToggleSelectAll(visible.map((message) => message.id))}
             />
-            <span>All</span>
+            <span>{folder === "trash" && folderTotalCount !== null && folderTotalCount > visible.length
+              ? `All ${visible.length} shown` : "All"}</span>
           </label>
-          <span className="mail-selection-count">{selectedIds.length} selected</span>
+          <span className="mail-selection-count">{selectedIds.length} selected{folder === "trash" && folderTotalCount !== null && folderTotalCount > visible.length
+            ? ` · ${folderTotalCount} in Trash` : ""}</span>
           <div className="mail-bulk-actions">
             {folder === "trash" ? (
               <>

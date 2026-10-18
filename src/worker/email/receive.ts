@@ -3,7 +3,8 @@ import { mailboxForRecipient, PRIMARY_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
 import { sanitizeEmailHtml } from "./html";
-import { appConfig, domainOf } from "../appConfig";
+import { domainOf } from "../appConfig";
+import { instanceSettings } from "../branding";
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENTS = 30;
@@ -179,6 +180,6 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     toAddress: message.to,
     preview: safePreview(bodyText),
   }));
-  const forwardTo = appConfig(env).forwardTo;
+  const forwardTo = (await instanceSettings(env)).mail.forwardTo;
   if (forwardTo && mailbox.id === PRIMARY_MAILBOX_ID && !isJunk) ctx.waitUntil(message.forward(forwardTo));
 }

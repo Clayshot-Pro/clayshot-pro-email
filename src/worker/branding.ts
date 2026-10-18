@@ -1,8 +1,7 @@
-import { appConfig } from "./appConfig";
 import { deviceAuthorized } from "./deviceAuth";
 import {
-  effectiveAppearance, ICON_SIZES, pngDimensions, readPreferences, readSettings, updatePreferences, updateSettings,
-  type InstanceSettings,
+  effectiveAppearance, ICON_SIZES, pngDimensions, readPreferences, readSettings, THEMES, updatePreferences, updateSettings,
+  type InstanceSettings, type ThemeId,
 } from "./customization";
 
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
@@ -16,12 +15,10 @@ export async function instanceSettings(env: Env): Promise<InstanceSettings> {
   return readSettings(raw);
 }
 
-/** Name precedence: BRANDING_SOURCE=env > admin settings > .env defaults. */
-export function brandNames(env: Env, settings: InstanceSettings): { name: string; shortName: string } {
-  const config = appConfig(env);
-  if (config.brandingSource === "env") return { name: config.brand.name, shortName: config.brand.shortName };
-  const name = settings.brandName ?? config.brand.name;
-  return { name, shortName: settings.brandShortName ?? (settings.brandName ? name.slice(0, 20) : config.brand.shortName) };
+/** Branding lives only in D1; a neutral name until the admin sets one. */
+export function brandNames(settings: InstanceSettings): { name: string; shortName: string } {
+  const name = settings.brandName ?? "Mail";
+  return { name, shortName: settings.brandShortName ?? name.slice(0, 20) };
 }
 
 async function storeSettings(env: Env, settings: InstanceSettings): Promise<void> {
@@ -32,14 +29,14 @@ async function storeSettings(env: Env, settings: InstanceSettings): Promise<void
 
 export async function adminSettingsResponse(env: Env): Promise<Response> {
   const settings = await instanceSettings(env);
-  return Response.json({ settings, brandingSource: appConfig(env).brandingSource, effectiveNames: brandNames(env, settings) });
+  return Response.json({ settings, effectiveNames: brandNames(settings) });
 }
 
 /** PUT /api/admin/instance (admin + step-up). */
 export async function saveInstanceSettings(request: Request, env: Env): Promise<Response> {
   const input = await request.json().catch(() => null);
   const current = await instanceSettings(env);
-  const result = updateSettings(current, input, appConfig(env).brandingSource === "env");
+  const result = updateSettings(current, input);
   if (!result.ok) return jsonError(result.error, result.status);
   await storeSettings(env, result.value);
   return adminSettingsResponse(env);
@@ -136,6 +133,14 @@ export async function accountColors(env: Env, ids: string[]): Promise<Map<string
   return colors;
 }
 
+/** The admin's theme for a native mailbox's domain (Gmail accounts have none). */
+async function domainThemeFor(env: Env, accountId: string): Promise<ThemeId | null> {
+  if (!accountId.startsWith("native:")) return null;
+  const row = await env.DB.prepare(`SELECT d.theme FROM native_mailboxes m JOIN domains d ON d.domain = m.domain
+    WHERE m.id = ?1`).bind(accountId).first<{ theme: string | null }>().catch(() => null);
+  return row?.theme && (THEMES as readonly string[]).includes(row.theme) ? row.theme as ThemeId : null;
+}
+
 async function authorizedAccount(request: Request, env: Env, url: URL): Promise<string | Response> {
   const accountId = url.searchParams.get("accountId")?.trim() ?? "";
   if (!accountId || accountId.length > 150) return jsonError("accountId is required", 400);
@@ -147,8 +152,8 @@ async function authorizedAccount(request: Request, env: Env, url: URL): Promise<
 export async function getPreferences(request: Request, env: Env, url: URL): Promise<Response> {
   const accountId = await authorizedAccount(request, env, url);
   if (accountId instanceof Response) return accountId;
-  const [settings, preferences] = await Promise.all([instanceSettings(env), preferencesFor(env, accountId)]);
-  return Response.json({ preferences, effective: effectiveAppearance(settings, preferences), lock: settings.lock });
+  const [settings, preferences, domainTheme] = await Promise.all([instanceSettings(env), preferencesFor(env, accountId), domainThemeFor(env, accountId)]);
+  return Response.json({ preferences, effective: effectiveAppearance(settings, preferences, domainTheme), lock: settings.lock, domainTheme });
 }
 
 /** PUT /api/preferences?accountId= — locked fields are rejected with 403. */
@@ -156,11 +161,11 @@ export async function savePreferences(request: Request, env: Env, url: URL): Pro
   const accountId = await authorizedAccount(request, env, url);
   if (accountId instanceof Response) return accountId;
   const input = await request.json().catch(() => null);
-  const [settings, current] = await Promise.all([instanceSettings(env), preferencesFor(env, accountId)]);
+  const [settings, current, domainTheme] = await Promise.all([instanceSettings(env), preferencesFor(env, accountId), domainThemeFor(env, accountId)]);
   const result = updatePreferences(current, input, settings);
   if (!result.ok) return jsonError(result.error, result.status);
   await env.DB.prepare(`INSERT INTO account_preferences (account_id, preferences, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
     ON CONFLICT(account_id) DO UPDATE SET preferences = excluded.preferences, updated_at = CURRENT_TIMESTAMP`)
     .bind(accountId, JSON.stringify(result.value)).run();
-  return Response.json({ preferences: result.value, effective: effectiveAppearance(settings, result.value), lock: settings.lock });
+  return Response.json({ preferences: result.value, effective: effectiveAppearance(settings, result.value, domainTheme), lock: settings.lock, domainTheme });
 }

@@ -12,7 +12,7 @@ const envFile = new URL("../.env", import.meta.url);
 if (!existsSync(envFile)) throw new Error("No .env file found. Copy .env.example to .env and fill it in first.");
 
 let { values } = loadConfigValues(envFile);
-const missing = missingRequired(values, ["var", "deploy"]);
+const missing = missingRequired(values, ["deploy"]);
 if (missing.length) throw new Error(`Fill these keys in .env first: ${missing.join(", ")}`);
 
 const credentials = {

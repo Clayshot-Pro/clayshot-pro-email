@@ -15,7 +15,7 @@ const env = { ...process.env, CLOUDFLARE_ACCOUNT_ID: values.CLOUDFLARE_ACCOUNT_I
 if (!process.argv.includes("--yes")) {
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await prompt.question(
-    `Deploy worker "${values.WORKER_NAME}" for ${values.APP_ORIGIN} to account ${values.CLOUDFLARE_ACCOUNT_ID}? [y/N] `);
+    `Deploy worker "${values.WORKER_NAME}" to account ${values.CLOUDFLARE_ACCOUNT_ID}? [y/N] `);
   prompt.close();
   if (!/^y(es)?$/i.test(answer.trim())) {
     console.log("Cancelled.");
@@ -33,4 +33,4 @@ for (const [command, args] of [
   const result = spawnSync(command, args, { stdio: "inherit", shell: process.platform === "win32", env });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-console.log(`Deployed. Open ${values.APP_ORIGIN}`);
+console.log("Deployed. Open the Worker URL or custom domain and complete first-run setup.");

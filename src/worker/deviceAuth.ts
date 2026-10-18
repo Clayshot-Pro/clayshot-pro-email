@@ -2,9 +2,10 @@ import { mailboxPasswordError } from "./mailboxPasswordPolicy";
 import { preparePassword, checkPassword } from "./passwordCrypto";
 import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
+import { adminLoginAddress, isAdministratorEmail, legacyAdminLoginAddress } from "./config";
 import { checkAuthRateLimit, authRateLimitBucket } from "./security";
-import { appConfig } from "./appConfig";
-import { addressRules } from "./domains";
+
+import { addressRules, primaryDomain } from "./domains";
 import { beginAdminLogin } from "./adminAuth";
 
 const DEVICE_COOKIE = "__Host-ltm_device";
@@ -74,7 +75,8 @@ export async function setMailboxPassword(env: Env, id: string, password: string)
   ]);
 }
 export async function rotateMailboxPassword(env: Env, id: string): Promise<string> {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  // 24 random bytes -> 32 base64url chars (192 bits of entropy).
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
   const password = b64url(bytes);
   await setMailboxPassword(env,id,password);
   return password; // only displayed once to the verified owner.
@@ -121,9 +123,9 @@ export async function deviceAccountIds(request: Request, env: Env): Promise<stri
     LEFT JOIN native_mailboxes n ON g.provider='native' AND n.id=g.account_id
     LEFT JOIN connected_accounts a ON g.provider='gmail' AND a.id=g.account_id
     WHERE g.session_id=?1 AND (
-      (g.provider='native' AND n.status='active' AND n.deleted_at IS NULL AND n.email_address!=?2) OR
+      (g.provider='native' AND n.status='active' AND n.deleted_at IS NULL AND n.email_address NOT IN (?2,?3)) OR
       (g.provider='gmail' AND a.status IN ('active','reauth_required'))
-    )`).bind(session.id, appConfig(env).adminAddress).all<{account_id:string}>();
+    )`).bind(session.id, adminLoginAddress(request), legacyAdminLoginAddress(request, await primaryDomain(env)) ?? "").all<{account_id:string}>();
   return items.results.map(i => i.account_id);
 }
 export async function deviceStatus(request: Request, env: Env): Promise<Response> {
@@ -138,9 +140,9 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
   const email = typeof input?.email === "string" ? input.email : "";
   const password = typeof input?.password === "string" ? input.password : "";
   if (!email || password.length > 128) return jsonError("Invalid credentials", 401);
-  // The server, not the client, decides whether this is the reserved
-  // administrator sign-in (password + passkey); the admin address is not public.
-  if (email.trim().toLowerCase() === appConfig(env).adminAddress) {
+  // The server decides whether this is the administrator sign-in (password +
+  // passkey), so a client that posts admin@ here still gets the MFA flow.
+  if (isAdministratorEmail(request, email, await primaryDomain(env))) {
     if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "/api/admin/login/password")))) {
       return jsonError("Too many authentication attempts", 429);
     }
