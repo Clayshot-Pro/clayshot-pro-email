@@ -1,0 +1,100 @@
+/*
+ * High contrast — black canvas, white text, visible borders and a solid
+ * yellow focus ring. Text tokens meet WCAG AAA (7:1) against every surface.
+ *
+ * Presets only define palette primitives and the semantic tokens; the
+ * component tones are derived from them in ../tokens.css.
+ */
+:root[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  /* ---- Palette ---- */
+  --p-hc-black: #000000;
+  --p-hc-white: #ffffff;
+  --p-hc-gray-960: #0a0a0a;
+  --p-hc-gray-920: #141414;
+  --p-hc-gray-880: #1f1f1f;
+  --p-hc-gray-840: #2a2a2a;
+  --p-hc-gray-460: #8a8a8a;
+  --p-hc-gray-200: #cccccc;
+  --p-hc-gray-100: #e6e6e6;
+  --p-hc-yellow-400: #ffd400;
+  --p-hc-yellow-300: #ffe14d;
+  --p-hc-yellow-200: #ffe680;
+  --p-hc-yellow-900: #2a2300;
+  --p-hc-yellow-800: #4d4000;
+  --p-hc-red-400: #ff8080;
+  --p-hc-red-950: #2a0000;
+  --p-hc-green-400: #5eea8a;
+  --p-hc-green-950: #002a10;
+
+  /* ---- Surfaces ---- */
+  --color-bg: var(--p-hc-black);
+  --color-bg-glow: var(--p-hc-black);
+  --color-surface: var(--p-hc-gray-960);
+  --color-surface-sunken: var(--p-hc-black);
+  --color-surface-raised: var(--p-hc-gray-920);
+  --color-surface-hover: var(--p-hc-gray-880);
+  --color-surface-strong: var(--p-hc-gray-840);
+  --color-sidebar: var(--p-hc-black);
+  --color-overlay: var(--p-hc-black);
+
+  /* ---- Text ---- */
+  --color-text: var(--p-hc-white);
+  --color-text-muted: var(--p-hc-gray-100);
+  --color-text-subtle: var(--p-hc-gray-200);
+  --color-text-on-accent: var(--p-hc-black);
+
+  /* ---- Lines ---- */
+  --color-border: var(--p-hc-gray-460);
+  --color-border-strong: var(--p-hc-gray-200);
+  --color-focus-ring: var(--p-hc-yellow-400);
+
+  /* ---- Accent ---- */
+  --color-accent: var(--p-hc-yellow-400);
+  --color-accent-hover: var(--p-hc-yellow-300);
+  --color-accent-soft: var(--p-hc-yellow-900);
+  --color-accent-strong: var(--p-hc-yellow-800);
+  --color-accent-text: var(--p-hc-yellow-200);
+
+  /* ---- Status ---- */
+  --color-danger: var(--p-hc-red-400);
+  --color-danger-soft: var(--p-hc-red-950);
+  --color-success: var(--p-hc-green-400);
+  --color-success-soft: var(--p-hc-green-950);
+  --color-warning: var(--p-hc-yellow-400);
+
+  /* ---- Effects ---- */
+  --color-shadow: var(--p-hc-black);
+  --color-highlight: var(--p-hc-white);
+  --shadow-lg: 0 0 0 1px var(--color-border-strong), 0 28px 80px var(--color-shadow);
+
+  /* ---- Sign-in and administrator surfaces ---- */
+  --auth-bg: var(--color-bg);
+  --auth-bg-glow: var(--color-bg-glow);
+  --auth-surface: var(--color-surface);
+  --auth-surface-raised: var(--color-surface-raised);
+  --auth-field: var(--color-surface-sunken);
+  --auth-border: var(--color-border);
+  --auth-border-strong: var(--color-border-strong);
+  --auth-text: var(--color-text);
+  --auth-text-muted: var(--color-text-muted);
+  --auth-text-subtle: var(--color-text-subtle);
+  --auth-text-on-accent: var(--color-text-on-accent);
+  --auth-accent: var(--color-accent);
+  --auth-accent-hover: var(--color-accent-hover);
+  --auth-accent-soft: var(--color-accent-soft);
+  --auth-accent-strong: var(--color-accent-strong);
+  --auth-accent-text: var(--color-accent-text);
+  --auth-focus-ring: var(--color-focus-ring);
+  --auth-danger: var(--color-danger);
+  --auth-danger-soft: var(--color-danger-soft);
+  --auth-success: var(--color-success);
+  --auth-warning: var(--color-warning);
+}
+
+/* Stronger, always-solid focus indication. */
+:root[data-theme="high-contrast"] :focus-visible {
+  outline: 3px solid var(--color-focus-ring) !important;
+  outline-offset: 2px !important;
+}
