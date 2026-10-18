@@ -1,0 +1,102 @@
+/*
+ * Graphite — a neutral grey dark theme with a cool blue accent.
+ *
+ * Presets only define palette primitives and the semantic tokens; the
+ * component tones are derived from them in ../tokens.css.
+ */
+:root[data-theme="graphite"] {
+  color-scheme: dark;
+
+  /* ---- Palette ---- */
+  --p-gr-black: #000000;
+  --p-gr-white: #ffffff;
+  --p-gr-gray-975: #121314;
+  --p-gr-gray-965: #141517;
+  --p-gr-gray-960: #151618;
+  --p-gr-gray-950: #18191b;
+  --p-gr-gray-940: #1c1d1f;
+  --p-gr-gray-930: #202124;
+  --p-gr-gray-900: #2a2b2f;
+  --p-gr-gray-880: #2c2e32;
+  --p-gr-gray-860: #34363a;
+  --p-gr-gray-780: #43464c;
+  --p-gr-gray-500: #8a8d94;
+  --p-gr-gray-300: #b4b6bc;
+  --p-gr-gray-50: #ececee;
+  --p-gr-blue-950: #0f1012;
+  --p-gr-blue-900: #1f2633;
+  --p-gr-blue-800: #2f3d5c;
+  --p-gr-blue-400: #9ab8ff;
+  --p-gr-blue-300: #b0c6ff;
+  --p-gr-blue-200: #c5d5ff;
+  --p-gr-blue-ring: rgba(160, 196, 255, .75);
+  --p-gr-red-300: #f28b82;
+  --p-gr-red-950: #2c1c1c;
+  --p-gr-green-300: #7fd29b;
+  --p-gr-green-950: #18261d;
+  --p-gr-amber-300: #f2c66d;
+
+  /* ---- Surfaces ---- */
+  --color-bg: var(--p-gr-gray-975);
+  --color-bg-glow: var(--p-gr-gray-940);
+  --color-surface: var(--p-gr-gray-950);
+  --color-surface-sunken: var(--p-gr-gray-960);
+  --color-surface-raised: var(--p-gr-gray-930);
+  --color-surface-hover: var(--p-gr-gray-900);
+  --color-surface-strong: var(--p-gr-gray-860);
+  --color-sidebar: var(--p-gr-gray-965);
+  --color-overlay: var(--p-gr-black);
+
+  /* ---- Text ---- */
+  --color-text: var(--p-gr-gray-50);
+  --color-text-muted: var(--p-gr-gray-300);
+  --color-text-subtle: var(--p-gr-gray-500);
+  --color-text-on-accent: var(--p-gr-blue-950);
+
+  /* ---- Lines ---- */
+  --color-border: var(--p-gr-gray-880);
+  --color-border-strong: var(--p-gr-gray-780);
+  --color-focus-ring: var(--p-gr-blue-ring);
+
+  /* ---- Accent ---- */
+  --color-accent: var(--p-gr-blue-400);
+  --color-accent-hover: var(--p-gr-blue-300);
+  --color-accent-soft: var(--p-gr-blue-900);
+  --color-accent-strong: var(--p-gr-blue-800);
+  --color-accent-text: var(--p-gr-blue-200);
+
+  /* ---- Status ---- */
+  --color-danger: var(--p-gr-red-300);
+  --color-danger-soft: var(--p-gr-red-950);
+  --color-success: var(--p-gr-green-300);
+  --color-success-soft: var(--p-gr-green-950);
+  --color-warning: var(--p-gr-amber-300);
+
+  /* ---- Effects ---- */
+  --color-shadow: var(--p-gr-black);
+  --color-highlight: var(--p-gr-white);
+  --shadow-lg: 0 28px 80px color-mix(in srgb, var(--color-shadow) 48%, transparent);
+
+  /* ---- Sign-in and administrator surfaces ---- */
+  --auth-bg: var(--color-bg);
+  --auth-bg-glow: var(--color-bg-glow);
+  --auth-surface: var(--color-surface);
+  --auth-surface-raised: var(--color-surface-raised);
+  --auth-field: var(--color-surface-sunken);
+  --auth-border: var(--color-border);
+  --auth-border-strong: var(--color-border-strong);
+  --auth-text: var(--color-text);
+  --auth-text-muted: var(--color-text-muted);
+  --auth-text-subtle: var(--color-text-subtle);
+  --auth-text-on-accent: var(--color-text-on-accent);
+  --auth-accent: var(--color-accent);
+  --auth-accent-hover: var(--color-accent-hover);
+  --auth-accent-soft: var(--color-accent-soft);
+  --auth-accent-strong: var(--color-accent-strong);
+  --auth-accent-text: var(--color-accent-text);
+  --auth-focus-ring: var(--color-focus-ring);
+  --auth-danger: var(--color-danger);
+  --auth-danger-soft: var(--color-danger-soft);
+  --auth-success: var(--color-success);
+  --auth-warning: var(--color-warning);
+}
