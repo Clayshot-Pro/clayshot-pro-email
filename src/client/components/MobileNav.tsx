@@ -1,5 +1,6 @@
 import type { ConnectedAccount, Folder, FolderDefinition } from "../mailTypes";
 import { Icon } from "./Icon";
+import { ALL_INBOXES_ID } from "../allInboxes";
 
 type MobileNavProps = {
   folders: FolderDefinition[];
@@ -8,6 +9,7 @@ type MobileNavProps = {
   draftCount: number;
   accounts: ConnectedAccount[];
   activeAccountId: string;
+  showAllInboxes: boolean;
   connectingGmail: boolean;
   onAccountChange: (id: string) => void;
   onAddInbox: () => void;
@@ -17,7 +19,7 @@ type MobileNavProps = {
 };
 
 export function MobileNav({
-  folders, activeFolder, unreadCount, draftCount, accounts, activeAccountId,
+  folders, activeFolder, unreadCount, draftCount, accounts, activeAccountId, showAllInboxes,
   connectingGmail, onAccountChange, onAddInbox, onOpenSettings, onFolderChange, onCompose,
 }: MobileNavProps) {
   const active = accounts.find(account => account.id === activeAccountId);
@@ -26,6 +28,7 @@ export function MobileNav({
       <div className="mobile-account-bar">
         {active?.avatarUrl ? <img className="mobile-account-avatar" src={active.avatarUrl} alt=""/> : null}
         <select aria-label="Mail account" value={activeAccountId} onChange={event => onAccountChange(event.target.value)}>
+          {showAllInboxes ? <option value={ALL_INBOXES_ID}>All inboxes</option> : null}
           {accounts.map(account => (
             <option key={account.id} value={account.id}>
               {account.provider === "gmail" ? "Gmail · " : ""}{account.emailAddress}

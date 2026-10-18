@@ -35,6 +35,15 @@ import { forwardSubject, replySubject } from "./mailUtils";
 import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
 import { useActiveAccountAppearance } from "./appearance";
+import {
+  ALL_INBOXES_ID,
+  accountLabel,
+  allInboxesAvailable,
+  groupByAccount,
+  mergeAccountLists,
+  unifiedAccounts,
+  type AccountListResult,
+} from "./allInboxes";
 
 export function App() {
   const [folder, setFolder] = useState<Folder>("inbox");
@@ -72,8 +81,11 @@ export function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [addInboxMode, setAddInboxMode] = useState<AddInboxMode>(null);
   const [activeAccountId, setActiveAccountId] = useState(NATIVE_ACCOUNT_ID);
+  // The account of the open message; in All inboxes it differs per message.
+  const [readerAccountId, setReaderAccountId] = useState<string | null>(null);
+  const unified = activeAccountId === ALL_INBOXES_ID;
   // Theme, accent, density, text size and icons follow the open mailbox.
-  useActiveAccountAppearance(activeAccountId);
+  useActiveAccountAppearance(unified ? readerAccountId : activeAccountId);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -91,10 +103,16 @@ export function App() {
   const mailViewRef = useRef({ folder, search, accountId: activeAccountId });
   mailViewRef.current = { folder, search, accountId: activeAccountId };
 
-  const detailCacheKey = useCallback(
-    (id: string) => `${activeAccountId}:${id}`,
-    [activeAccountId],
-  );
+  const detailCacheKey = (accountId: string, id: string) => `${accountId}:${id}`;
+  // The account a listed message belongs to (its own in All inboxes).
+  const accountOf = (id: string) => messages.find(message => message.id === id)?.accountId ?? activeAccountId;
+  const knownAccount = (id: string) => id === ALL_INBOXES_ID
+    ? allInboxesAvailable(accounts)
+    : accounts.some(account => account.id === id);
+  const defaultSenderId = () => unified
+    ? (unifiedAccounts(accounts).find(account => account.id === NATIVE_ACCOUNT_ID)
+      ?? unifiedAccounts(accounts)[0])?.id ?? NATIVE_ACCOUNT_ID
+    : activeAccountId;
 
   const refreshAccounts = useCallback(async () => {
     const response = await fetch("/api/accounts", { cache: "no-store" });
@@ -190,21 +208,38 @@ export function App() {
       }
 
       try {
-        const params = new URLSearchParams({
-          folder: activeFolder,
-          accountId: activeAccountId,
-        });
-        if (query.trim()) params.set("q", query.trim());
-
-        const response = await fetch(`/api/messages?${params}`);
-        if (!response.ok) throw new Error("Could not load mail");
-        const data = await response.json() as {
-          messages: MessageListItem[];
-          unreadCount: number;
-          draftCount: number;
-          folderTotalCount?: number | null;
+        const fetchList = async (accountId: string) => {
+          const params = new URLSearchParams({ folder: activeFolder, accountId });
+          if (query.trim()) params.set("q", query.trim());
+          const response = await fetch(`/api/messages?${params}`);
+          if (!response.ok) throw new Error("Could not load mail");
+          return await response.json() as {
+            messages: MessageListItem[];
+            unreadCount: number;
+            draftCount: number;
+            folderTotalCount?: number | null;
+          };
         };
+        let data: Awaited<ReturnType<typeof fetchList>>;
+        let failedNames: string[] = [];
+        if (activeAccountId === ALL_INBOXES_ID) {
+          const targets = unifiedAccounts(accounts);
+          const results = await Promise.all(targets.map(async (account): Promise<AccountListResult> => {
+            try {
+              return { accountId: account.id, ok: true, ...await fetchList(account.id) };
+            } catch {
+              return { accountId: account.id, ok: false };
+            }
+          }));
+          const merged = mergeAccountLists(results);
+          if (targets.length && merged.failedAccountIds.length === targets.length) throw new Error("Could not load mail");
+          failedNames = merged.failedAccountIds.map(id => accountLabel(accounts.find(account => account.id === id)));
+          data = merged;
+        } else {
+          data = await fetchList(activeAccountId);
+        }
         if (requestId !== listRequest.current) return;
+        if (failedNames.length && !silent) setError(`Could not load ${failedNames.join(", ")}. Other accounts are shown.`);
         const guarded = applyMailMutationShields(activeFolder, activeAccountId, data.messages, mutationShields.current);
         setMessages(guarded);
         setFolderTotalCount(typeof data.folderTotalCount === "number" ? data.folderTotalCount : null);
@@ -221,13 +256,13 @@ export function App() {
         if (!silent && requestId === listRequest.current) setLoading(false);
       }
     },
-    [folder, search, activeAccountId],
+    [folder, search, activeAccountId, accounts],
   );
 
   useEffect(() => {
     // Do not request the previous default native account before the device's
     // actual authorized account list has loaded.
-    if (!accountsLoaded || !accounts.some(account => account.id === activeAccountId)) return;
+    if (!accountsLoaded || !knownAccount(activeAccountId)) return;
     const timer = setTimeout(
       () => void loadMessages(folder, search),
       search ? 250 : 0,
@@ -237,7 +272,7 @@ export function App() {
 
   useEffect(() => {
     const refresh = () => {
-      if (accountsLoaded && accounts.some(account => account.id === activeAccountId) && document.visibilityState === "visible") {
+      if (accountsLoaded && knownAccount(activeAccountId) && document.visibilityState === "visible") {
         void loadMessages(folder, search, true);
       }
     };
@@ -289,12 +324,13 @@ export function App() {
     setSelected(null);
     setThread([]);
     setOpeningMessageId(null);
+    setReaderAccountId(null);
     setSearch("");
   };
 
   useEffect(() => {
     if (!accountsLoaded || accounts.length === 0) return;
-    if (accounts.some(account => account.id === activeAccountId)) return;
+    if (knownAccount(activeAccountId)) return;
     const remembered = localStorage.getItem("ltm:active-mail-account");
     const selectedId = accounts.find(account => account.id === remembered)?.id ?? accounts[0].id;
     switchAccount(selectedId);
@@ -347,6 +383,7 @@ export function App() {
     setSelected(null);
     setThread([]);
     setOpeningMessageId(null);
+    setReaderAccountId(null);
     setSearch("");
   };
 
@@ -470,9 +507,10 @@ export function App() {
 
   const openMessage = async (id: string) => {
     const listItem = messages.find((message) => message.id === id);
+    const accountId = listItem?.accountId ?? activeAccountId;
     if (listItem?.isDraft || folder === "drafts") {
       try {
-        const response = await fetch(`/api/drafts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(activeAccountId)}`);
+        const response = await fetch(`/api/drafts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`);
         const data = await response.json() as { draft: DraftDetail };
         if (!response.ok) throw new Error();
 
@@ -483,7 +521,7 @@ export function App() {
             (account) => account.id === savedSenderId && account.status === "active",
           )
           ? savedSenderId
-          : draft.accountId || activeAccountId;
+          : draft.accountId || accountId;
         setCompose({
           to: draft.to,
           cc: draft.cc,
@@ -503,7 +541,8 @@ export function App() {
     }
 
     const requestId = ++openRequest.current;
-    const key = detailCacheKey(id);
+    const key = detailCacheKey(accountId, id);
+    setReaderAccountId(accountId);
     const cached = detailCache.current.get(key);
     const wasUnread = Boolean(listItem && !listItem.isRead);
 
@@ -526,7 +565,7 @@ export function App() {
     }
 
     try {
-      const params = new URLSearchParams({ accountId: activeAccountId });
+      const params = new URLSearchParams({ accountId });
       if (listItem?.threadId) params.set("threadId", listItem.threadId);
       const response = await fetch(
         `/api/messages/${encodeURIComponent(id)}?${params}`,
@@ -573,7 +612,8 @@ export function App() {
     if (!selected) return;
 
     const target = selected;
-    const key = detailCacheKey(target.id);
+    const accountId = readerAccountId ?? activeAccountId;
+    const key = detailCacheKey(accountId, target.id);
     const previousMessages = messages;
     const previousSelected = selected;
     const previousThread = thread;
@@ -583,10 +623,9 @@ export function App() {
     // conversation, not only its representative item (which would resurface
     // an older message with the same subject after the next refresh).
     const conversationMutation = typeof patch.isDeleted === "boolean";
-    const matchesTarget = (message: MessageListItem) => conversationMutation
-      ? message.threadId === target.threadId
-      : message.id === target.id;
-    const shieldKey = mailMutationKey(activeAccountId,
+    const matchesTarget = (message: MessageListItem) => (message.accountId ?? activeAccountId) === accountId
+      && (conversationMutation ? message.threadId === target.threadId : message.id === target.id);
+    const shieldKey = mailMutationKey(accountId,
       conversationMutation ? target.threadId : target.id,
       conversationMutation ? "thread" : "message");
     mutationShields.current.set(shieldKey, {
@@ -631,7 +670,7 @@ export function App() {
 
     try {
       const response = await fetch(
-        `/api/messages/${encodeURIComponent(target.id)}?accountId=${encodeURIComponent(activeAccountId)}`,
+        `/api/messages/${encodeURIComponent(target.id)}?accountId=${encodeURIComponent(accountId)}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -641,7 +680,7 @@ export function App() {
       if (!response.ok) throw new Error();
       detailCache.current.delete(key);
       if (conversationMutation) {
-        for (const item of previousThread) detailCache.current.delete(detailCacheKey(item.id));
+        for (const item of previousThread) detailCache.current.delete(detailCacheKey(accountId, item.id));
       }
       if (mailViewRef.current.accountId === activeAccountId &&
           mailViewRef.current.folder === folder && mailViewRef.current.search === search) {
@@ -715,8 +754,10 @@ export function App() {
       action === "star" ? { isStarred: true } :
       action === "unstar" ? { isStarred: false } : {};
     const hide = action === "permanent" || action === "deleteDraft";
+    const owners = new Map(requestedIds.map(id => [id, accountOf(id)]));
+    const ownerOf = (id: string) => owners.get(id) ?? activeAccountId;
     for (const id of requestedIds) {
-      mutationShields.current.set(mailMutationKey(activeAccountId, id), {
+      mutationShields.current.set(mailMutationKey(ownerOf(id), id), {
         flags,
         hide,
         updatedAt: Date.now(),
@@ -729,10 +770,12 @@ export function App() {
     const succeeded: string[] = [];
     const failed: Array<{ id: string; error: string }> = [];
     try {
-      for (const batch of chunkBulkMessageIds(requestedIds)) {
+      const batches = [...groupByAccount(requestedIds, ownerOf)]
+        .flatMap(([accountId, ids]) => chunkBulkMessageIds(ids).map(batch => ({ accountId, batch })));
+      for (const { accountId, batch } of batches) {
         try {
           const response = await fetch(
-            "/api/messages/bulk?accountId=" + encodeURIComponent(activeAccountId),
+            "/api/messages/bulk?accountId=" + encodeURIComponent(accountId),
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -761,12 +804,12 @@ export function App() {
       }
 
       for (const item of failed) {
-        mutationShields.current.delete(mailMutationKey(activeAccountId, item.id));
+        mutationShields.current.delete(mailMutationKey(ownerOf(item.id), item.id));
       }
       if (mailViewRef.current.accountId !== activeAccountId ||
           mailViewRef.current.folder !== folder || mailViewRef.current.search !== search) return;
       const successIds = new Set(succeeded);
-      for (const id of successIds) detailCache.current.delete(detailCacheKey(id));
+      for (const id of successIds) detailCache.current.delete(detailCacheKey(ownerOf(id), id));
       if (selected && successIds.has(selected.id)) {
         openRequest.current += 1;
         setSelected(null);
@@ -793,20 +836,21 @@ export function App() {
   };
 
   const permanentlyDeleteSelected = async (confirmed = false, targetId = selected?.id) => {
-    if (!selected || !targetId || selected.id !== targetId || activeAccountId.startsWith("gmail:")) return;
+    const accountId = readerAccountId ?? activeAccountId;
+    if (!selected || !targetId || selected.id !== targetId || accountId.startsWith("gmail:")) return;
     if (!confirmed) {
       setPendingDeletion({ kind: "single", ids: [targetId], accountId: activeAccountId, folder });
       return;
     }
     const id = targetId;
-    const shieldKey = mailMutationKey(activeAccountId, id);
+    const shieldKey = mailMutationKey(accountId, id);
     mutationShields.current.set(shieldKey, { flags: {}, hide: true, updatedAt: Date.now() });
     listRequest.current += 1;
-    setMessages(current => current.filter(item => item.id !== id));
+    setMessages(current => current.filter(item => !(item.id === id && (item.accountId ?? activeAccountId) === accountId)));
     setError(null);
     try {
       const response = await fetch(
-        "/api/messages/" + encodeURIComponent(id) + "?accountId=" + encodeURIComponent(activeAccountId),
+        "/api/messages/" + encodeURIComponent(id) + "?accountId=" + encodeURIComponent(accountId),
         { method: "DELETE" },
       );
       if (!response.ok) {
@@ -818,7 +862,7 @@ export function App() {
       setSelected(null);
       setThread([]);
       setOpeningMessageId(null);
-      detailCache.current.delete(detailCacheKey(id));
+      detailCache.current.delete(detailCacheKey(accountId, id));
       await loadMessages(folder, search, true);
     } catch (cause) {
       mutationShields.current.delete(shieldKey);
@@ -832,8 +876,9 @@ export function App() {
   const startCompose = () => {
     const draftId = crypto.randomUUID();
     setCompose({ ...EMPTY_COMPOSE, draftId });
-    setComposeAccountId(activeAccountId);
-    localStorage.setItem(draftSenderKey(draftId), activeAccountId);
+    const sender = defaultSenderId();
+    setComposeAccountId(sender);
+    localStorage.setItem(draftSenderKey(draftId), sender);
     setFiles([]);
     setDraftStatus(null);
     setComposeOpen(true);
@@ -852,8 +897,10 @@ export function App() {
       replyToMessageId: target.id,
       draftId,
     });
-    setComposeAccountId(activeAccountId);
-    localStorage.setItem(draftSenderKey(draftId), activeAccountId);
+    // Reply from the account that received the message.
+    const sender = readerAccountId ?? activeAccountId;
+    setComposeAccountId(sender);
+    localStorage.setItem(draftSenderKey(draftId), sender);
     setComposeOpen(true);
   };
 
@@ -867,8 +914,9 @@ export function App() {
       forwardMessageId: selected.id,
       draftId,
     });
-    setComposeAccountId(activeAccountId);
-    localStorage.setItem(draftSenderKey(draftId), activeAccountId);
+    const sender = readerAccountId ?? activeAccountId;
+    setComposeAccountId(sender);
+    localStorage.setItem(draftSenderKey(draftId), sender);
     setComposeOpen(true);
   };
 
@@ -905,7 +953,7 @@ export function App() {
     }
     setComposeOpen(false);
     setCompose(EMPTY_COMPOSE);
-    setComposeAccountId(activeAccountId);
+    setComposeAccountId(defaultSenderId());
     setFiles([]);
     if (folder === "drafts") void loadMessages("drafts", search, true);
   };
@@ -944,11 +992,12 @@ export function App() {
       setComposeError(null);
       setCompose(EMPTY_COMPOSE);
       setFiles([]);
-      if (composeAccountId !== activeAccountId) {
+      // All inboxes stays open and shows the sent message among the others.
+      if (!unified && composeAccountId !== activeAccountId) {
         setActiveAccountId(composeAccountId);
       }
       setFolder("sent");
-      if (folder === "sent" && composeAccountId === activeAccountId) void loadMessages("sent", search, true);
+      if (folder === "sent" && (unified || composeAccountId === activeAccountId)) void loadMessages("sent", search, true);
       setSelected(null);
       setThread([]);
       setOpeningMessageId(null);
@@ -966,12 +1015,16 @@ export function App() {
     setSelected(null);
     setThread([]);
     setOpeningMessageId(null);
+    setReaderAccountId(null);
   };
 
-  const label = useMemo(
-    () => FOLDERS.find((item) => item.key === folder)?.label ?? "Mail",
-    [folder],
-  );
+  const label = useMemo(() => {
+    const folderLabel = FOLDERS.find((item) => item.key === folder)?.label ?? "Mail";
+    if (!unified) return folderLabel;
+    return folder === "inbox" ? "All inboxes" : `${folderLabel} · all accounts`;
+  }, [folder, unified]);
+  const readerAccount = accounts.find(account => account.id === (readerAccountId ?? activeAccountId));
+  const showAllInboxes = allInboxesAvailable(accounts);
   const notificationsDisabled = notificationControlsDisabled(notificationState);
   const readerOpen = Boolean(selected || openingMessageId);
 
@@ -986,6 +1039,7 @@ export function App() {
         notificationsDisabled={notificationsDisabled}
         accounts={accounts}
         activeAccountId={activeAccountId}
+        showAllInboxes={showAllInboxes}
         connectingGmail={connectingGmail}
         onAccountChange={switchAccount}
         onAddInbox={openAddInbox}
@@ -1012,7 +1066,12 @@ export function App() {
           bulkBusy={bulkBusy}
           folderTotalCount={folderTotalCount}
           bulkNotice={bulkNotice}
-          canPermanentlyDelete={accounts.find((account) => account.id === activeAccountId)?.provider === "native"}
+          canPermanentlyDelete={unified
+            ? unifiedAccounts(accounts).some((account) => account.provider === "native")
+            : accounts.find((account) => account.id === activeAccountId)?.provider === "native"}
+          accountLabelFor={unified
+            ? (message) => accountLabel(accounts.find((account) => account.id === message.accountId))
+            : undefined}
           onToggleSelection={() => {
             if (bulkBusy) return;
             setSelectionMode((current) => !current);
@@ -1030,12 +1089,12 @@ export function App() {
           thread={thread}
           folderLabel={label}
           loading={Boolean(openingMessageId && !selected)}
-          accountId={activeAccountId}
+          accountId={readerAccountId ?? activeAccountId}
           onBack={closeReader}
           onReply={startReply}
           onForward={startForward}
           onPatch={(patch, closeAfter) => void patchSelected(patch, closeAfter)}
-          canPermanentlyDelete={accounts.find((account) => account.id === activeAccountId)?.provider === "native"}
+          canPermanentlyDelete={readerAccount?.provider === "native"}
           onPermanentDelete={() => void permanentlyDeleteSelected()}
         />
       </div>
@@ -1046,6 +1105,7 @@ export function App() {
         draftCount={draftCount}
         accounts={accounts}
         activeAccountId={activeAccountId}
+        showAllInboxes={showAllInboxes}
         connectingGmail={connectingGmail}
         onAccountChange={switchAccount}
         onAddInbox={openAddInbox}

@@ -50,8 +50,10 @@ export function applyMailMutationShields(
   }
   const result: MessageListItem[] = [];
   for (const message of messages) {
-    const a = shields.get(mailMutationKey(accountId, message.id));
-    const b = shields.get(mailMutationKey(accountId, message.threadId, "thread"));
+    // In All inboxes each message carries its own account.
+    const owner = message.accountId ?? accountId;
+    const a = shields.get(mailMutationKey(owner, message.id));
+    const b = shields.get(mailMutationKey(owner, message.threadId, "thread"));
     const state = a && b ? (a.updatedAt >= b.updatedAt ? a : b) : a ?? b;
     if (!state) {
       result.push(message);

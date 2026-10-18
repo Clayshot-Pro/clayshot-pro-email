@@ -13,6 +13,7 @@
 | `v3.04` | Branding, lock, themes, icons, credit |
 | `v3.05` | v2.08 merged; instance settings moved into D1; Cloudflare Email Sending API for all Cloudflare sending; per-domain themes; licence; GitHub Actions deploys |
 | `v3.06` | Integration keys in D1 (Admin → Keys), encrypted with `PROVIDER_CREDENTIAL_KEY`; VAPID generated automatically (migration 0020) |
+| `v3.07` | All inboxes: one merged list of every account signed in on the device |
 
 ## Decisions applied in v3.05
 
@@ -50,6 +51,13 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Without a valid `PROVIDER_CREDENTIAL_KEY`, the Worker behaves exactly as before (Worker secrets only).
 - Resolved keys are cached per isolate for a minute; a change applies at once on the isolate that saved it.
 - `npm run setup` generates `PROVIDER_CREDENTIAL_KEY` when `.env` has none.
+
+## v3.07: All inboxes
+
+- Client-only. The account switcher offers **All inboxes** when two or more active accounts are signed in on the device. Each account is listed through its own `/api/messages` request, so the server's per-account authorization is unchanged; there is no new endpoint.
+- Lists are merged newest first and each message is tagged with its account (`accountId`). Threads collapse per account, and read-your-writes shields are keyed by the message's own account.
+- Opening, PATCH, permanent delete, draft opening, replies and forwards use the message's account. Bulk actions are split into one request per account. An account that fails to load is named in a notice while the others are shown.
+- Every folder works in the merged view; counts are summed. Compose defaults to the primary mailbox.
 
 ## Production rollout (LTM instance)
 
