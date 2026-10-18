@@ -22,7 +22,7 @@ export function passkeyRpId(request: Request): string {
   return appHostname(request);
 }
 
-/** The primary administrator sign-in changes with the Worker hostname. */
+/** The hostname-based administrator sign-in (an alias of admin@<main domain>). */
 export function adminLoginAddress(request: Request): string {
   return `admin@${appHostname(request)}`;
 }
@@ -35,19 +35,17 @@ function mailDomain(primary: string | null | undefined): string | null {
 }
 
 /**
- * Preserve the existing admin@<mail domain> sign-in only when this Worker is
- * hosted on that mail domain or a subdomain, so existing owners are not locked
- * out on release. It does not turn admin into a real mailbox.
+ * admin@<main mail domain>: the administrator's own mailbox (v3.08) and the
+ * preferred sign-in. Opened only with the administrator password and passkey.
  */
-export function legacyAdminLoginAddress(request: Request, primaryDomain: string | null): string | null {
+export function adminMailboxAddress(primaryDomain: string | null): string | null {
   const domain = mailDomain(primaryDomain);
-  if (!domain) return null;
-  const host = appHostname(request);
-  return host !== domain && host.endsWith("." + domain) ? `admin@${domain}` : null;
+  return domain ? `admin@${domain}` : null;
 }
 
+/** admin@<main mail domain>, or admin@<app hostname> as an alias. */
 export function isAdministratorEmail(request: Request, email: string, primaryDomain: string | null): boolean {
   const normalized = email.trim().toLowerCase();
   return normalized === adminLoginAddress(request)
-    || normalized === legacyAdminLoginAddress(request, primaryDomain);
+    || normalized === adminMailboxAddress(primaryDomain);
 }

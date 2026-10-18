@@ -9,8 +9,10 @@ import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
 import { instanceIconUrl, useInstance } from "../instance";
+import { useAdminView } from "../adminView";
 
 export function AdminPanel() {
+  const { openMail } = useAdminView();
   const instance = useInstance();
   const { brandName } = instance;
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -152,6 +154,11 @@ export function AdminPanel() {
           </div>
           <div className="admin-home-actions">
             <span className="admin-home-session" aria-label="Authenticated administrator">Secure session</span>
+            {configured && (
+              <button type="button" className="settings-primary" onClick={openMail}>
+                Back to mail
+              </button>
+            )}
             <button type="button" className="auth-secondary" disabled={busy} onClick={() => void signOut()}>
               Sign out
             </button>

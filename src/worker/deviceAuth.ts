@@ -2,7 +2,8 @@ import { mailboxPasswordError } from "./mailboxPasswordPolicy";
 import { preparePassword, checkPassword } from "./passwordCrypto";
 import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
-import { adminLoginAddress, isAdministratorEmail, legacyAdminLoginAddress } from "./config";
+import { adminLoginAddress, adminMailboxAddress, isAdministratorEmail } from "./config";
+import { ADMIN_MAILBOX_ID } from "./mailboxIds";
 import { checkAuthRateLimit, authRateLimitBucket } from "./security";
 
 import { addressRules, primaryDomain } from "./domains";
@@ -60,6 +61,8 @@ export async function credentialForMailbox(_id: string, password: string): Promi
 export async function setMailboxPassword(env: Env, id: string, password: string): Promise<void> {
   const invalid = mailboxPasswordError(password);
   if (invalid) throw new Error(invalid);
+  // admin@ signs in with the administrator password and passkey only.
+  if (id === ADMIN_MAILBOX_ID) throw new Error("The admin mailbox uses the administrator sign-in");
   const record = await env.DB.prepare(
     "SELECT id FROM native_mailboxes WHERE id=?1 AND status='active' AND deleted_at IS NULL"
   ).bind(id).first();
@@ -125,7 +128,7 @@ export async function deviceAccountIds(request: Request, env: Env): Promise<stri
     WHERE g.session_id=?1 AND (
       (g.provider='native' AND n.status='active' AND n.deleted_at IS NULL AND n.email_address NOT IN (?2,?3)) OR
       (g.provider='gmail' AND a.status IN ('active','reauth_required'))
-    )`).bind(session.id, adminLoginAddress(request), legacyAdminLoginAddress(request, await primaryDomain(env)) ?? "").all<{account_id:string}>();
+    )`).bind(session.id, adminLoginAddress(request), adminMailboxAddress(await primaryDomain(env)) ?? "").all<{account_id:string}>();
   return items.results.map(i => i.account_id);
 }
 export async function deviceStatus(request: Request, env: Env): Promise<Response> {

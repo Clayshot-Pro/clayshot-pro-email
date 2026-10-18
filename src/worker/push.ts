@@ -27,9 +27,9 @@ export type NewMailPush = {
   preview?: string | null;
 };
 
-/** VAPID contact: the primary mailbox from D1. */
+/** VAPID contact: the admin mailbox from D1. */
 async function vapidSubject(env: Env): Promise<string> {
-  const row = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = 'native:primary'")
+  const row = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = 'native:admin'")
     .first<{ email_address: string }>().catch(() => null);
   return `mailto:${row?.email_address ?? "postmaster@localhost"}`;
 }

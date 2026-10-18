@@ -1,6 +1,7 @@
 import { gmailProvider } from "./gmailProvider";
 import { nativeProvider } from "./native";
-import { allNativeMailboxes, mailboxById, PRIMARY_MAILBOX_ID } from "../mailboxes";
+import { allNativeMailboxes, mailboxById } from "../mailboxes";
+import { ADMIN_MAILBOX_ID, LEGACY_MAILBOX_ID } from "../mailboxIds";
 import type { MailProvider, MailProviderKind } from "./types";
 import { sendableMailboxes } from "../transports";
 import { accountColors } from "../branding";
@@ -26,13 +27,11 @@ type AccountRow = {
   last_synced_at: string | null;
 };
 
-export const NATIVE_ACCOUNT_ID = PRIMARY_MAILBOX_ID;
-
 export async function ensureNativeAccount(env: Env): Promise<void> {
-  const primary = await mailboxById(env, NATIVE_ACCOUNT_ID);
+  const primary = await mailboxById(env, LEGACY_MAILBOX_ID);
   if (!primary) return;
-  // Legacy provider registry must be preserved for Gmail integration and the
-  // primary mailbox; new native mailboxes live in native_mailboxes.
+  // Legacy provider registry row kept for the v2 mailbox and Gmail
+  // integration; every other native mailbox lives only in native_mailboxes.
   await env.DB.prepare(`
     INSERT INTO connected_accounts (
       id, provider, provider_account_id, email_address, display_name, status, updated_at
@@ -40,7 +39,7 @@ export async function ensureNativeAccount(env: Env): Promise<void> {
     ON CONFLICT(id) DO UPDATE SET
       email_address = excluded.email_address,
       status = 'active', updated_at = CURRENT_TIMESTAMP
-  `).bind(NATIVE_ACCOUNT_ID, primary.email_address, primary.display_name || primary.email_address).run();
+  `).bind(LEGACY_MAILBOX_ID, primary.email_address, primary.display_name || primary.email_address).run();
 }
 
 export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[]> {
@@ -71,7 +70,8 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
       provider: "native" as const,
       emailAddress: box.email_address,
       displayName: box.display_name || null,
-      avatarUrl: box.id === NATIVE_ACCOUNT_ID ? primaryAvatarUrl : null,
+      // The profile photo belongs to the administrator's mailbox.
+      avatarUrl: box.id === ADMIN_MAILBOX_ID ? primaryAvatarUrl : null,
       status: box.status,
       lastSyncedAt: null,
       sendEnabled: sendable[index],
@@ -92,7 +92,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
 }
 
 export async function resolveProvider(env: Env, accountId?: string | null): Promise<MailProvider | null> {
-  const id = accountId?.trim() || NATIVE_ACCOUNT_ID;
+  const id = accountId?.trim() || ADMIN_MAILBOX_ID;
   if (id.startsWith("native:")) {
     const box = await mailboxById(env, id);
     return box?.status === "active" ? nativeProvider(env, box.id, box.email_address, box.sender_name || box.display_name || box.email_address) : null;

@@ -4,18 +4,18 @@
 
 ## Intended user experience
 
-- `admin@<worker-hostname>` is a **reserved login identity**, not a mail inbox or newly created native mailbox.
-- On a device without saved accounts, type `admin@<worker-hostname>` into the normal **Custom email** sign-in form, followed by the administrator password.
+- `admin@<mail domain>` is the administrator's sign-in and, since v3.08, also the administrator's own mailbox. `admin@<worker-hostname>` is accepted as an alias. No other admin@ address can be created as a mailbox or signed in with a mailbox password.
+- On a device without saved accounts, type `admin@<mail domain>` into the normal **Custom email** sign-in form, followed by the administrator password.
 - The app then requests the previously registered **owner passkey** as a mandatory second factor. Both must succeed on the same browser, within five minutes, to establish an administrator session.
-- Once authenticated, the app opens the **standalone Email administration dashboard**, instead of showing a normal inbox or an admin panel buried in Settings.
-- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@<worker-hostname>`; after completing both factors the app opens the separate dashboard.
+- Once authenticated, the app opens the mail app on the **admin@ inbox**, with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the Email administration pages; **Back to mail** returns. The panel opens first while no administrator password is set.
+- On a device already signed into an email account, choose **Add custom email** in Settings and sign in as `admin@<mail domain>`; after completing both factors the app opens the admin@ inbox.
 - Admin dashboard supports creating mailboxes, changing their passwords to an owner-chosen value (4–32 characters) or generating a secure random password, quotas, archival and deletion operations.
 
 ## Setting your administrator password the first time
 
 Your existing owner passkey is already registered. The v2.02 migration **does not set or transmit an administrator password**. On initial use, the sign-in page offers **Set up admin password using passkey**; authenticate with your existing passkey and choose the password in the standalone admin dashboard. You must choose it in the web app. **Do not put it in repository files, Cloudflare build variables, or chat messages.**
 
-Once the password is saved, all existing passkey-only administrator sessions are invalidated. Sign in using `admin@<worker-hostname>`, your chosen password, then your passkey. This prevents legacy passkey-only sign-in from bypassing the new second factor.
+Once the password is saved, all existing passkey-only administrator sessions are invalidated. Sign in using `admin@<mail domain>`, your chosen password, then your passkey. This prevents legacy passkey-only sign-in from bypassing the new second factor.
 
 ## Changing passwords
 

@@ -4,7 +4,7 @@ import {
   DETAIL_CACHE_MS,
   EMPTY_COMPOSE,
   FOLDERS,
-  NATIVE_ACCOUNT_ID,
+  ADMIN_ACCOUNT_ID,
   base64UrlToArrayBuffer,
   belongsInFolder,
   draftSenderKey,
@@ -35,6 +35,7 @@ import { forwardSubject, replySubject } from "./mailUtils";
 import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
 import { useActiveAccountAppearance } from "./appearance";
+import { useAdminView } from "./adminView";
 import {
   ALL_INBOXES_ID,
   accountLabel,
@@ -44,6 +45,8 @@ import {
   unifiedAccounts,
   type AccountListResult,
 } from "./allInboxes";
+
+const TAB_ACCOUNT_KEY = "ltm:tab-mail-account";
 
 export function App() {
   const [folder, setFolder] = useState<Folder>("inbox");
@@ -69,7 +72,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [compose, setCompose] = useState<ComposeState>(EMPTY_COMPOSE);
-  const [composeAccountId, setComposeAccountId] = useState(NATIVE_ACCOUNT_ID);
+  const [composeAccountId, setComposeAccountId] = useState(ADMIN_ACCOUNT_ID);
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
@@ -80,9 +83,14 @@ export function App() {
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [addInboxMode, setAddInboxMode] = useState<AddInboxMode>(null);
-  const [activeAccountId, setActiveAccountId] = useState(NATIVE_ACCOUNT_ID);
+  // Admins start in admin@; returning from the admin panel keeps the mailbox
+  // that was open in this tab.
+  const [activeAccountId, setActiveAccountId] = useState(() => {
+    try { return sessionStorage.getItem(TAB_ACCOUNT_KEY) ?? ADMIN_ACCOUNT_ID; } catch { return ADMIN_ACCOUNT_ID; }
+  });
   // The account of the open message; in All inboxes it differs per message.
   const [readerAccountId, setReaderAccountId] = useState<string | null>(null);
+  const adminView = useAdminView();
   const unified = activeAccountId === ALL_INBOXES_ID;
   // Theme, accent, density, text size and icons follow the open mailbox.
   useActiveAccountAppearance(unified ? readerAccountId : activeAccountId);
@@ -110,8 +118,8 @@ export function App() {
     ? allInboxesAvailable(accounts)
     : accounts.some(account => account.id === id);
   const defaultSenderId = () => unified
-    ? (unifiedAccounts(accounts).find(account => account.id === NATIVE_ACCOUNT_ID)
-      ?? unifiedAccounts(accounts)[0])?.id ?? NATIVE_ACCOUNT_ID
+    ? (unifiedAccounts(accounts).find(account => account.id === ADMIN_ACCOUNT_ID)
+      ?? unifiedAccounts(accounts)[0])?.id ?? ADMIN_ACCOUNT_ID
     : activeAccountId;
 
   const refreshAccounts = useCallback(async () => {
@@ -321,6 +329,7 @@ export function App() {
     setLoading(true);
     setActiveAccountId(id);
     localStorage.setItem("ltm:active-mail-account", id);
+    try { sessionStorage.setItem(TAB_ACCOUNT_KEY, id); } catch { /* private mode */ }
     setSelected(null);
     setThread([]);
     setOpeningMessageId(null);
@@ -447,9 +456,9 @@ export function App() {
         if (replacement) switchAccount(replacement.id);
       }
       if (composeAccountId === id) {
-        setComposeAccountId(NATIVE_ACCOUNT_ID);
+        setComposeAccountId(ADMIN_ACCOUNT_ID);
         if (compose.draftId) {
-          localStorage.setItem(draftSenderKey(compose.draftId), NATIVE_ACCOUNT_ID);
+          localStorage.setItem(draftSenderKey(compose.draftId), ADMIN_ACCOUNT_ID);
         }
       }
       await refreshAccounts();
@@ -1047,6 +1056,7 @@ export function App() {
         onCompose={startCompose}
         onToggleNotifications={() => void toggleNotifications()}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenAdmin={adminView.isAdmin ? adminView.openAdmin : undefined}
       />
       <div className="mail-workspace">
         <MailList
@@ -1138,6 +1148,7 @@ export function App() {
         sessionCount={sessionCount}
         busy={settingsBusy}
         isAdmin={isAdmin}
+        onOpenAdmin={adminView.isAdmin ? adminView.openAdmin : undefined}
         onClose={() => setSettingsOpen(false)}
         onToggleNotifications={() => void toggleNotifications()}
         onAddInbox={openAddInbox}

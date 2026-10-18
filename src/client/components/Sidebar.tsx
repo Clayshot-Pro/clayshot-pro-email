@@ -21,6 +21,8 @@ type Props = {
   onCompose: () => void;
   onToggleNotifications: () => void;
   onOpenSettings: () => void;
+  /** Administrators only: switch to the admin panel. */
+  onOpenAdmin?: () => void;
 };
 
 export function Sidebar({
@@ -40,6 +42,7 @@ export function Sidebar({
   onCompose,
   onToggleNotifications,
   onOpenSettings,
+  onOpenAdmin,
 }: Props) {
   const { brandName } = useInstance();
   return (
@@ -117,6 +120,12 @@ export function Sidebar({
         <span className={`notification-icon ${notificationState === "on" ? "enabled" : ""}`}><Icon name="bell" size={16}/></span>
         <span className="notification-copy"><strong>{notificationLabel(notificationState)}</strong><small>Push alerts for new mail</small></span>
       </button>
+      {onOpenAdmin ? (
+        <button className="notification-card" type="button" onClick={onOpenAdmin}>
+          <span className="notification-icon"><Icon name="archive" size={16}/></span>
+          <span className="notification-copy"><strong>Admin panel</strong><small>Domains, mailboxes and keys</small></span>
+        </button>
+      ) : null}
       <button className="notification-card" type="button" onClick={onOpenSettings}>
         <span className="notification-icon"><Icon name="more" size={16}/></span>
         <span className="notification-copy"><strong>Settings</strong><small>Accounts, profile, and security</small></span>

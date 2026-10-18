@@ -3,11 +3,12 @@ import { credentialForMailbox } from "./deviceAuth";
 import { instanceSettings } from "./branding";
 import { addressRules, postmasterMailboxId } from "./domains";
 import { normalizeHex } from "./customization";
+import { ADMIN_MAILBOX_ID } from "./mailboxIds";
 /**
- * Native mailboxes are addresses managed by the single existing passkey owner.
- * They are not distinct web-app login identities or SMTP accounts.
+ * Native mailboxes are addresses managed by the single administrator. Each
+ * signs in with its own password; admin@ is opened with the owner session.
  */
-export const PRIMARY_MAILBOX_ID = "native:primary";
+export { ADMIN_MAILBOX_ID } from "./mailboxIds";
 
 function safeDisplayName(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -44,7 +45,7 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
   // An explicitly disabled address must not be revived by plus-alias fallback.
   if (exact) return exact.status === "active" && !exact.deleted_at ? exact : null;
   // RFC postmaster and abuse go to the domain's postmaster mailbox (the
-  // protected primary mailbox by default). Plus suffixes are accepted only if
+  // protected admin mailbox by default). Plus suffixes are accepted only if
   // the parent mailbox on the same domain exists and is active.
   const alias = aliasTarget(normalized);
   if (!alias) return null;
@@ -59,7 +60,7 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
 
 export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
   const result = await env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes ORDER BY CASE WHEN id='native:primary' THEN 0 ELSE 1 END, created_at"
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version, accent_color, sender_name FROM native_mailboxes ORDER BY CASE WHEN id='native:admin' THEN 0 ELSE 1 END, created_at"
   ).all<NativeMailbox>();
   return result.results;
 }
@@ -113,8 +114,8 @@ export async function updateNativeMailbox(request: Request, env: Env, id: string
     return Response.json({ error: "Invalid mailbox update" }, { status: 400 });
   if (body.status === undefined && body.displayName === undefined && body.quotaBytes === undefined && body.spamFilterEnabled === undefined && body.accentColor === undefined && body.senderName === undefined)
     return Response.json({ error: "No changes requested" }, { status: 400 });
-  if (id === PRIMARY_MAILBOX_ID && body.status === "disabled")
-    return Response.json({ error: "Primary mailbox cannot be disabled" }, { status: 403 });
+  if (id === ADMIN_MAILBOX_ID && body.status === "disabled")
+    return Response.json({ error: "The admin mailbox cannot be disabled" }, { status: 403 });
   const old = await mailboxById(env, id);
   if (!old) return Response.json({ error: "Mailbox not found" }, { status: 404 });
   if (old.deleted_at) return Response.json({ error: "Restore the mailbox before editing" }, { status: 409 });
@@ -132,7 +133,7 @@ export async function updateNativeMailbox(request: Request, env: Env, id: string
 }
 
 export async function scheduleNativeMailboxDeletion(env: Env, id: string): Promise<Response> {
-  if (id === PRIMARY_MAILBOX_ID) return Response.json({ error: "Primary mailbox cannot be deleted" }, { status: 403 });
+  if (id === ADMIN_MAILBOX_ID) return Response.json({ error: "The admin mailbox cannot be deleted" }, { status: 403 });
   const old = await mailboxById(env, id);
   if (!old) return Response.json({ error: "Mailbox not found" }, { status: 404 });
   if (!old.deleted_at) {
@@ -158,7 +159,7 @@ export async function restoreNativeMailbox(env: Env, id: string): Promise<Respon
 // retried. Storage objects are deleted before DB references; restore must not be
 // offered after the grace period until purge has completed.
 export async function purgeNativeMailbox(env: Env, id: string): Promise<Response> {
-  if (id === PRIMARY_MAILBOX_ID) return Response.json({ error: "Primary mailbox cannot be purged" }, { status: 403 });
+  if (id === ADMIN_MAILBOX_ID) return Response.json({ error: "The admin mailbox cannot be purged" }, { status: 403 });
   const box = await mailboxById(env, id);
   if (!box?.deleted_at || !box.purge_after) return Response.json({ error: "Mailbox not pending deletion" }, { status: 409 });
   const ready = await env.DB.prepare("SELECT 1 AS ready FROM native_mailboxes WHERE id=?1 AND purge_after <= CURRENT_TIMESTAMP")

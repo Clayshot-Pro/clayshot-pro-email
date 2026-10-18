@@ -8,7 +8,8 @@ import type {
 } from "./mailTypes";
 import { formatFullDate } from "./mailUtils";
 
-export const NATIVE_ACCOUNT_ID = "native:primary";
+/** admin@<main domain>: the administrator's starting inbox. */
+export const ADMIN_ACCOUNT_ID = "native:admin";
 export const DETAIL_CACHE_MS = 5 * 60_000;
 
 const DRAFT_SENDER_KEY_PREFIX = "ltm-draft-sender:";

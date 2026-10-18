@@ -1,5 +1,5 @@
 import { suspectedJunk } from "./junk";
-import { mailboxForRecipient, PRIMARY_MAILBOX_ID } from "../mailboxes";
+import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
 import { sanitizeEmailHtml } from "./html";
@@ -181,5 +181,6 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     preview: safePreview(bodyText),
   }));
   const forwardTo = (await instanceSettings(env)).mail.forwardTo;
-  if (forwardTo && mailbox.id === PRIMARY_MAILBOX_ID && !isJunk) ctx.waitUntil(message.forward(forwardTo));
+  // Forwarding (Admin → Mail settings) applies to the admin mailbox.
+  if (forwardTo && mailbox.id === ADMIN_MAILBOX_ID && !isJunk) ctx.waitUntil(message.forward(forwardTo));
 }

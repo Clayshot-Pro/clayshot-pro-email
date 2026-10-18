@@ -3,10 +3,10 @@ import { ensureDomains } from "./domains";
 let ready: Promise<void> | null = null;
 
 /**
- * Align stored instance state once per isolate: keep mailbox domains in sync
- * and, for an install upgraded from v2, adopt its primary mailbox's domain as
- * the primary domain. A fresh install stays uninitialized until first-run
- * setup (POST /api/setup) chooses the primary mailbox address.
+ * Align stored instance state once per isolate: keep mailbox domains in sync,
+ * adopt a v2 install's mailbox domain as the main domain, and create the
+ * admin@ mailbox on the main domain if it is missing. A fresh install stays
+ * uninitialized until first-run setup (POST /api/setup) chooses the domain.
  */
 export function bootstrapInstance(env: Env): Promise<void> {
   ready ??= ensureDomains(env).catch(error => {

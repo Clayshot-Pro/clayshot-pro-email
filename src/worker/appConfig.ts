@@ -2,7 +2,7 @@
  * Runtime capabilities derived from Worker secrets. Pure and dependency-free.
  *
  * The Worker has no instance vars: the origin and admin sign-in come from the
- * request URL (config.ts), and domains, the primary mailbox, branding and mail
+ * request URL (config.ts), and domains, the admin@ mailbox, branding and mail
  * settings live in D1 (domains.ts, branding.ts). Only secrets, the
  * build-filled CF_EMAIL_SENDING_ACCOUNT_ID and the EMAIL binding are read here.
  */
