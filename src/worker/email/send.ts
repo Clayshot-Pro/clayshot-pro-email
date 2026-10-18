@@ -1,6 +1,7 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
 import { appConfig } from "../appConfig";
+import { sendingDomain } from "../domains";
 
 type ReplyTarget = {
   id: string;
@@ -180,6 +181,12 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   // Do not enable other addresses before provider policy and binding approval.
   if (provider.kind === "native" && provider.address !== appConfig(env).primaryAddress && !appConfig(env).features.multiSender) {
     return Response.json({ error: "Sending from this mailbox is not enabled yet" }, { status: 403 });
+  }
+  if (provider.kind === "native") {
+    const domain = await sendingDomain(env, provider.address);
+    if (!domain || domain.status !== "active" || domain.transport === "none") {
+      return Response.json({ error: "Sending is not enabled for this mailbox's domain" }, { status: 403 });
+    }
   }
   const to = splitRecipients(form.get("to"));
   const cc = splitRecipients(form.get("cc"));

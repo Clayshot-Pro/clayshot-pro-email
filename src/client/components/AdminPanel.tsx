@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MailboxManager } from "./MailboxManager";
+import { DomainManager } from "./DomainManager";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
 import { useInstance } from "../instance";
@@ -12,13 +13,16 @@ export function AdminPanel() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [primaryMismatch, setPrimaryMismatch] = useState<{ stored: string; configured: string } | null>(null);
+  const [domainVersion, setDomainVersion] = useState(0);
 
   useEffect(() => {
     fetch("/api/admin/status", { cache: "no-store" })
       .then(async response => {
         if (!response.ok) throw new Error("Unable to load administrator settings");
-        const status = await response.json() as { passwordConfigured: boolean };
+        const status = await response.json() as { passwordConfigured: boolean; primaryMismatch?: { stored: string; configured: string } | null };
         setConfigured(status.passwordConfigured);
+        setPrimaryMismatch(status.primaryMismatch ?? null);
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Unable to load administrator settings"));
   }, []);
@@ -139,7 +143,7 @@ export function AdminPanel() {
             <div>
               <p className="admin-section-kicker">{brandName} / Administrator</p>
               <h1>Email administration</h1>
-              <p className="admin-home-subtitle">Manage your domain's mailboxes and account security.</p>
+              <p className="admin-home-subtitle">Manage your domains, mailboxes and account security.</p>
             </div>
           </div>
           <div className="admin-home-actions">
@@ -151,13 +155,21 @@ export function AdminPanel() {
         </header>
 
         <nav className="admin-home-nav" aria-label="Administrator sections">
+          {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
         </nav>
 
+        {primaryMismatch && (
+          <p className="admin-config-warning" role="alert">
+            PRIMARY_ADDRESS is {primaryMismatch.configured}, but the primary mailbox already holds mail as {primaryMismatch.stored}.
+            It was not renamed automatically. Set PRIMARY_ADDRESS back, or plan an explicit migration.
+          </p>
+        )}
         {configured === false && passwordSection}
-        {configured && <MailboxManager onChanged={() => undefined} />}
+        {configured && <DomainManager onChanged={() => setDomainVersion(version => version + 1)} />}
+        {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}
         {configured === null && (

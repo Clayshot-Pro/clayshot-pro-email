@@ -16,6 +16,8 @@ export function isApprovedAdminMutation(method: string, path: string): boolean {
     || path === "/api/auth/sessions/reset")) return true;
   if (method === "DELETE" && /^\/api\/auth\/sessions\/[^/]+$/.test(path)) return true;
   if ((method === "PATCH" || method === "DELETE") && /^\/api\/mailboxes\/[^/]+$/.test(path)) return true;
+  if (method === "POST" && path === "/api/admin/domains") return true;
+  if ((method === "PATCH" || method === "DELETE") && /^\/api\/admin\/domains\/[^/]+$/.test(path)) return true;
   return method === "POST" && /^\/api\/mailboxes\/[^/]+\/(reset-password|restore|purge|reconcile)$/.test(path);
 }
 

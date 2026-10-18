@@ -80,8 +80,8 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
     // Atomic mailbox plus credential creation; do not expose plaintext except
     // the one-time response to the authenticated owner.
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO native_mailboxes (id,email_address,display_name) VALUES (?1,?2,?3)")
-        .bind(id,address,displayName),
+      env.DB.prepare("INSERT INTO native_mailboxes (id,email_address,display_name,domain) VALUES (?1,?2,?3,?4)")
+        .bind(id,address,displayName,address.slice(address.lastIndexOf("@") + 1)),
       env.DB.prepare(`INSERT INTO native_mailbox_credentials
         (mailbox_id,password_salt,password_hash,iterations) VALUES (?1,?2,?3,?4)`)
         .bind(id,credential.salt,credential.hash,credential.iterations),

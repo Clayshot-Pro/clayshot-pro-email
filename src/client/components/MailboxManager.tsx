@@ -26,6 +26,8 @@ async function api(path: string, method = "GET", body?: unknown, approval?: Admi
 
 export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   const { primaryDomain } = useInstance();
+  const [domains, setDomains] = useState<{ domain: string; status: string; isPrimary: boolean }[]>([]);
+  const [domain, setDomain] = useState("");
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [address, setAddress] = useState("");
@@ -44,8 +46,13 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
 
   const load = useCallback(async () => {
     try {
-      const data = await api("/api/mailboxes");
+      const [data, domainData] = await Promise.all([api("/api/mailboxes"), api("/api/admin/domains")]);
       setMailboxes(data.mailboxes as Mailbox[]);
+      const usable = (domainData.domains as { domain: string; status: string; isPrimary: boolean }[])
+        .filter(entry => entry.status !== "disabled");
+      setDomains(usable);
+      setDomain(current => current && usable.some(entry => entry.domain === current)
+        ? current : usable.find(entry => entry.isPrimary)?.domain ?? usable[0]?.domain ?? "");
       setLoaded(true);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load mailboxes");
@@ -77,7 +84,8 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await run("new", async () => {
-      const created = await api("/api/mailboxes", "POST", { address, displayName });
+      const fullAddress = address.includes("@") || !domain ? address.trim() : `${address.trim()}@${domain}`;
+      const created = await api("/api/mailboxes", "POST", { address: fullAddress, displayName });
       if (typeof created.password === "string") {
         setNewCredential({ address: String((created.mailbox as Mailbox).email_address), password: created.password });
       }
@@ -177,7 +185,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
         <div>
           <p className="admin-section-kicker">Domain management</p>
           <h2>Mailboxes</h2>
-          <p>Create and manage addresses on {primaryDomain || "your domain"}. Each mailbox has its own login and storage.</p>
+          <p>Create and manage addresses on {domains.length > 1 ? `${domains.length} domains` : primaryDomain || "your domain"}. Each mailbox has its own login and storage.</p>
         </div>
         <span className="admin-mailbox-count">{loaded ? `${mailboxes.length} total` : "Loading…"}</span>
       </div>
@@ -199,8 +207,16 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
           <label htmlFor="new-mailbox-address">
             Email address
             <input id="new-mailbox-address" autoComplete="off" spellCheck={false} type="text" maxLength={254}
-              placeholder={`example@${primaryDomain || "example.com"}`} value={address} onChange={e => setAddress(e.target.value)}
+              placeholder="name" value={address} onChange={e => setAddress(e.target.value)}
               required className="mailbox-entry-input" />
+          </label>
+          <label htmlFor="new-mailbox-domain">
+            Domain
+            <select id="new-mailbox-domain" value={domain} onChange={e => setDomain(e.target.value)} className="mailbox-entry-input">
+              {domains.map(entry => (
+                <option key={entry.domain} value={entry.domain}>@{entry.domain}{entry.status === "pending" ? " (pending)" : ""}</option>
+              ))}
+            </select>
           </label>
           <label htmlFor="new-mailbox-name">
             Display name <span className="admin-field-optional">(optional)</span>

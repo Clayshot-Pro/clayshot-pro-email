@@ -35,6 +35,7 @@ import {
 import { appConfig, ConfigError } from "./appConfig";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance, primaryAddressMismatch } from "./bootstrap";
+import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
@@ -175,6 +176,17 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
       adminPasswordConfigured(env), primaryAddressMismatch(env),
     ]);
     return Response.json({ passwordConfigured, primaryMismatch });
+  }
+  if (url.pathname === "/api/admin/domains" && request.method === "GET") return listDomainsResponse(env);
+  if (url.pathname === "/api/admin/domains" && request.method === "POST") return createDomain(request, env);
+  const domainRoute = url.pathname.match(/^\/api\/admin\/domains\/([^/]+)(\/dns)?$/);
+  if (domainRoute) {
+    const domain = decodePathSegment(domainRoute[1]);
+    if (!domain) return jsonError("Invalid domain", 400);
+    if (domainRoute[2] && request.method === "GET") return checkDomainDns(env, domain);
+    if (!domainRoute[2] && request.method === "PATCH") return updateDomain(request, env, domain);
+    if (!domainRoute[2] && request.method === "DELETE") return deleteDomain(env, domain);
+    return jsonError("Method not allowed", 405);
   }
 
   // The primary mailbox owns its profile photo. Other mailbox sessions must

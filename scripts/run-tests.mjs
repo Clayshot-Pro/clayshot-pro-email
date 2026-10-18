@@ -15,6 +15,7 @@ const TESTS = [
   "test-admin-layout",
   "test-add-inbox-ui",
   "test-domains",
+  "test-migrations",
   "test-transport-selection",
   "test-resend-webhook",
   "test-resend-errors",

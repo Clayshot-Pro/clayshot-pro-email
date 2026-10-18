@@ -11,6 +11,7 @@ for (const [method, path] of [
   ["POST","/api/mailboxes/native%3Aexample/purge"],
   ["POST","/api/mailboxes/native%3Aexample/reconcile"],
   ["POST","/api/auth/sessions/reset"], ["DELETE","/api/auth/sessions/example"],
+  ["POST","/api/admin/domains"], ["PATCH","/api/admin/domains/example.org"], ["DELETE","/api/admin/domains/example.org"],
 ]) {
   assert.equal(adminMutationNeedsStepUp(method,path),true,path);
   assert.equal(isApprovedAdminMutation(method,path),true,path);
@@ -27,6 +28,11 @@ assert.equal(adminMutationNeedsStepUp("GET","/api/mailboxes"),false);
 assert.equal(adminMutationEvent("POST","/api/mailboxes"),"admin.mailbox.created");
 assert.equal(adminMutationEvent("POST","/api/mailboxes/id/purge"),"admin.mailbox.purged");
 assert.equal(adminMutationEvent("POST","/api/admin/password"),"admin.password.changed");
+assert.equal(adminMutationEvent("POST","/api/admin/domains"),"admin.domain.created");
+assert.equal(adminMutationEvent("PATCH","/api/admin/domains/example.org"),"admin.domain.updated");
+assert.equal(adminMutationEvent("DELETE","/api/admin/domains/example.org"),"admin.domain.deleted");
+assert.equal(adminMutationNeedsStepUp("GET","/api/admin/domains/example.org/dns"),false,"DNS checks are read-only lookups");
+assert.equal(isApprovedAdminMutation("POST","/api/admin/domains/example.org/dns"),false);
 
 const emptyHash = await hashMutationBody(new Request("https://example.com", {method:"POST"}));
 assert.equal(emptyHash,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");

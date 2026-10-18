@@ -1,4 +1,5 @@
 import { appConfig } from "./appConfig";
+import { ensureDomains } from "./domains";
 
 const PRIMARY = "native:primary";
 let ready: Promise<void> | null = null;
@@ -12,7 +13,7 @@ let ready: Promise<void> | null = null;
  * automatically; the admin panel reports the mismatch instead.
  */
 export function bootstrapInstance(env: Env): Promise<void> {
-  ready ??= ensurePrimaryMailbox(env).catch(error => {
+  ready ??= ensurePrimaryMailbox(env).then(() => ensureDomains(env)).catch(error => {
     ready = null;
     console.error("instance_bootstrap_failed", error instanceof Error ? error.name : "unknown");
   });
