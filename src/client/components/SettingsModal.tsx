@@ -3,6 +3,7 @@ import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
 import { ADMIN_ACCOUNT_ID } from "../appModel";
 import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
+import { BlockedSenders } from "./BlockedSenders";
 
 type Props = {
   open: boolean;
@@ -14,6 +15,8 @@ type Props = {
   busy: string | null;
   onClose: () => void;
   isAdmin: boolean;
+  /** The mailbox shown first in Blocked senders. */
+  activeAccountId: string | null;
   onOpenAdmin?: () => void;
 
   onToggleNotifications: () => void;
@@ -126,6 +129,8 @@ export function SettingsModal(props: Props) {
               </button>
             </div>
           </section>
+
+          <BlockedSenders accounts={props.accounts} preferredAccountId={props.activeAccountId} />
 
           <section className="settings-section">
             <h3>Security &amp; sessions</h3>

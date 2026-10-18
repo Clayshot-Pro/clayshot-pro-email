@@ -71,3 +71,11 @@
 .admin-home-nav a {
   flex: 0 0 auto;
 }
+
+/* Block sender: a desktop footer action; on phones the footer stays as it
+   was and Block lives in the Unsubscribe dialog. */
+@media (max-width: 760px) {
+  .reader-reply-bar .reader-block-action {
+    display: none;
+  }
+}
