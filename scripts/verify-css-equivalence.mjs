@@ -29,6 +29,12 @@ import { join, posix } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const base = process.argv[2] ?? "6c0811a";
+try {
+  execFileSync("git", ["cat-file", "-e", `${base}^{commit}`], { cwd: ROOT, stdio: "ignore" });
+} catch {
+  console.error(`Baseline commit ${base} is not in this clone. Fetch full history (git fetch --unshallow, or actions/checkout fetch-depth: 0).`);
+  process.exit(1);
+}
 const git = path => execFileSync("git", ["show", `${base}:${path}`], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
 
 // ---------------------------------------------------------------------------
