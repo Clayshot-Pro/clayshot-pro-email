@@ -21,7 +21,7 @@ An **authenticated web application**, not a traditional mail server: there are n
 | Gmail API (optional) | Connected Gmail accounts |
 | Web Push / VAPID (optional) | Browser/PWA notifications |
 
-**There is no instance configuration in the Worker.** The app's address and the admin sign-in come from the URL it is served on. The primary mailbox, mail domains, branding, themes, forwarding and limits are stored in D1 and managed from the app. The only things you configure outside the app are Worker **secrets** and the Cloudflare **deploy keys**, both in one `.env` file.
+**There is no instance configuration in the Worker.** The app's address and the admin sign-in come from the URL it is served on. The primary mailbox, mail domains, branding, themes, forwarding and limits are stored in D1 and managed from the app. The only things you configure outside the app are a few Worker **secrets** and the Cloudflare **deploy keys**: in the Cloudflare dashboard for automatic deploys from `main`, or in a local `.env` file for command-line deploys (step 2). Nothing secret is committed.
 
 ## Before you start
 
@@ -43,24 +43,23 @@ cd my-mail
 npm ci
 ```
 
-## 2. Fill in `.env`
+## 2. Know where each setting goes
 
-```bash
-cp .env.example .env
-```
+Nothing secret is ever committed. Depending on how you deploy, keys live in one of these places:
 
-`.env` is gitignored. It holds two kinds of keys (see [`config/schema.mjs`](./config/schema.mjs)):
+| Key | Automatic deploys (Workers Builds) | Command-line deploys |
+| --- | --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | **Workers Builds → Build variables** (plain text) | `.env` |
+| `CLOUDFLARE_API_TOKEN` — deploy token: Workers Scripts edit, D1 edit, R2 edit, Account Settings read | **Workers Builds → Build variables** (mark as **secret**) | `.env` |
+| `AUTH_SETUP_TOKEN` — one-time first-run secret | **Worker → Settings → Variables & Secrets** (type **Secret**) | `.env` |
+| `PROVIDER_CREDENTIAL_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Gmail only | **Worker → Variables & Secrets** (Secret) | `.env` |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — push only | **Worker → Variables & Secrets** (Secret) | `.env` |
+| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` — Resend only | **Worker → Variables & Secrets** (Secret) | `.env` |
+| `CF_EMAIL_SENDING_TOKEN` — optional; sending works without it | **Worker → Variables & Secrets** (Secret) | `.env` |
+| `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`, `D1_DATABASE_ID` — optional, sensible defaults | Build variables, only if you change the defaults | `.env` |
+| Primary mailbox, domains, branding, themes, forwarding, limits | **The app itself** (first-run setup and the admin panel, stored in D1) | Same |
 
-| Key | Kind | Required | Purpose |
-| --- | --- | --- | --- |
-| `CLOUDFLARE_ACCOUNT_ID` | deploy | yes | Your account. Also passed to the Worker (not secret) for the optional Email Sending API. |
-| `CLOUDFLARE_API_TOKEN` | deploy | yes | Deploy token: Workers Scripts edit, D1 edit, R2 edit, Account Settings read. Never sent to the Worker. |
-| `CF_EMAIL_SENDING_TOKEN` | secret | no | Optional. Sending works without it through the Worker's send binding; set an **Email Sending** token only to use the REST API instead. |
-| `AUTH_SETUP_TOKEN` | secret | first run | One-time secret for first-run setup. Remove afterwards. |
-| `PROVIDER_CREDENTIAL_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secret | Gmail only | OAuth client and the key that encrypts stored Gmail tokens. |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | secret | push only | Web Push keypair. |
-| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | secret | Resend only | Sending-only Resend key and its webhook signing secret. |
-| `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`, `D1_DATABASE_ID` | deploy | no | Resource names (sensible defaults); the D1 ID is filled in by setup. |
+**Build variables are not runtime secrets.** Build variables are only visible while Cloudflare builds and deploys the code; the running app cannot read them. Gmail, push, Resend, setup and sending keys must go under the **Worker's own Variables & Secrets**, as type **Secret** — a plain "Text" variable added in the dashboard is removed on the next deploy, while secrets persist across every deploy.
 
 Generate strong random values locally, for example:
 
@@ -70,7 +69,30 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 
 Keep `PROVIDER_CREDENTIAL_KEY` backed up: changing it makes stored Gmail credentials unreadable.
 
-## 3. Set up and deploy
+## 3. Deploy
+
+### Option A — automatic deploys from `main` (Cloudflare Workers Builds, no `.env`)
+
+1. In the Cloudflare dashboard, create a **D1 database** named `ltm-email-service` and an **R2 bucket** named `ltm-email-service-mail` (or other names, set as build variables).
+2. **Workers & Pages → Create → Import a repository**, pick your private copy of this repository, and name the Worker `ltm-email-service` (or set `WORKER_NAME`).
+3. In the Worker's **Settings → Build**:
+   - Production branch: `main`. Disable preview builds on other branches unless you give them their own database and bucket.
+   - Build command: `npm run build:cloudflare`
+   - Deploy command: `npm run deploy`
+   - **Build variables:** `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (as a secret).
+4. Push or merge to `main`. The build renders `wrangler.jsonc`, finds the D1 database, applies migrations and deploys. `npm run deploy` refuses to run anywhere except Workers Builds on `main`.
+5. In the Worker's **Settings → Variables & Secrets**, add `AUTH_SETUP_TOKEN` (and any optional secrets from the table) as type **Secret**. Secrets take effect immediately and survive later deploys.
+6. Under **Settings → Domains & Routes**, add your custom domain (for example `mail.example.com`).
+
+Every later merge to `main` deploys automatically; nothing else needs to be set again.
+
+### Option B — deploy from your computer (`.env`)
+
+```bash
+cp .env.example .env
+```
+
+Fill in `.env` (it is gitignored), then:
 
 ```bash
 npm run setup
@@ -82,13 +104,9 @@ Creates the D1 database and R2 bucket if missing, records the D1 ID in `.env`, r
 npm run deploy:self
 ```
 
-Asks for confirmation, then type-checks, builds, migrates and deploys. Add a **custom domain** for the Worker (for example `mail.example.com`) in the Cloudflare dashboard.
+Asks for confirmation, then type-checks, builds, migrates and deploys. Add a **custom domain** for the Worker in the dashboard.
 
-After changing a secret in `.env`, run `npm run secrets:push`.
-
-### Deploying with Cloudflare Workers Builds instead
-
-Connect the repository to the Worker, set the production branch to `main`, build command `npm run build:cloudflare`, deploy command `npm run deploy`, and add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (secret) as **build variables**. Nothing else is needed in the build environment. Upload runtime secrets once with `npm run secrets:push` from a machine that has `.env`. The build renders `wrangler.jsonc`, resolves the D1 ID from the deployed Worker (or by name), applies migrations, and `npm run deploy` refuses to run anywhere except Workers Builds on `main`.
+After adding or changing a secret in `.env`, run `npm run secrets:push` to upload it. You can also use this to upload secrets for an Option A install instead of typing them into the dashboard. It only uploads: to remove a secret, delete it in the dashboard or run `npx wrangler secret delete NAME`.
 
 ## 4. First-run setup
 
@@ -97,7 +115,7 @@ Open the app on its **final HTTPS hostname** (passkeys are bound to it).
 1. Enter the **primary mailbox address** (for example `hello@example.com`; its domain becomes the primary mail domain) and your `AUTH_SETUP_TOKEN`, then register the owner passkey.
 2. In **Email administration**, set an administrator password (4–32 characters).
 3. Sign in again as `admin@<app hostname>` (for example `admin@mail.example.com`) with the password and your passkey. Sensitive admin actions ask for a fresh passkey check.
-4. Remove `AUTH_SETUP_TOKEN` from `.env` and run `npm run secrets:push`.
+4. Delete the `AUTH_SETUP_TOKEN` secret: **Worker → Settings → Variables & Secrets**, or `npx wrangler secret delete AUTH_SETUP_TOKEN`. (Also remove it from `.env` if you use one.)
 
 An instance upgraded from v2 skips step 1: its existing primary mailbox and domain are adopted automatically, and `admin@<mail domain>` keeps working when the app is on a subdomain of the mail domain.
 
@@ -113,7 +131,7 @@ For **each** mail domain:
 ## 6. Outbound sending
 
 - **Cloudflare (default):** onboard each mail domain for **Email Sending** in the same Cloudflare account. That's all: the Worker sends through its built-in `EMAIL` binding, which needs no token, and every active mailbox on an active domain can send. (Optionally set `CF_EMAIL_SENDING_TOKEN` to use the REST API instead.) Check Cloudflare's terms cover your use.
-- **Resend (optional, per domain):** verify the domain in Resend, set `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET`, add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
+- **Resend (optional, per domain):** verify the domain in Resend, add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` as Worker secrets (see step 2), add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
 - A domain can also be **receive-only**.
 
 Outbound sending always applies server-side mailbox authorization, rate and daily limits, idempotency and quota checks; the From address is never taken from the client.
@@ -136,9 +154,9 @@ Users get **Settings → Appearance** for anything you leave unlocked.
 
 ## Optional integrations
 
-**Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Set the three Gmail secrets, push them, then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.
+**Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Add the three Gmail keys as Worker secrets (see step 2), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.
 
-**Push notifications.** Set a VAPID keypair as secrets. The VAPID contact is the primary mailbox address.
+**Push notifications.** Add a VAPID keypair as Worker secrets (see step 2). The VAPID contact is the primary mailbox address.
 
 ## Validate the deployment
 
@@ -188,7 +206,7 @@ src/worker/transports/        Cloudflare Email Sending API and Resend transports
 src/worker/webhooks/          Signed Resend delivery webhooks
 src/worker/email/             Inbound storage and outbound sending
 migrations/                   Ordered D1 schema migrations
-config/schema.mjs             The .env keys (secrets and deploy keys)
+config/schema.mjs             Secret and deploy keys (.env.example is generated from it)
 scripts/                      Setup, render, deploy guards and regression tests
 docs/v3/                      v3 design, status and self-hosting notes
 ```
