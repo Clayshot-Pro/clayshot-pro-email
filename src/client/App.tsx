@@ -34,6 +34,7 @@ import type {
 import { forwardSubject, replySubject } from "./mailUtils";
 import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
+import { useActiveAccountAppearance } from "./appearance";
 
 export function App() {
   const [folder, setFolder] = useState<Folder>("inbox");
@@ -71,6 +72,8 @@ export function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [addInboxMode, setAddInboxMode] = useState<AddInboxMode>(null);
   const [activeAccountId, setActiveAccountId] = useState(NATIVE_ACCOUNT_ID);
+  // Theme, accent, density, text size and icons follow the open mailbox.
+  useActiveAccountAppearance(activeAccountId);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);

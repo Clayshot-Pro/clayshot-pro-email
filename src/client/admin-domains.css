@@ -1,0 +1,83 @@
+/* v3.01 — Domain administration. Uses theme variables only (no colour literals). */
+.admin-domain-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 18px 0 14px;
+}
+.admin-domain-add label { flex: 1 1 auto; display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.admin-domain-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.admin-domain-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-raised);
+  padding: 12px 14px;
+}
+.admin-domain-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+}
+.admin-domain-summary > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-domain-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-domain-summary small { grid-column: 1; color: var(--muted); font-size: 11px; }
+.admin-domain-summary button { grid-column: 2; grid-row: 1 / span 2; }
+.admin-domain-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.admin-domain-chip.chip-active { border-color: var(--ui-cta-border); color: var(--text); }
+.admin-domain-chip.chip-disabled { border-color: var(--ui-error-border); color: var(--ui-error-text); }
+.admin-domain-details { display: grid; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.admin-domain-checklist { margin: 0; padding-left: 20px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.admin-dns-report { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-dns-report li { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; }
+.admin-dns-report li small { color: var(--muted); overflow-wrap: anywhere; }
+.admin-dns-report li.dns-fail { border-color: var(--ui-error-border); }
+.admin-dns-report li.dns-fail strong { color: var(--ui-error-text); }
+.admin-domain-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-domain-actions .danger { border-color: var(--ui-error-border); color: var(--ui-error-text); }
+.admin-domain-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.admin-domain-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.admin-domain-fields select,
+#new-mailbox-domain {
+  min-height: 40px;
+  border: 1px solid var(--ui-field-border);
+  border-radius: 10px;
+  background: var(--ui-field);
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+}
+.admin-domain-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.admin-domain-note p { margin: 0 0 6px; }
+.admin-domain-note code { display: block; overflow-wrap: anywhere; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.admin-config-warning {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--ui-error-border);
+  border-radius: 12px;
+  background: var(--ui-error-bg);
+  color: var(--ui-error-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 520px) {
+  .admin-domain-add { flex-direction: column; align-items: stretch; }
+  .admin-domain-fields { grid-template-columns: 1fr; }
+}
+.delivery-note { width: min(820px, calc(100% - 56px)); margin: 20px auto 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 11px; }
+@media (max-width: 760px) { .delivery-note { width: calc(100% - 32px); } }
+.admin-domain-actions .auth-secondary,
+.admin-domain-actions .settings-primary,
+.admin-domain-summary .auth-secondary,
+.branding-logo .auth-secondary { width: auto; min-width: 0; flex: 0 0 auto; padding-inline: 14px; }
+.branding-logo label.auth-secondary { display: inline-flex; align-items: center; cursor: pointer; }
+.admin-domain-add .auth-secondary { width: auto; flex: 0 0 auto; padding-inline: 16px; }

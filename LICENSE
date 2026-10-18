@@ -1,27 +1,53 @@
-LTM EMAIL SERVICE — PROPRIETARY NO-USE LICENSE
+LTM EMAIL SERVICE — SELF-HOSTING LICENSE
 
-Copyright (c) 2026 Sanghyuk Mo. All rights reserved.
+Copyright (c) 2026 Sanghyuk Mo. All rights reserved except as granted below.
 
-NO LICENSE IS GRANTED.
+1. Grant. Subject to this license, including the attribution conditions in
+   section 2, the copyright holder grants you a worldwide, non-exclusive,
+   non-transferable, non-sublicensable, royalty-free license to download,
+   install, configure, modify, and run the software to operate your own
+   instance, for your personal use or for the internal use of your
+   organization, including a commercial organization.
 
-This software and its source code are proprietary and are made publicly visible solely for portfolio review, evaluation, and good-faith security review.
+2. Attribution. As a condition of this license, you must:
+   (a) keep the software's built-in credit ("Powered by LTM Email Service",
+       linking to the project repository) visible to users of your instance
+       on the sign-in page and in the application's settings or about screen,
+       or, if you modify those screens, display an equivalent credit in a
+       comparably visible place;
+   (b) keep all copyright, license, and attribution notices in the source
+       code and in every copy; and
+   (c) not represent the software as your own work.
 
-Except to the limited extent necessary to view the source code through the repository hosting service, and except where applicable law expressly requires otherwise, you are not granted permission to use this software or source code in any manner.
+3. Restrictions. You may not, in whole or in part, modified or unmodified:
+   (a) distribute, publish, redistribute, sublicense, sell, rent, or lease
+       the software or source code, or make it available to any third party;
+   (b) publish your modifications, including in a public repository or fork;
+   (c) provide the software, or a service substantially based on it, to third
+       parties as a hosted or managed service, whether or not for a fee;
+   (d) sell, or charge any fee for, access to or use of the software, an
+       instance of it, or any service substantially based on it;
+   (e) remove, hide, or alter the credit or notices required by section 2;
+   (f) use the names "LTM", "LTM Mails", "LTM Email Service", or related
+       logos as the name or branding of your instance or product, except in
+       the credit required by section 2 or to truthfully state the origin of
+       the software.
 
-Without prior written permission from the copyright holder, you may not, in whole or in part:
+4. Third-party components. Components included under their own licenses
+   remain subject to those licenses.
 
-1. use, execute, run, operate, compile, build, or deploy the software;
-2. copy, reproduce, modify, adapt, translate, or create derivative works from the software or source code;
-3. publish, distribute, redistribute, transmit, sublicense, sell, rent, lease, host, provide, or otherwise make the software or source code available to any third party;
-4. incorporate the software or source code into another product, service, project, library, application, dataset, model, or codebase;
-5. use the software or source code for commercial, educational, research, benchmarking, training, machine-learning, artificial-intelligence, or other development purposes;
-6. remove, obscure, or alter any copyright, ownership, licensing, or attribution notice; or
-7. represent that you have been granted any license, ownership interest, endorsement, affiliation, or authorization relating to this project.
+5. Termination. This license terminates automatically if you breach it. If
+   you cure a first breach within 30 days of notice, your license is
+   reinstated. On termination you must stop using the software and delete
+   your copies.
 
-Public availability of this repository does not place the software in the public domain, does not make it open source, and does not imply permission to use it.
+6. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A
+   PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
 
-Any permission not expressly granted in a separate written agreement signed by the copyright holder is withheld.
+7. Limitation of liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE
+   COPYRIGHT HOLDER IS NOT LIABLE FOR ANY CLAIM, DAMAGES, DATA LOSS, OR
+   OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
 
-THE SOFTWARE IS PROVIDED FOR VIEWING "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM ACCESS TO OR VIEWING OF THE SOFTWARE.
-
-For licensing inquiries or requests for written permission, contact the repository owner.
+8. Other permissions. Any use not expressly permitted here requires prior
+   written permission from the copyright holder.

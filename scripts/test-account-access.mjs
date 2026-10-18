@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { requestedMailAccount, protectedAccountPath, primaryProfilePath } from "../src/worker/accountAccess.ts";
 
-const destination = "https://email.liamthemo.com";
+const destination = process.env.TEST_ORIGIN || "https://mail.example.com";
 const allowed = "native:allowed";
 const forbidden = "native:unrelated";
 

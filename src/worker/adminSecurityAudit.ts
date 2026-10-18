@@ -2,6 +2,12 @@ export type AdminSecurityOutcome = "success" | "denied" | "failure";
 
 export function adminMutationEvent(method: string, path: string): string {
   if (path === "/api/admin/password") return "admin.password.changed";
+  if (path === "/api/admin/domains") return "admin.domain.created";
+  if (path.startsWith("/api/admin/domains/")) return method === "DELETE" ? "admin.domain.deleted" : "admin.domain.updated";
+  if (path === "/api/admin/instance") return "admin.branding.updated";
+  if (path === "/api/admin/instance/logo") return method === "DELETE" ? "admin.branding.logo_removed" : "admin.branding.logo_uploaded";
+  if (path === "/api/admin/suppressions") return "admin.suppression.added";
+  if (path.startsWith("/api/admin/suppressions/")) return "admin.suppression.removed";
   if (path === "/api/mailboxes") return "admin.mailbox.created";
   if (path === "/api/auth/sessions/reset") return "admin.sessions.reset";
   if (path.startsWith("/api/auth/sessions/")) return "admin.session.revoked";

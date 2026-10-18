@@ -5,7 +5,7 @@ import {
   readOwnerSessionToken, OWNER_SESSION_TTL_SECONDS, OWNER_IDLE_TTL_SECONDS,
 } from "../src/worker/ownerSessionPolicy.ts";
 
-const site = "https://email.liamthemo.com";
+const site = process.env.TEST_ORIGIN || "https://mail.example.com";
 const owner = "a".repeat(43);
 const request = cookie => new Request(site, { headers: { Cookie: cookie } });
 

@@ -27,22 +27,27 @@ export function adminLoginAddress(request: Request): string {
   return `admin@${appHostname(request)}`;
 }
 
+/** Accepts a primary mail domain or an address on it (D1 primary domain). */
+function mailDomain(primary: string | null | undefined): string | null {
+  if (!primary) return null;
+  const domain = primary.slice(primary.lastIndexOf("@") + 1).trim().toLowerCase();
+  return /^[a-z0-9.-]+$/.test(domain) ? domain : null;
+}
+
 /**
  * Preserve the existing admin@<mail domain> sign-in only when this Worker is
  * hosted on that mail domain or a subdomain, so existing owners are not locked
  * out on release. It does not turn admin into a real mailbox.
  */
-export function legacyAdminLoginAddress(request: Request, primaryAddress: string): string | null {
-  const at = primaryAddress.lastIndexOf("@");
-  if (at < 0) return null;
-  const domain = primaryAddress.slice(at + 1).trim().toLowerCase();
-  if (!/^[a-z0-9.-]+$/.test(domain)) return null;
+export function legacyAdminLoginAddress(request: Request, primaryDomain: string | null): string | null {
+  const domain = mailDomain(primaryDomain);
+  if (!domain) return null;
   const host = appHostname(request);
   return host !== domain && host.endsWith("." + domain) ? `admin@${domain}` : null;
 }
 
-export function isAdministratorEmail(request: Request, email: string, primaryAddress: string): boolean {
+export function isAdministratorEmail(request: Request, email: string, primaryDomain: string | null): boolean {
   const normalized = email.trim().toLowerCase();
   return normalized === adminLoginAddress(request)
-    || normalized === legacyAdminLoginAddress(request, primaryAddress);
+    || normalized === legacyAdminLoginAddress(request, primaryDomain);
 }

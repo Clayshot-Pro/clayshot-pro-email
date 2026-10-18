@@ -22,8 +22,8 @@ type ComposeModalProps = {
 const fallbackAccount: ConnectedAccount = {
   id: "native:primary",
   provider: "native",
-  emailAddress: "contact@liamthemo.com",
-  displayName: "LTM Email",
+  emailAddress: "",
+  displayName: "Primary mailbox",
   avatarUrl: null,
   status: "active",
   lastSyncedAt: null,

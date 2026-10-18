@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { unlockOwnerPasskey } from "./adminPasskey";
+import { useInstance } from "./instance";
 import { isAdminLoginEmail } from "./adminIdentity";
 
 export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: () => void; showGoogle?: boolean }) {
@@ -8,10 +9,10 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
   const [pending, setPending] = useState<"google" | "custom" | null>(null);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  // Administrator mailboxes are a distinct authentication identity. Routing
-  // any admin@ address to the admin endpoint also retains the legacy alias
-  // when a Worker moves from a parent-domain to a subdomain login.
+  // Client routing only: any admin@ address goes to the administrator
+  // password + passkey flow. The Worker authenticates the exact identity.
   const isAdmin = isAdminLoginEmail(email);
+  const { primaryDomain } = useInstance();
 
   async function addGoogle() {
     setPending("google"); setError("");
@@ -37,8 +38,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
       const result = await response.json() as {error?:string;passkeyRequired?:boolean};
       if (!response.ok) throw new Error(result.error || "Email sign-in failed");
       setPassword("");
-      if (isAdmin) {
-        if (!result.passkeyRequired) throw new Error("Administrator passkey verification required");
+      if (result.passkeyRequired) {
         // A separate, server-bound passkey challenge completes the second factor.
         await unlockOwnerPasskey();
       }
@@ -74,7 +74,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
           inputMode="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@example.com"
+          placeholder={primaryDomain ? `name@${primaryDomain}` : "name@example.com"}
           autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
@@ -83,7 +83,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
         />
       </div>
       <div className="signin-field">
-        <label htmlFor="device-password">{isAdmin ? "Administrator password" : "Password"}</label>
+        <label htmlFor="device-password">Password</label>
         <div className="signin-password-field">
           <input
             id="device-password"
@@ -106,7 +106,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
           </button>
         </div>
       </div>
-      {isAdmin ? <p className="signin-admin-note">Your registered passkey will be requested after your password.</p> : null}
+      {isAdmin ? <p className="signin-admin-note">Confirm with your registered passkey to finish signing in.</p> : null}
       <button className="auth-primary signin-submit" type="submit" disabled={pending !== null}>
         {pending === "custom" ? "Verifying…" : isAdmin ? "Sign in as administrator" : "Sign in to mailbox"}
       </button>

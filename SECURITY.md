@@ -20,7 +20,9 @@ Do not access, modify, retain, or disclose mailbox contents, credentials, authen
 
 Security reports concerning the application source, authentication/session handling, email processing, attachment handling, provider integrations, deployment configuration, or accidental secret exposure are welcome.
 
-The public visibility of this source code does not authorize security testing against the production service, infrastructure, accounts, users, or third-party providers. Do not perform denial-of-service testing, credential attacks, social engineering, destructive testing, data extraction, or attempts to access data that is not yours.
+Self-hosters may test their **own** instances. Problems that are specific to a self-hosted deployment's configuration (its Cloudflare account, DNS, secrets or providers) should be fixed by its operator; report issues in the software itself here.
+
+The public visibility of this source code does not authorize security testing against the original production service or anyone else's instance, infrastructure, accounts, users, or third-party providers. Do not perform denial-of-service testing, credential attacks, social engineering, destructive testing, data extraction, or attempts to access data that is not yours.
 
 ## Disclosure
 

@@ -25,11 +25,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # verify-css-equivalence compares against the v2.08 baseline commit.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
 
       - name: Install dependencies
@@ -47,54 +49,9 @@ jobs:
       - name: Native mailbox migration smoke test
         run: python3 scripts/test-mailbox-migration.py
 
-      - name: Unsubscribe and sender authorization regressions
-        run: node --experimental-strip-types scripts/test-unsubscribe-and-senders.mjs
+      - name: Regression suite (config, auth boundary, mailbox rules, domains, transports, theming)
+        run: npm test
 
-      - name: Active native sender and compose regression
-        run: node scripts/test-compose-sender.mjs
-
-      - name: Unsubscribe action visible in every folder
-        run: node scripts/test-unsubscribe-ui.mjs
-
-      - name: Dark reader action bar and label alignment regression
-        run: node scripts/test-reader-action-bar.mjs
-
-      - name: Mobile footer, bulk selection and custom deletion confirmation
-        run: node --experimental-strip-types scripts/test-reader-bulk-delete.mjs
-
-      - name: Native bulk Trash atomicity and mobile selection recovery
-        run: node --experimental-strip-types scripts/test-bulk-trash-consistency.mjs
-
-      - name: Per-device mailbox authorization regression
-        run: node --experimental-strip-types scripts/test-account-access.mjs
-
-      - name: Administrator privilege boundary and session policy regression
-        run: node --experimental-strip-types scripts/test-admin-auth-boundary.mjs
-
-      - name: Administrator sign-in routing regression
-        run: node --experimental-strip-types scripts/test-admin-login-routing.mjs
-
-      - name: Portable administrator host and authentication origin regression
-        run: node --experimental-strip-types scripts/test-portable-origin.mjs
-
-      - name: Administrator step-up and audit regression
-        run: node --experimental-strip-types scripts/test-admin-stepup.mjs
-
-      - name: Mailbox rules and Junk heuristic tests
-        run: node --experimental-strip-types scripts/test-mailbox-rules.mjs
-
-      - name: Mailbox deletion consistency regression
-        run: node --experimental-strip-types scripts/test-mail-mutation-shields.mjs
-
-      - name: Administrator layout regression
-        run: node scripts/test-admin-layout.mjs
-
-      - name: Add Inbox and toggle label regression
-        run: node scripts/test-add-inbox-ui.mjs
- 
-      - name: Administrator password crypto regression
-        run: node --experimental-strip-types scripts/test-password-crypto.mjs
-      
       - name: Cloudflare Workers password-runtime integration
         run: |
           set -euo pipefail

@@ -1,6 +1,7 @@
 import type { ConnectedAccount, Folder, FolderDefinition, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { Icon } from "./Icon";
+import { useInstance } from "../instance";
 
 type Props = {
   folders: FolderDefinition[];
@@ -37,10 +38,11 @@ export function Sidebar({
   onToggleNotifications,
   onOpenSettings,
 }: Props) {
+  const { brandName } = useInstance();
   return (
     <aside className="desktop-sidebar">
       <div className="brand-row">
-        <div className="brand-copy"><strong className="brand-title">LTM Mails</strong></div>
+        <div className="brand-copy"><strong className="brand-title">{brandName}</strong></div>
       </div>
 
       <button className="primary-compose" type="button" onClick={onCompose}>
@@ -62,7 +64,7 @@ export function Sidebar({
                 ? <img src={account.avatarUrl} alt=""/>
                 : <span className="desktop-account-fallback"><Icon name="mail" size={13}/></span>}
               <span className="desktop-account-copy">
-                <strong>{account.displayName || account.emailAddress}</strong>
+                <strong>{account.accentColor ? <i className="account-color-dot" style={{ background: account.accentColor }} aria-hidden="true" /> : null}{account.displayName || account.emailAddress}</strong>
                 <small>{account.provider === "gmail" ? "Gmail" : "Custom"} · {account.emailAddress}</small>
               </span>
               {account.id === activeAccountId ? <span className="desktop-account-check">✓</span> : null}

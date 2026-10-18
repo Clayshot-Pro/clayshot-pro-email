@@ -1,6 +1,7 @@
 import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
-import { sendViaEmailServiceApi } from "./emailServiceApi";
-import { nativeSendBinding } from "./senderPolicy";
+import { transportChoice, transportFor } from "../transports";
+import { TransportError } from "../transports/types";
+import { textToHtml } from "../email/textHtml";
 
 type NativeMessageRow = {
   id: string;
@@ -129,36 +130,23 @@ export class NativeMailProvider implements MailProvider {
   }
 
   async sendMessage(input: ProviderSendInput): Promise<ProviderSendResult> {
-    // The REST API is domain-scoped rather than a static per-address sender list.
-    // It lets newly created, authenticated native mailboxes send immediately.
-    if (this.env.CF_EMAIL_SENDING_ACCOUNT_ID && this.env.CF_EMAIL_SENDING_TOKEN) {
-      return sendViaEmailServiceApi(this.env, this.address, this.senderName, input);
-    }
-    // The dedicated binding can send from any on-boarded native mail domain.
-    // The app supplies From from the authenticated active D1 mailbox, never
-    // from client data. Preserve the primary sender's restricted fallback.
-    const transport = nativeSendBinding(this.env, this.accountId);
-    if (!transport) {
-      throw Object.assign(new Error("Native sender binding unavailable"), { code: "E_NATIVE_TRANSPORT_NOT_CONFIGURED" });
-    }
+    const choice = await transportChoice(this.env, this.accountId, this.address);
+    const transport = transportFor(this.env, choice);
+    if (!transport) throw new TransportError("E_SENDER_DOMAIN_NOT_AVAILABLE");
     const result = await transport.send({
       from: { email: this.address, name: this.senderName },
-      to: input.to,
-      cc: input.cc.length ? input.cc : undefined,
-      bcc: input.bcc.length ? input.bcc : undefined,
       replyTo: this.address,
+      to: input.to,
+      cc: input.cc,
+      bcc: input.bcc,
       subject: input.subject,
       text: input.text,
-      html: `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${input.text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replace(/\n/g, "<br>")}</div>`,
-      headers: input.headers && Object.keys(input.headers).length ? input.headers : undefined,
-      attachments: input.attachments.map((attachment) => ({
-        content: attachment.content,
-        filename: attachment.filename,
-        type: attachment.type,
-        disposition: "attachment" as const,
-      })),
+      html: textToHtml(input.text),
+      headers: input.headers,
+      attachments: input.attachments,
+      idempotencyKey: input.idempotencyKey,
     });
-    return { providerMessageId: result.messageId };
+    return { providerMessageId: result.providerMessageId, transport: transport.kind };
   }
 }
 

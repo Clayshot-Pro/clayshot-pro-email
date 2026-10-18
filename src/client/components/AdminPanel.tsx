@@ -1,15 +1,24 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { MailboxManager } from "./MailboxManager";
+import { DomainManager } from "./DomainManager";
+import { SuppressionManager } from "./SuppressionManager";
+import { BrandingManager } from "./BrandingManager";
+import { MailSettingsManager } from "./MailSettingsManager";
+import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
+import { instanceIconUrl, useInstance } from "../instance";
 
 export function AdminPanel() {
+  const instance = useInstance();
+  const { brandName } = instance;
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [domainVersion, setDomainVersion] = useState(0);
 
   useEffect(() => {
     fetch("/api/admin/status", { cache: "no-store" })
@@ -133,11 +142,11 @@ export function AdminPanel() {
       <div className="admin-home-card">
         <header className="admin-home-header">
           <div className="admin-home-identity">
-            <img src="/apple-touch-icon.png" alt="" className="admin-home-logo" width={48} height={48} />
+            <img src={instanceIconUrl(instance, 180)} alt="" className="admin-home-logo" width={48} height={48} />
             <div>
-              <p className="admin-section-kicker">LTM Mail / Administrator</p>
+              <p className="admin-section-kicker">{brandName} / Administrator</p>
               <h1>Email administration</h1>
-              <p className="admin-home-subtitle">Manage your domain's mailboxes and account security.</p>
+              <p className="admin-home-subtitle">Manage your domains, mailboxes and account security.</p>
             </div>
           </div>
           <div className="admin-home-actions">
@@ -149,13 +158,21 @@ export function AdminPanel() {
         </header>
 
         <nav className="admin-home-nav" aria-label="Administrator sections">
+          {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
+          {configured && <a href="#admin-mail-settings">Mail</a>}
+          {configured && <a href="#admin-suppressions">Deliverability</a>}
+          {configured && <a href="#admin-branding">Branding</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
         </nav>
 
         {configured === false && passwordSection}
-        {configured && <MailboxManager onChanged={() => undefined} />}
+        {configured && <DomainManager onChanged={() => setDomainVersion(version => version + 1)} />}
+        {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
+        {configured && <MailSettingsManager />}
+        {configured && <SuppressionManager />}
+        {configured && <BrandingManager />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}
         {configured === null && (
@@ -168,6 +185,7 @@ export function AdminPanel() {
           <span>Administrator access requires your password and passkey.</span>
           <a href="#admin-top">Back to top ↑</a>
         </footer>
+        <PoweredBy />
       </div>
     </main>
   );

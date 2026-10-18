@@ -40,13 +40,8 @@ export async function hashPassword(password: string, salt: string, iterations = 
   }
   return encode(pbkdf2Sync(encoder.encode(password), saltBytes, iterations, 32, "sha256"));
 }
-export function constantTimeEqual(a: string, b: string): boolean {
-  let difference = a.length ^ b.length;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    difference |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  }
-  return difference === 0;
-}
+export { constantTimeEqual } from "./constantTime.ts";
+import { constantTimeEqual } from "./constantTime.ts";
 export type PasswordHash = { salt: string; hash: string; iterations: number };
 export async function preparePassword(
   password: string,

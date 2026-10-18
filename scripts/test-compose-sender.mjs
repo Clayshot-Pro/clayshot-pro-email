@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const source = (path) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
-const config = JSON.parse(source("wrangler.jsonc"));
-assert.ok(config.send_email.some((binding) => binding.name === "EMAIL_DYNAMIC"
-  && !binding.allowed_sender_addresses && !binding.allowed_destination_addresses));
+// One unrestricted EMAIL binding: no per-address sender allowlist.
+assert.match(source("wrangler.template.jsonc"), /"name": "EMAIL"/);
+assert.doesNotMatch(source("wrangler.template.jsonc"), /allowed_sender_addresses/);
 const registry = source("src/worker/providers/registry.ts");
-assert.match(registry, /sendEnabled: isNativeSenderAllowed\(env, box\.email_address\)/);
+assert.match(registry, /sendEnabled: sendable\[index\]/);
+assert.match(registry, /sendableMailboxes\(env, active\)/, "one domains query for the whole account list");
 assert.doesNotMatch(registry, /sendEnabled:.*nativeSendTransportReady/);
 const send = source("src/worker/email/send.ts");
 assert.doesNotMatch(send, /!nativeSendTransportReady\(/);
-assert.match(send, /isNativeSenderAllowed\(env, provider\.address\)/);
+assert.match(send, /transportChoice\(env, provider\.accountId, provider\.address\)/);
 const modal = source("src/client/components/ComposeModal.tsx");
 assert.match(modal, /const senderDisabled = currentSender\.status !== "active"/);
 assert.doesNotMatch(modal, /senderDisabled\s*=.*sendEnabled/);

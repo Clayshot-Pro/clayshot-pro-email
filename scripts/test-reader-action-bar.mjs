@@ -5,7 +5,7 @@ const css = readFileSync(new URL("../src/client/ui-overrides.css", import.meta.u
 const reader = readFileSync(new URL("../src/client/components/MessageReader.tsx", import.meta.url), "utf8");
 
 const mobile = css.slice(css.indexOf("/* ---- mobile-mail-actions.css ---- */"), css.indexOf("/* ---- auth.css ---- */"));
-assert.ok(mobile.includes("background: #0e0d0c;"), "Mobile action bar must use the app's dark theme");
+assert.ok(mobile.includes("background: var(--tone-v208-reader-bar);"), "Mobile action bar must use the theme's reader surface");
 assert.ok(!mobile.includes("background: rgba(255,255,255,.98);"), "White mobile action-bar frame must not return");
 assert.ok(mobile.includes("backdrop-filter: none;"), "Do not add a bright backdrop over the dark reader");
 assert.ok(mobile.includes(".reader-reply-bar .reader-action-label"), "Optical text adjustment must target labels, not icons");

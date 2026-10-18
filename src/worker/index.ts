@@ -33,6 +33,15 @@ import {
   verifyRegistration,
 } from "./auth";
 import { appOrigin } from "./config";
+import { instanceResponse, manifestResponse, shellResponse } from "./instance";
+import { bootstrapInstance } from "./bootstrap";
+import { setupInstance } from "./setup";
+import { instanceSettings } from "./branding";
+import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
+import { addSuppression, listSuppressions, pruneWebhookReceipts, removeSuppression, resendWebhook } from "./webhooks/resend";
+import {
+  adminSettingsResponse, deleteLogo, getPreferences, iconResponse, savePreferences, saveInstanceSettings, uploadLogo,
+} from "./branding";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
@@ -41,6 +50,7 @@ import { authRateLimitBucket, checkAuthRateLimit } from "./security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_POSTS = new Set([
+  "/api/setup",
   "/api/auth/register/options",
   "/api/auth/register/verify",
   "/api/auth/login/options",
@@ -74,7 +84,10 @@ function requestTooLarge(request: Request): boolean {
 
 function secureApiResponse(response: Response): Response {
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "private, no-store");
+  // Public, versioned instance icons are the only cacheable API responses.
+  if (headers.get("Cache-Control") !== "public, max-age=31536000, immutable" || headers.get("Content-Type") !== "image/png") {
+    headers.set("Cache-Control", "private, no-store");
+  }
   // Preserve stricter endpoint-specific CSP directives (e.g. the "sandbox"
   // directive for attachments) instead of overwriting them.
   if (!headers.has("Content-Security-Policy")) {
@@ -105,6 +118,9 @@ function decodedRouteId(match: RegExpMatchArray): string | null {
 }
 
 async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response> {
+  // Provider webhooks are server-to-server: exempt from the same-origin and
+  // session checks for this exact path only, authenticated by signature.
+  if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
   if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
   if (!SAFE_METHODS.has(request.method) && requestTooLarge(request)) {
     return jsonError("Request body too large", 413);
@@ -118,11 +134,19 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     return jsonError("Too many authentication attempts", 429, { "Retry-After": "60" });
   }
 
+  // Public instance identity for the sign-in screen (no addresses or secrets).
+  if (url.pathname === "/api/instance" && request.method === "GET") return instanceResponse(env);
+  const iconRoute = url.pathname.match(/^\/api\/instance\/icon\/(\d{2,3})\.png$/);
+  if (iconRoute && request.method === "GET") return iconResponse(request, env, Number(iconRoute[1]));
+
   // Device authentication is independent from the privileged owner passkey.
   if (url.pathname === "/api/device/status" && request.method === "GET") return deviceStatus(request, env);
   if (url.pathname === "/api/device/login" && request.method === "POST") return deviceLogin(request, env);
   if (url.pathname === "/api/admin/login/password" && request.method === "POST") return beginAdminLogin(request, env);
   if (url.pathname === "/api/device/logout" && request.method === "POST") return deviceLogout(request, env);
+
+  // First-run setup (AUTH_SETUP_TOKEN, uninitialized instance only).
+  if (url.pathname === "/api/setup" && request.method === "POST") return setupInstance(request, env);
 
   // Authentication routes that must be reachable before a session exists.
   if (url.pathname === "/api/auth/status" && request.method === "GET") return authStatus(request, env);
@@ -171,7 +195,29 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     }
   }
   if (url.pathname === "/api/admin/status" && request.method === "GET") {
-    return Response.json({passwordConfigured:await adminPasswordConfigured(env)});
+    return Response.json({ passwordConfigured: await adminPasswordConfigured(env) });
+  }
+  if (url.pathname === "/api/admin/domains" && request.method === "GET") return listDomainsResponse(request, env);
+  if (url.pathname === "/api/admin/domains" && request.method === "POST") return createDomain(request, env);
+  const domainRoute = url.pathname.match(/^\/api\/admin\/domains\/([^/]+)(\/dns)?$/);
+  if (domainRoute) {
+    const domain = decodePathSegment(domainRoute[1]);
+    if (!domain) return jsonError("Invalid domain", 400);
+    if (domainRoute[2] && request.method === "GET") return checkDomainDns(env, domain);
+    if (!domainRoute[2] && request.method === "PATCH") return updateDomain(request, env, domain);
+    if (!domainRoute[2] && request.method === "DELETE") return deleteDomain(env, domain);
+    return jsonError("Method not allowed", 405);
+  }
+  if (url.pathname === "/api/admin/instance" && request.method === "GET") return adminSettingsResponse(env);
+  if (url.pathname === "/api/admin/instance" && request.method === "PUT") return saveInstanceSettings(request, env);
+  if (url.pathname === "/api/admin/instance/logo" && request.method === "PUT") return uploadLogo(request, env);
+  if (url.pathname === "/api/admin/instance/logo" && request.method === "DELETE") return deleteLogo(env);
+  if (url.pathname === "/api/admin/suppressions" && request.method === "GET") return listSuppressions(env);
+  if (url.pathname === "/api/admin/suppressions" && request.method === "POST") return addSuppression(request, env);
+  const suppressionRoute = url.pathname.match(/^\/api\/admin\/suppressions\/([^/]+)$/);
+  if (suppressionRoute && request.method === "DELETE") {
+    const address = decodePathSegment(suppressionRoute[1]);
+    return address ? removeSuppression(env, address) : jsonError("Invalid address", 400);
   }
 
   // The primary mailbox owns its profile photo. Other mailbox sessions must
@@ -225,6 +271,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
       return jsonError("Account not signed in on this device", 403);
     }
   }
+
+  // Appearance preferences of an account signed in on this device.
+  if (url.pathname === "/api/preferences" && request.method === "GET") return getPreferences(request, env, url);
+  if (url.pathname === "/api/preferences" && request.method === "PUT") return savePreferences(request, env, url);
 
   // Authenticated account and session management.
   if (url.pathname === "/api/auth/sessions" && request.method === "GET") return sessionInfo(request, env);
@@ -342,6 +392,7 @@ export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
+      await bootstrapInstance(env);
       const response = await routeApi(request, env, url, ctx);
       if (isApprovedAdminMutation(request.method, url.pathname)) {
         // Never retain request payload, mailbox passwords, cookies or assertions.
@@ -366,10 +417,17 @@ export default {
       }
       return secureApiResponse(response);
     }
+    if (request.method === "GET" && url.pathname === "/manifest.webmanifest") {
+      try { return await manifestResponse(env); } catch { return env.ASSETS.fetch(request); }
+    }
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+      return shellResponse(request, env);
+    }
     return env.ASSETS.fetch(request);
   },
 
   async email(message, env, ctx): Promise<void> {
+    await bootstrapInstance(env);
     await receiveEmail(message, env, ctx);
   },
 
@@ -378,9 +436,10 @@ export default {
     // Retry receipts only exist to prevent duplicate ingestion after transport
     // retries; they are not permanent message records.
     ctx.waitUntil(env.DB.prepare("DELETE FROM inbound_receipts WHERE first_seen_at<datetime('now','-7 days')").run().then(() => undefined));
-    if (env.MAILBOX_PURGE_ENABLED === "true") {
+    if ((await instanceSettings(env)).mail.purgeEnabled) {
       ctx.waitUntil(purgeExpiredNativeMailboxes(env));
     }
     ctx.waitUntil(pruneAdminSecurityEvents(env));
+    ctx.waitUntil(pruneWebhookReceipts(env));
   },
 } satisfies ExportedHandler<Env>;

@@ -1,25 +1,35 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { normalizeMailboxAddress, mailDomainFromPrimaryAddress } from "../src/worker/mailboxRules.ts";
+import { aliasTarget, normalizeMailboxAddress as normalize } from "../src/worker/mailboxRules.ts";
 import { suspectedJunk } from "../src/worker/email/junk.ts";
 import { adminPasswordError, mailboxPasswordError } from "../src/worker/mailboxPasswordPolicy.ts";
 
-assert.equal(normalizeMailboxAddress(" Personal@LIAMTHEMO.COM "), "personal@liamthemo.com");
-assert.equal(normalizeMailboxAddress("work"), "work@liamthemo.com");
-assert.equal(mailDomainFromPrimaryAddress("contact@clayshotpro.com"), "clayshotpro.com");
-assert.equal(mailDomainFromPrimaryAddress("bogus"), null);
-assert.equal(normalizeMailboxAddress("team", false, "clayshotpro.com"), "team@clayshotpro.com");
-assert.equal(normalizeMailboxAddress("Team@CLAYSHOTPRO.COM", false, "clayshotpro.com"), "team@clayshotpro.com");
-assert.equal(normalizeMailboxAddress("team@liamthemo.com", false, "clayshotpro.com"), null);
-assert.equal(normalizeMailboxAddress("admin@clayshotpro.com", false, "clayshotpro.com"), null);
-assert.equal(normalizeMailboxAddress("postmaster@clayshotpro.com", true, "clayshotpro.com"), "postmaster@clayshotpro.com");
-assert.equal(normalizeMailboxAddress("work+receipts@liamthemo.com"), "work+receipts@liamthemo.com");
-assert.equal(normalizeMailboxAddress("Admin@liamthemo.com"), null, "admin identity is reserved for MFA");
-assert.equal(normalizeMailboxAddress("postmaster@liamthemo.com", true), "postmaster@liamthemo.com");
-assert.equal(normalizeMailboxAddress("abuse@liamthemo.com", true), "abuse@liamthemo.com");
-for (const invalid of ["", "other@gmail.com", "account@liamthemo.com.evil", "../test", "x..y", "postmaster", "abuse", "@liamthemo.com"]) {
+const single = { domains: new Set(["example.com"]), defaultDomain: "example.com", adminAddress: "owner@example.com" };
+const normalizeMailboxAddress = (value, allowReserved = false) => normalize(value, single, allowReserved);
+assert.equal(normalizeMailboxAddress(" Personal@EXAMPLE.COM "), "personal@example.com");
+assert.equal(normalizeMailboxAddress("work"), "work@example.com");
+assert.equal(normalizeMailboxAddress("work+receipts@example.com"), "work+receipts@example.com");
+assert.equal(normalizeMailboxAddress("Admin@example.com"), null, "admin identity is reserved for MFA");
+assert.equal(normalizeMailboxAddress("owner@example.com"), null, "the configured admin address is never a mailbox");
+assert.equal(normalizeMailboxAddress("postmaster@example.com", true), "postmaster@example.com");
+assert.equal(normalizeMailboxAddress("abuse@example.com", true), "abuse@example.com");
+for (const invalid of ["", "other@gmail.com", "account@example.com.evil", "../test", "x..y", "postmaster", "abuse", "@example.com", "a@b@example.com"]) {
   assert.equal(normalizeMailboxAddress(invalid), null, invalid);
 }
+
+// Multi-domain rules: same-domain aliases only, admin local part reserved everywhere.
+const multi = { domains: new Set(["example.com", "example.org"]), defaultDomain: "example.com", adminAddress: "admin@example.com" };
+assert.equal(normalize("me@Example.ORG", multi), "me@example.org");
+assert.equal(normalize("me", multi), "me@example.com", "bare local parts use the primary domain");
+assert.equal(normalize("me@example.net", multi), null, "unknown domains are rejected");
+assert.equal(normalize("admin@example.org", multi), null, "admin is reserved on every domain");
+assert.equal(normalize("me@exämple.org", multi), null, "raw IDN input is rejected");
+assert.deepEqual(aliasTarget("a+x@example.org"), { kind: "plus", parent: "a@example.org" });
+assert.notEqual(aliasTarget("a+x@example.org")?.parent, "a@example.com", "plus aliases never cross domains");
+assert.deepEqual(aliasTarget("postmaster@example.org"), { kind: "postmaster", domain: "example.org" });
+assert.deepEqual(aliasTarget("abuse@example.com"), { kind: "postmaster", domain: "example.com" });
+assert.equal(aliasTarget("plain@example.com"), null);
+assert.equal(aliasTarget("+x@example.com"), null);
 assert.equal(suspectedJunk("Upcoming meeting notes", "noreply@university.ca", "Agenda attached"), false);
 assert.equal(suspectedJunk("Lottery winner!!!", "unknown@contest.test", "Click here to claim"), true);
 assert.equal(suspectedJunk("Urgent schedule change", "professor@university.ca", "Please see the course schedule"), false);

@@ -46,8 +46,11 @@ assert.match(auth,/expectedRPID: passkeyRpId\(request\)/);
 assert.match(stepup,/expectedOrigin: appOrigin\(request\)/);
 assert.match(stepup,/expectedRPID: passkeyRpId\(request\)/);
 assert.match(auth,/userName: adminLoginAddress\(request\)/);
-assert.match(admin,/isAdministratorEmail\(request,email,env.PRIMARY_ADDRESS\)/);
-assert.match(device,/isAdministratorEmail\(request,email,env.PRIMARY_ADDRESS\)/);
+// The legacy admin@<mail domain> alias follows the D1 primary domain.
+assert.match(admin,/isAdministratorEmail\(request, email, await primaryDomain\(env\)\)/);
+assert.match(device,/isAdministratorEmail\(request, email, await primaryDomain\(env\)\)/);
+assert.equal(legacyAdminLoginAddress(original, "liamthemo.com"), "admin@liamthemo.com", "a bare primary domain works too");
+assert.equal(legacyAdminLoginAddress(original, null), null, "an uninitialized instance has no legacy alias");
 assert.match(device,/n.email_address NOT IN \(\?2,\?3\)/);
 assert.match(ui,/isAdminLoginEmail\(email\)/, "Client must route admin identities to MFA login");
 assert.match(google,/origin: appOrigin\(request\)/);
@@ -57,4 +60,7 @@ assert.match(google,/redirect_uri: callbackUri\(request\)/);
 assert.doesNotMatch(google,/REDIRECT_URI|APP_ORIGIN/);
 assert.doesNotMatch(auth,/APP_ORIGIN|RP_ID/);
 assert.doesNotMatch(stepup,/APP_ORIGIN|RP_ID/);
+// A fresh install cannot register the owner passkey before choosing its primary mailbox.
+assert.match(auth, /if \(!\(await isInitialized\(env\)\)\) return false;/);
+assert.ok(auth.indexOf("isInitialized(env)") < auth.indexOf("secretMatches(env.AUTH_SETUP_TOKEN"));
 console.log("PASS: portable admin login, WebAuthn relying-party binding, CSRF and OAuth origin isolation");

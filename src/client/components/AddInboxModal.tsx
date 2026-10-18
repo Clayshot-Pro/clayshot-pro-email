@@ -1,5 +1,6 @@
 import { AccountSignIn } from "../AccountSignIn";
 import { Icon } from "./Icon";
+import { useInstance } from "../instance";
 
 export type AddInboxMode = "choose" | "custom" | null;
 
@@ -24,6 +25,7 @@ export function AddInboxModal({
   onChooseGmail,
   onCustomSignedIn,
 }: Props) {
+  const { brandName } = useInstance();
   if (mode === null) return null;
 
   return (
@@ -60,7 +62,7 @@ export function AddInboxModal({
                   <span className="add-inbox-option-icon"><Icon name="mail" size={21}/></span>
                   <span className="add-inbox-option-copy">
                     <strong>Custom email</strong>
-                    <small>Sign in to an existing LTM mailbox with its email address and password.</small>
+                    <small>Sign in to an existing {brandName} mailbox with its email address and password.</small>
                   </span>
                   <span className="add-inbox-option-arrow" aria-hidden="true">›</span>
                 </button>

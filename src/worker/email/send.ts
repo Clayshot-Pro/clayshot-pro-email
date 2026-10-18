@@ -1,6 +1,9 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
-import { isNativeSenderAllowed } from "../providers/senderPolicy";
+import { textToHtml } from "./textHtml";
+import { fitsCloudflareApi } from "../transports/cloudflareApi";
+import { transportChoice } from "../transports";
+import { SAFE_DELIVERY_CODES, TransportError } from "../transports/types";
 
 type ReplyTarget = {
   id: string;
@@ -32,30 +35,6 @@ const MAX_BODY_CHARS = 500_000;
 const MAX_SUBJECT_CHARS = 500;
 const MAX_RECIPIENTS = 50;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SAFE_DELIVERY_CODES = new Set([
-  "E_RECIPIENT_NOT_ALLOWED",
-  "E_EMAIL_API_NOT_CONFIGURED",
-  "E_NATIVE_TRANSPORT_NOT_CONFIGURED",
-  "E_EMAIL_API_AUTH_FAILED",
-  "E_EMAIL_API_FORBIDDEN",
-  "E_EMAIL_SERVICE_NOT_ENTITLED",
-  "E_EMAIL_SENDING_DISABLED",
-  "E_EMAIL_DELIVERY_UNKNOWN",
-  "E_SENDER_NOT_VERIFIED",
-  "E_RECIPIENT_SUPPRESSED",
-  "E_SENDER_DOMAIN_NOT_AVAILABLE",
-  "E_CONTENT_TOO_LARGE",
-  "E_DELIVERY_FAILED",
-  "E_RATE_LIMIT_EXCEEDED",
-  "E_DAILY_LIMIT_EXCEEDED",
-  "E_INTERNAL_SERVER_ERROR",
-  "E_HEADER_NOT_ALLOWED",
-  "E_HEADER_USE_API_FIELD",
-  "E_HEADER_VALUE_INVALID",
-  "E_HEADER_VALUE_TOO_LONG",
-  "E_HEADERS_TOO_LARGE",
-  "E_HEADERS_TOO_MANY",
-]);
 
 function splitRecipients(value: FormDataEntryValue | null): string[] {
   if (typeof value !== "string") return [];
@@ -69,18 +48,6 @@ function splitRecipients(value: FormDataEntryValue | null): string[] {
   ];
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function textToHtml(value: string): string {
-  return `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(value).replace(/\n/g, "<br>")}</div>`;
-}
 
 function preview(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 240);
@@ -96,8 +63,9 @@ function safeDeliveryError(error: unknown): string {
 }
 
 function userDeliveryError(code: string): string {
+  if (code === "E_DELIVERY_UNCERTAIN") return "Delivery status is uncertain. Check Sent before trying again";
+  if (code === "E_SENDER_DOMAIN_NOT_AVAILABLE") return "This mailbox's domain is not set up for sending";
   if (code === "E_EMAIL_API_NOT_CONFIGURED") return "Email Sending API credentials are not configured";
-  if (code === "E_NATIVE_TRANSPORT_NOT_CONFIGURED") return "Cloudflare's dynamic sender binding is not configured for this Worker";
   if (code === "E_EMAIL_API_AUTH_FAILED" || code === "E_EMAIL_API_FORBIDDEN") {
     return "Cloudflare Email Sending API credentials are invalid or lack Email Sending permission";
   }
@@ -199,9 +167,14 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // D1 resolves the authenticated, active mailbox. Never trust client-supplied From.
-  if (provider.kind === "native" && !isNativeSenderAllowed(env, provider.address)) {
-    return Response.json({ error: "Mailbox domain is not configured for outbound sending" }, { status: 403 });
+  let nativeTransport: "cloudflare" | "resend" | null = null;
+  // D1 resolves the authenticated, active mailbox (never a client-supplied
+  // From). It needs an active domain and an available transport: the
+  // Cloudflare Email Sending API by default, or Resend where switched on.
+  if (provider.kind === "native") {
+    const choice = await transportChoice(env, provider.accountId, provider.address);
+    if (choice.kind === "unavailable") return Response.json({ error: choice.reason }, { status: 403 });
+    nativeTransport = choice.kind;
   }
   const to = splitRecipients(form.get("to"));
   const cc = splitRecipients(form.get("cc"));
@@ -227,6 +200,16 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       { error: `A message can contain at most ${MAX_RECIPIENTS} recipients` },
       { status: 400 },
     );
+  }
+  if (provider.kind === "native") {
+    // Hard bounces and complaints reported by the provider block further sends.
+    const lowered = [...new Set(recipients.map(address => address.toLowerCase()))];
+    const suppressed = await env.DB.prepare(
+      `SELECT address FROM suppressed_recipients WHERE address IN (${lowered.map(() => "?").join(",")}) LIMIT 1`,
+    ).bind(...lowered).first<{ address: string }>();
+    if (suppressed) {
+      return Response.json({ error: `${suppressed.address}: ${userDeliveryError("E_RECIPIENT_SUPPRESSED")}` }, { status: 422 });
+    }
   }
   if (recipients.some((address) => !EMAIL_PATTERN.test(address))) {
     return Response.json(
@@ -306,6 +289,16 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       { status: 400 },
     );
   }
+  // The Cloudflare Email Sending API caps a message at 5 MiB after base64
+  // encoding; reject before reserving quota rather than failing in transport.
+  if (nativeTransport === "cloudflare" && !fitsCloudflareApi(
+    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0), text.length + subject.length,
+  )) {
+    return Response.json(
+      { error: "Attachments are too large for Cloudflare Email Sending (5 MB per message after encoding, about 3.7 MB of files)" },
+      { status: 413 },
+    );
+  }
   if (!subject) subject = "(no subject)";
 
   const id = crypto.randomUUID();
@@ -367,30 +360,36 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   let status = "sent";
   let deliveryError: string | null = null;
   let providerMessageId: string | null = null;
+  let transportKind: string | null = null;
+  let uncertain = false;
   try {
-    providerMessageId = (
-      await provider.sendMessage({
-        to,
-        cc,
-        bcc,
-        subject,
-        text,
-        headers,
-        attachments: allUploads,
-      })
-    ).providerMessageId;
+    const result = await provider.sendMessage({
+      to,
+      cc,
+      bcc,
+      subject,
+      text,
+      headers,
+      attachments: allUploads,
+      idempotencyKey: provider.kind === "native" ? `${provider.accountId}:${clientKey}` : undefined,
+    });
+    providerMessageId = result.providerMessageId;
+    transportKind = result.transport ?? null;
   } catch (error) {
     status = "failed";
     deliveryError = safeDeliveryError(error);
+    uncertain = error instanceof TransportError && error.uncertain;
     // Log a whitelisted transport code only; never expose addresses,
     // message contents, API credentials or provider stack traces.
     console.warn("Outbound provider rejected message", { provider: provider.kind, code: deliveryError });
   }
 
   if (provider.kind === "native") {
+    // An uncertain result (e.g. a timeout after the request left) is never
+    // retried automatically; the idempotency key makes a manual retry safe.
     await env.DB.prepare(
-      "UPDATE outbound_attempts SET state=?3, provider_message_id=?4, error_code=?5, updated_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND client_key=?2"
-    ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : "failed",providerMessageId,deliveryError).run();
+      "UPDATE outbound_attempts SET state=?3, provider_message_id=?4, error_code=?5, transport=COALESCE(?6, transport), updated_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND client_key=?2"
+    ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : uncertain ? "uncertain" : "failed",providerMessageId,deliveryError,transportKind).run();
   }
   if (provider.kind === "native" && status !== "sent" && attachmentBytes > 0) {
     await env.DB.prepare(
