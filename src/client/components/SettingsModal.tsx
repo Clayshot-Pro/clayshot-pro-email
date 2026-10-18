@@ -1,6 +1,7 @@
 import type { ConnectedAccount, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
+import { ADMIN_ACCOUNT_ID } from "../appModel";
 import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
   busy: string | null;
   onClose: () => void;
   isAdmin: boolean;
+  onOpenAdmin?: () => void;
 
   onToggleNotifications: () => void;
   onAddInbox: () => void;
@@ -77,9 +79,9 @@ export function SettingsModal(props: Props) {
                       {account.emailAddress}
                     </small>
                   </div>
-                  {(account.id === "native:primary" || account.provider === "gmail" || !props.isAdmin) ? (
+                  {(account.id === ADMIN_ACCOUNT_ID || account.provider === "gmail" || !props.isAdmin) ? (
                     <div className="settings-account-actions">
-                      {account.id === "native:primary" ? (
+                      {account.id === ADMIN_ACCOUNT_ID ? (
                         <button type="button" disabled={props.busy !== null} onClick={props.onEditProfile}>
                           Edit profile
                         </button>
@@ -127,6 +129,15 @@ export function SettingsModal(props: Props) {
 
           <section className="settings-section">
             <h3>Security &amp; sessions</h3>
+            {props.onOpenAdmin ? (
+              <div className="settings-row">
+                <div>
+                  <strong>Admin panel</strong>
+                  <small>Domains, mailboxes, keys, branding and security.</small>
+                </div>
+                <button type="button" onClick={() => { props.onClose(); props.onOpenAdmin?.(); }}>Open</button>
+              </div>
+            ) : null}
             {props.isAdmin ? (
               <>
                 <div className="settings-row">

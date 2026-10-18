@@ -21,7 +21,7 @@ An **authenticated web application**, not a traditional mail server: there are n
 | Gmail API (optional) | Connected Gmail accounts |
 | Web Push / VAPID (optional) | Browser/PWA notifications |
 
-**There is no instance configuration in the Worker.** The app's address and the admin sign-in come from the URL it is served on. The primary mailbox, mail domains, branding, themes, forwarding, limits and integration keys are stored in D1 and managed from the app. Outside the app you set only two Worker **secrets** (`PROVIDER_CREDENTIAL_KEY`, plus `AUTH_SETUP_TOKEN` until setup is done) and two Cloudflare **deploy keys**. Nothing secret is committed.
+**There is no instance configuration in the Worker.** The app's address comes from the URL it is served on. The admin's mailbox (`admin@<mail domain>`), mail domains, branding, themes, forwarding, limits and integration keys are stored in D1 and managed from the app. Outside the app you set only two Worker **secrets** (`PROVIDER_CREDENTIAL_KEY`, plus `AUTH_SETUP_TOKEN` until setup is done) and two Cloudflare **deploy keys**. Nothing secret is committed.
 
 ## Before you start
 
@@ -56,7 +56,7 @@ npm ci
 | Cloudflare Email Sending API token — optional, sending works without it | **Admin → Keys** |
 | Push notification (VAPID) keys | Nothing to do: created automatically on first use and stored in D1 |
 | `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`, `D1_DATABASE_ID` — optional, sensible defaults | Next to the deploy token, only if you change the defaults |
-| Primary mailbox, domains, branding, themes, forwarding, limits | **The app itself** (first-run setup and the admin panel) |
+| Mail domain, mailboxes, branding, themes, forwarding, limits | **The app itself** (first-run setup and the admin panel) |
 
 Create the two Worker secrets with a strong random value each:
 
@@ -127,9 +127,9 @@ Asks for confirmation, then type-checks, builds, migrates and deploys. Then add 
 
 Open the app on its **final HTTPS hostname** (passkeys are bound to it).
 
-1. Enter the **primary mailbox address** (for example `hello@example.com`; its domain becomes the primary mail domain) and your `AUTH_SETUP_TOKEN`, then register the owner passkey.
+1. Enter your **mail domain** (for example `example.com`) and your `AUTH_SETUP_TOKEN`, then register the owner passkey. This creates the **admin@** mailbox on that domain (`admin@example.com`): the administrator's own inbox and sign-in. It cannot be deleted, it receives postmaster@ and abuse@ by default, and only the administrator sign-in opens it.
 2. In **Email administration**, set an administrator password (4–32 characters).
-3. Sign in again as `admin@<app hostname>` (for example `admin@mail.example.com`) with the password and your passkey. Sensitive admin actions ask for a fresh passkey check.
+3. Sign in again as `admin@<mail domain>` (for example `admin@example.com`; `admin@<app hostname>` also works) with the password and your passkey. You land in the mail app on the admin@ inbox, with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the administration pages, and **Back to mail** returns. Sensitive admin actions ask for a fresh passkey check.
 4. Delete the `AUTH_SETUP_TOKEN` secret: **Worker → Settings → Variables & Secrets**, or `npx wrangler secret delete AUTH_SETUP_TOKEN`. (Also remove it from `.env` if you use one.)
 5. Open **Admin → Keys**. *Push notification keys* should read "Created and stored automatically". If the page asks for `PROVIDER_CREDENTIAL_KEY`, add that Worker secret first. Add Gmail or Resend keys here when you need them.
 
@@ -141,10 +141,11 @@ Open the app on its **final HTTPS hostname** (passkeys are bound to it).
 
 From v2 to v3:
 
-- The existing primary mailbox and domain are adopted automatically; there is no first-run setup. `admin@<mail domain>` keeps working when the app is on a subdomain of the mail domain.
+- The existing mailbox and its domain are adopted automatically; there is no first-run setup.
 - Set the app name under **Branding** and sender names under **Mailboxes**, and re-enter forwarding or automatic purge under **Mail settings** if you used them.
 - These Worker settings are no longer read and can be deleted: `PRIMARY_ADDRESS`, `FORWARD_TO`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `MAX_MAILBOXES`, `APP_ORIGIN`, `ADMIN_ADDRESS`. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (deploys set it).
 - From v3.06, existing `GOOGLE_*`, `RESEND_*`, `CF_EMAIL_SENDING_TOKEN` and `VAPID_*` Worker secrets are copied into D1 (push subscriptions keep working). Once **Admin → Keys** shows them, you may delete those Worker secrets — but keep them while you might roll back to v2, which reads them. Never delete `PROVIDER_CREDENTIAL_KEY`.
+- From v3.08 there is no "primary mailbox". An `admin@<mail domain>` mailbox is created on the first request after the deploy and becomes the administrator's starting inbox. The former primary mailbox keeps its address and mail and becomes an ordinary mailbox (it can now be disabled or deleted). Postmaster/abuse mail without a chosen mailbox, forwarding (Mail settings), the profile photo and the push contact now belong to admin@.
 
 ## 5. Route incoming mail
 
@@ -152,7 +153,7 @@ For **each** mail domain:
 
 1. In Cloudflare, enable **Email Routing** for the zone and review the MX/TXT records it adds.
 2. Set the **catch-all** rule to *Send to a Worker* → this Worker. Unknown or disabled addresses are rejected by the app; catch-all does not create inboxes.
-3. In **Admin → Domains**, add the domain (the primary one already exists), run **Check DNS**, then **Activate**. Activation requires MX records pointing to Cloudflare.
+3. In **Admin → Domains**, add the domain (the main one from setup already exists), run **Check DNS**, then **Activate**. Activation requires MX records pointing to Cloudflare.
 4. Create mailboxes in **Admin → Mailboxes**, then test mail from an external provider, including a plus alias and an unregistered address.
 
 ## 6. Outbound sending
@@ -174,7 +175,7 @@ All from the admin panel, stored in D1:
 - **Branding:** app name, short name, app icon (resized in your browser), accent colour, default theme and icon set.
 - **Lock:** which appearance options users may change.
 - **Per-domain theme:** mailboxes on a domain use that domain's theme, so the look switches with the mailbox.
-- **Mail settings:** forwarding of primary-mailbox mail, mailbox limit, automatic purge of deleted mailboxes (leave off until restores are tested).
+- **Mail settings:** forwarding of admin@ mail, mailbox limit, automatic purge of deleted mailboxes (leave off until restores are tested).
 - **Mailboxes:** display name, sender name, quota, colour, passwords.
 
 Users get **Settings → Appearance** for anything you leave unlocked.
@@ -185,7 +186,7 @@ With two or more accounts signed in on a device, the account switcher offers **A
 
 **Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Enter the client ID and secret in **Admin → Keys** (`PROVIDER_CREDENTIAL_KEY` must be set), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.
 
-**Push notifications.** Nothing to configure: the VAPID key pair is generated on first use and stored encrypted in D1 (an existing `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` Worker secret pair is kept and copied in). The VAPID contact is the primary mailbox address.
+**Push notifications.** Nothing to configure: the VAPID key pair is generated on first use and stored encrypted in D1 (an existing `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` Worker secret pair is kept and copied in). The VAPID contact is the admin@ mailbox address.
 
 ## Validate the deployment
 
@@ -202,8 +203,8 @@ With two or more accounts signed in on a device, the account switcher offers **A
 
 | Symptom | Likely cause / action |
 | --- | --- |
-| First-run setup is not offered | `AUTH_SETUP_TOKEN` is not set, or the instance is already set up (it has a primary domain or an owner passkey). |
-| `Invalid credentials` as admin | Use `admin@<app hostname>`, and check the admin password was set. |
+| First-run setup is not offered | `AUTH_SETUP_TOKEN` is not set, or the instance is already set up (it has a mail domain or an owner passkey). |
+| `Invalid credentials` as admin | Use `admin@<mail domain>` (or `admin@<app hostname>`), and check the admin password was set. |
 | Passkey fails after changing hostnames | Passkeys are bound to the hostname; use the original host. |
 | Mail never arrives | Check Email Routing MX records, the catch-all → Worker rule, that the domain is **active** in Admin → Domains, and that the mailbox exists and is active. |
 | "Cloudflare Email Sending is not available" | The `EMAIL` send binding is missing from the deployed Worker; redeploy with the rendered `wrangler.jsonc`. |

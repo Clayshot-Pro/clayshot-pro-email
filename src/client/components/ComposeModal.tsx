@@ -20,10 +20,10 @@ type ComposeModalProps = {
 };
 
 const fallbackAccount: ConnectedAccount = {
-  id: "native:primary",
+  id: "native:admin",
   provider: "native",
   emailAddress: "",
-  displayName: "Primary mailbox",
+  displayName: "Admin mailbox",
   avatarUrl: null,
   status: "active",
   lastSyncedAt: null,

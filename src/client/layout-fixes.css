@@ -40,3 +40,34 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Admin panel on phones: the card's grid column may shrink to the screen
+   (its sections overflowed a 390px screen by ~300px), and the header actions,
+   including "Back to mail", wrap below the title. */
+.admin-home-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 580px) {
+  .admin-home-header {
+    flex-wrap: wrap;
+  }
+  .admin-home-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .admin-home-actions > button {
+    flex: 1 1 auto;
+  }
+}
+
+/* Admin section links scroll sideways instead of being clipped on phones. */
+.admin-home-nav {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.admin-home-nav a {
+  flex: 0 0 auto;
+}

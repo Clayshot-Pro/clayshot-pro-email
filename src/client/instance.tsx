@@ -7,7 +7,7 @@ export type InstanceInfo = {
   brandShortName: string;
   primaryDomain: string;
   features: { gmail: boolean; push: boolean };
-  /** False on a fresh install until first-run setup chooses the primary mailbox. */
+  /** False on a fresh install until first-run setup chooses the mail domain. */
   initialized?: boolean;
   setupAvailable?: boolean;
   logoVersion?: string | null;

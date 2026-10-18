@@ -10,7 +10,7 @@ import {
   deviceStatus, deviceLogin, deviceLogout, deviceRemoveAccount, deviceAccountIds,
   deviceAuthorized, adminAuthorized, rotateMailboxPassword, setMailboxPassword, cleanupDeviceSessions,
 } from "./deviceAuth";
-import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleNativeMailboxDeletion, restoreNativeMailbox, purgeNativeMailbox, purgeExpiredNativeMailboxes, PRIMARY_MAILBOX_ID } from "./mailboxes";
+import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleNativeMailboxDeletion, restoreNativeMailbox, purgeNativeMailbox, purgeExpiredNativeMailboxes, ADMIN_MAILBOX_ID } from "./mailboxes";
 import { getAccountAvatar } from "./api/accountAvatar";
 import { getConnectedAccounts } from "./api/accounts";
 import { previewAttachment } from "./api/attachments";
@@ -225,10 +225,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     return address ? removeSuppression(env, address) : jsonError("Invalid address", 400);
   }
 
-  // The primary mailbox owns its profile photo. Other mailbox sessions must
-  // not read or overwrite that image; owner passkey sessions remain authorized.
-  if (primaryProfilePath(url.pathname) && !(await deviceAuthorized(request, env, PRIMARY_MAILBOX_ID))) {
-    return jsonError("Primary mailbox sign-in required", 403);
+  // The profile photo belongs to the admin mailbox, which only the owner
+  // session can open; other mailbox sessions must not read or overwrite it.
+  if (primaryProfilePath(url.pathname) && !(await deviceAuthorized(request, env, ADMIN_MAILBOX_ID))) {
+    return jsonError("Administrator sign-in required", 403);
   }
 
   if (url.pathname === "/api/device/accounts" && request.method === "GET") {
@@ -271,7 +271,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (protectedAccountPath(url.pathname)) {
     const target = await requestedMailAccount(request, url);
     if (target.error) return jsonError(target.error, 400);
-    const requested = target.accountId ?? (isAdmin ? "native:primary" : null);
+    const requested = target.accountId ?? (isAdmin ? ADMIN_MAILBOX_ID : null);
     if (!requested || !(await deviceAuthorized(request, env, requested))) {
       return jsonError("Account not signed in on this device", 403);
     }

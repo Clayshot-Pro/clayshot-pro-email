@@ -5,6 +5,7 @@ import { AccountSignIn } from "./AccountSignIn";
 import { unlockOwnerPasskey } from "./adminPasskey";
 import { instanceIconUrl, useInstance } from "./instance";
 import { PoweredBy } from "./components/PoweredBy";
+import { AdminViewProvider, adminPanelRequested, type AdminView } from "./adminView";
 
 type AuthStatus = { configured: boolean; authenticated: boolean; setupAvailable: boolean; adminPasswordConfigured:boolean };
 type DeviceStatus = { authenticated: boolean; isAdmin: boolean; accountCount: number };
@@ -23,7 +24,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [owner, setOwner] = useState<AuthStatus | null>(null);
   const [setupToken, setSetupToken] = useState("");
-  const [primaryAddress, setPrimaryAddress] = useState("");
+  const [mailDomain, setMailDomain] = useState("");
+  const [adminPanel, setAdminPanel] = useState(() => adminPanelRequested(window.location.hash));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const instance = useInstance();
@@ -58,14 +60,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
   async function initialSetup() {
     if (!setupToken.trim()) { setError("Enter the original setup secret first."); return; }
-    if (needsInstanceSetup && !primaryAddress.trim()) { setError("Choose the primary mailbox address first."); return; }
+    if (needsInstanceSetup && !mailDomain.trim()) { setError("Enter your mail domain first."); return; }
     setBusy(true); setError("");
     try {
-      // A fresh install first records its primary mailbox (and so its primary
-      // domain) in D1; the Worker has no instance configuration of its own.
+      // A fresh install first records its main mail domain in D1, which
+      // creates the admin@ mailbox; the Worker has no instance configuration.
       if (needsInstanceSetup) {
         await apiJson<{ ok: boolean }>("/api/setup", {
-          method: "POST", body: JSON.stringify({ setupToken, primaryAddress: primaryAddress.trim() }),
+          method: "POST", body: JSON.stringify({ setupToken, domain: mailDomain.trim() }),
         });
         instance.refresh();
       }
@@ -84,7 +86,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const needsInstanceSetup = instance.loaded && instance.initialized === false;
 
-  if (device?.isAdmin) return <AdminPanel />;
+  if (device?.isAdmin) {
+    // Admins land in the mail app (admin@ first) and switch to the panel and
+    // back; the panel opens first while no administrator password is set.
+    const view: AdminView = {
+      isAdmin: true,
+      openAdmin: () => { window.history.replaceState(null, "", "#admin"); setAdminPanel(true); },
+      openMail: () => { window.history.replaceState(null, "", window.location.pathname + window.location.search); setAdminPanel(false); },
+    };
+    const panel = adminPanel || owner?.adminPasswordConfigured === false;
+    return <AdminViewProvider value={view}>{panel ? <AdminPanel /> : children}</AdminViewProvider>;
+  }
   if (device?.authenticated && device.accountCount > 0) return <>{children}</>;
   return <main className="auth-shell">
     <section className="auth-card" aria-labelledby="auth-title">
@@ -106,10 +118,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
         ) : !owner.configured && owner.setupAvailable ? (
           <div className="auth-setup">
             {needsInstanceSetup && <>
-              <label htmlFor="setup-primary">Primary mailbox address</label>
-              <input id="setup-primary" type="email" value={primaryAddress} autoComplete="off" autoCapitalize="none"
-                spellCheck={false} placeholder="hello@example.com" onChange={event=>setPrimaryAddress(event.target.value)} />
-              <p className="auth-intro">Its domain becomes the primary mail domain. You can add more domains later.</p>
+              <label htmlFor="setup-domain">Mail domain</label>
+              <input id="setup-domain" type="text" inputMode="url" value={mailDomain} autoComplete="off" autoCapitalize="none"
+                spellCheck={false} placeholder="example.com" onChange={event=>setMailDomain(event.target.value)} />
+              <p className="auth-intro">Creates your admin@ mailbox on this domain; it is also your administrator sign-in. You can add more domains and mailboxes later.</p>
             </>}
             <label htmlFor="setup-token">One-time administrator setup secret</label>
             <input id="setup-token" type="password" value={setupToken} autoComplete="off"

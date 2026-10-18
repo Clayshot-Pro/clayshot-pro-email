@@ -119,7 +119,7 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
             <div className="admin-domain-summary">
               <div>
                 <strong>{domain.domain}</strong>
-                <span className={`admin-domain-chip chip-${domain.status}`}>{domain.isPrimary ? "primary" : domain.status}</span>
+                <span className={`admin-domain-chip chip-${domain.status}`}>{domain.isPrimary ? "main" : domain.status}</span>
               </div>
               <small>
                 {domain.mailboxCount} mailbox{domain.mailboxCount === 1 ? "" : "es"} · sends via {TRANSPORT_LABEL[domain.outboundTransport]}
@@ -200,7 +200,7 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
                     Postmaster and abuse mail
                     <select value={domain.postmasterMailboxId ?? ""} disabled={busy !== null}
                       onChange={event => void update(domain, { postmasterMailboxId: event.target.value || null }, "Postmaster mailbox updated.")}>
-                      <option value="">Primary mailbox (default)</option>
+                      <option value="">Admin mailbox (default)</option>
                       {mailboxes.map(box => <option key={box.id} value={box.id}>{box.email_address}</option>)}
                     </select>
                   </label>

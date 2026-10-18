@@ -43,7 +43,7 @@ export type Lock = {
 
 /** Operational mail settings, editable by the admin (formerly Worker vars). */
 export type MailSettings = {
-  /** Copy of primary-mailbox mail to this address (must be verified in Email Routing). */
+  /** Copy of admin@ mailbox mail to this address (must be verified in Email Routing). */
   forwardTo: string | null;
   maxMailboxes: number;
   /** Daily cron permanently purges mailboxes past their 30-day grace period. */

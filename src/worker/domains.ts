@@ -1,8 +1,9 @@
-import { appConfig, isValidAddress, isValidDomain } from "./appConfig";
+import { appConfig, isValidDomain } from "./appConfig";
 import { appOrigin } from "./config";
 import { THEMES, type ThemeId } from "./customization";
 import { evaluateDns, CLOUDFLARE_DKIM_SELECTORS, RESEND_DKIM_SELECTORS, type DnsAnswers, type OutboundTransportKind } from "./domainDns";
 import type { AddressRules } from "./mailboxRules";
+import { ADMIN_MAILBOX_ID, LEGACY_MAILBOX_ID, adminMailboxAddressFor } from "./mailboxIds";
 
 export type RulesScope = "routing" | "create";
 export type DomainStatus = "pending" | "active" | "disabled";
@@ -20,7 +21,6 @@ export type DomainRow = {
   updated_at: string;
 };
 
-const PRIMARY_MAILBOX_ID = "native:primary";
 const TRANSPORTS = new Set<OutboundTransportKind>(["cloudflare", "resend", "none"]);
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 const validTheme = (value: unknown): value is ThemeId =>
@@ -46,31 +46,43 @@ export async function primaryDomain(env: Env, fresh = false): Promise<string | n
 /**
  * An install is established once it holds data or an owner passkey. Migration
  * 0010 seeds native:primary with a placeholder address, so a fresh install
- * stays uninitialized until first-run setup chooses the real address.
+ * stays uninitialized until first-run setup chooses the mail domain.
  */
 async function established(env: Env): Promise<boolean> {
   const row = await env.DB.prepare(`SELECT
       EXISTS (SELECT 1 FROM messages WHERE mailbox_id = ?1)
       OR EXISTS (SELECT 1 FROM drafts WHERE mailbox_id = ?1)
       OR EXISTS (SELECT 1 FROM native_mailbox_credentials WHERE mailbox_id = ?1)
-      OR EXISTS (SELECT 1 FROM auth_credentials) AS yes`).bind(PRIMARY_MAILBOX_ID).first<{ yes: number }>();
+      OR EXISTS (SELECT 1 FROM auth_credentials) AS yes`).bind(LEGACY_MAILBOX_ID).first<{ yes: number }>();
   return Boolean(row?.yes);
 }
 
+/** The admin@<main domain> mailbox; created once, never renamed. */
+async function ensureAdminMailbox(env: Env, domain: string): Promise<void> {
+  await env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain)
+    VALUES (?1, ?2, 'Admin', ?3)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain).run();
+}
+
 /**
- * Keep native_mailboxes.domain in sync and, for an install upgraded from v2,
- * adopt the primary mailbox's domain as the primary domain.
+ * Keep native_mailboxes.domain in sync; for an install upgraded from v2, adopt
+ * its mailbox's domain as the main domain; and make sure the admin mailbox
+ * exists on the main domain (upgrades from v3.07 and earlier get it here).
  */
 export async function ensureDomains(env: Env): Promise<void> {
   await env.DB.prepare(`UPDATE native_mailboxes SET domain = lower(substr(email_address, instr(email_address, '@') + 1))
     WHERE domain IS NULL OR domain != lower(substr(email_address, instr(email_address, '@') + 1))`).run();
-  if (await primaryDomain(env, true) || !(await established(env))) return;
-  const box = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = ?1")
-    .bind(PRIMARY_MAILBOX_ID).first<{ email_address: string }>();
-  const domain = box?.email_address.slice(box.email_address.lastIndexOf("@") + 1).toLowerCase();
-  if (!domain || !isValidDomain(domain)) return;
-  await env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
-    ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain).run();
+  let domain = await primaryDomain(env, true);
+  if (!domain && await established(env)) {
+    const box = await env.DB.prepare("SELECT email_address FROM native_mailboxes WHERE id = ?1")
+      .bind(LEGACY_MAILBOX_ID).first<{ email_address: string }>();
+    const legacy = box?.email_address.slice(box.email_address.lastIndexOf("@") + 1).toLowerCase();
+    if (legacy && isValidDomain(legacy)) {
+      await env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
+        ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(legacy).run();
+      domain = legacy;
+    }
+  }
+  if (domain) await ensureAdminMailbox(env, domain);
 }
 
 export async function isInitialized(env: Env): Promise<boolean> {
@@ -78,24 +90,23 @@ export async function isInitialized(env: Env): Promise<boolean> {
 }
 
 /**
- * First-run setup: choose the primary mailbox address. Allowed only while the
- * instance is uninitialized; the caller has already verified AUTH_SETUP_TOKEN.
- * Returns an error message, or null on success.
+ * First-run setup: choose the main mail domain, which creates the admin@
+ * mailbox on it. Allowed only while the instance is uninitialized; the caller
+ * has already verified AUTH_SETUP_TOKEN. Returns an error message, or null.
  */
-export async function initializeInstance(env: Env, address: string, displayName: string): Promise<string | null> {
-  const normalized = address.trim().toLowerCase();
-  if (!isValidAddress(normalized) || normalized.startsWith("admin@")) {
-    return "Enter a valid address for the primary mailbox (admin@ is reserved)";
-  }
+export async function initializeInstance(env: Env, input: string): Promise<string | null> {
+  // Accept "example.com" or an address on it.
+  const domain = input.trim().toLowerCase().replace(/^.*@/, "");
+  if (!isValidDomain(domain)) return "Enter your mail domain, for example example.com";
   if (await primaryDomain(env, true) || await established(env)) return "This instance is already set up";
-  const domain = normalized.slice(normalized.indexOf("@") + 1);
   await env.DB.batch([
-    env.DB.prepare(`INSERT INTO native_mailboxes (id, email_address, display_name, domain) VALUES (?1, ?2, ?3, ?4)
-      ON CONFLICT(id) DO UPDATE SET email_address = excluded.email_address, display_name = excluded.display_name,
-      domain = excluded.domain, updated_at = CURRENT_TIMESTAMP`).bind(PRIMARY_MAILBOX_ID, normalized, displayName, domain),
+    // Not established: native:primary is only migration 0010's placeholder.
+    env.DB.prepare("DELETE FROM native_mailboxes WHERE id = ?1").bind(LEGACY_MAILBOX_ID),
     env.DB.prepare("UPDATE domains SET is_primary = 0 WHERE is_primary = 1"),
     env.DB.prepare(`INSERT INTO domains (domain, status, is_primary) VALUES (?1, 'active', 1)
       ON CONFLICT(domain) DO UPDATE SET status = 'active', is_primary = 1, updated_at = CURRENT_TIMESTAMP`).bind(domain),
+    env.DB.prepare(`INSERT OR IGNORE INTO native_mailboxes (id, email_address, display_name, domain)
+      VALUES (?1, ?2, 'Admin', ?3)`).bind(ADMIN_MAILBOX_ID, adminMailboxAddressFor(domain), domain),
   ]);
   cachedPrimary = { domain, at: Date.now() };
   return null;
@@ -122,7 +133,7 @@ export async function postmasterMailboxId(env: Env, domain: string): Promise<str
   const row = await env.DB.prepare(`SELECT d.postmaster_mailbox_id AS id FROM domains d
     JOIN native_mailboxes m ON m.id = d.postmaster_mailbox_id AND m.status = 'active' AND m.deleted_at IS NULL
     WHERE d.domain = ?1`).bind(domain.toLowerCase()).first<{ id: string }>();
-  return row?.id ?? PRIMARY_MAILBOX_ID;
+  return row?.id ?? ADMIN_MAILBOX_ID;
 }
 
 /** Outbound policy for a sender address's domain. */

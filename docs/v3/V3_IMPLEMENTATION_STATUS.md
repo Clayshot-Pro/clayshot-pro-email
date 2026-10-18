@@ -14,6 +14,7 @@
 | `v3.05` | v2.08 merged; instance settings moved into D1; Cloudflare Email Sending API for all Cloudflare sending; per-domain themes; licence; GitHub Actions deploys |
 | `v3.06` | Integration keys in D1 (Admin → Keys), encrypted with `PROVIDER_CREDENTIAL_KEY`; VAPID generated automatically (migration 0020) |
 | `v3.07` | All inboxes: one merged list of every account signed in on the device |
+| `v3.08` | No primary mailbox: admin@<mail domain> is the administrator's mailbox; admins land in mail and switch to the admin panel and back |
 
 ## Decisions applied in v3.05
 
@@ -58,6 +59,15 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Lists are merged newest first and each message is tagged with its account (`accountId`). Threads collapse per account, and read-your-writes shields are keyed by the message's own account.
 - Opening, PATCH, permanent delete, draft opening, replies and forwards use the message's account. Bulk actions are split into one request per account. An account that fails to load is named in a notice while the others are shown.
 - Every folder works in the merged view; counts are summed. Compose defaults to the primary mailbox.
+
+## v3.08: admin@ mailbox, no primary mailbox
+
+- `native:admin` = `admin@<main domain>`: created by first-run setup (which now asks for the mail domain) or by the bootstrap on the first request after upgrading. It cannot be disabled, deleted, purged or given a mailbox password; only the owner session opens it, and the admin addresses are excluded from device grants.
+- The former primary mailbox (`native:primary`) keeps its ID, address and mail and is an ordinary mailbox. On a fresh install, setup deletes migration 0010's placeholder row (only while the install holds no data).
+- Moved to admin@: default postmaster/abuse mailbox, forwarding, profile photo, VAPID contact, default account for requests without one.
+- Sign-in: `admin@<main domain>` on any host, plus `admin@<app host>`; both open the same administrator record.
+- Admin sessions open the mail app (admin@ first, every mailbox listed). **Admin panel** in the sidebar and in Settings; **Back to mail** in the panel header; `#admin` keeps the panel across reloads, and the open mailbox is kept per tab.
+- Phone layout: the admin panel no longer overflows the screen; its section links scroll.
 
 ## Production rollout (LTM instance)
 

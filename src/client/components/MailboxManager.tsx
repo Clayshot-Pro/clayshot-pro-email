@@ -259,7 +259,9 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
       <div className="settings-accounts admin-mailbox-items">
         {mailboxes.map(box => {
           const expired = Boolean(box.purge_after && Date.parse(box.purge_after.replace(" ", "T") + "Z") <= Date.now());
-          const isPrimary = box.id === "native:primary";
+          // admin@ is the administrator's own inbox: it cannot be disabled or
+          // deleted, and it signs in with the administrator password + passkey.
+          const isAdminMailbox = box.id === "native:admin";
           return (
             <div className="settings-account admin-mailbox-item" key={box.id}>
               <span className="settings-avatar-fallback">{box.email_address.charAt(0).toUpperCase()}</span>
@@ -322,9 +324,9 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
                   <details className="admin-mailbox-more">
                     <summary>More actions</summary>
                     <div className="admin-mailbox-more-content">
-                      <button type="button" disabled={busy !== null} onClick={() => void resetPassword(box)}>Generate password</button>
+                      {!isAdminMailbox && <button type="button" disabled={busy !== null} onClick={() => void resetPassword(box)}>Generate password</button>}
                       <button type="button" disabled={busy !== null} onClick={() => void reconcile(box)}>Recount storage</button>
-                      {!isPrimary && (
+                      {!isAdminMailbox && (
                         <>
                           <button type="button" disabled={busy !== null} onClick={() => void change(box, box.status === "active" ? "disabled" : "active")}>
                             {box.status === "active" ? "Disable" : "Enable"}

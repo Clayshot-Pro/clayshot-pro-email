@@ -150,8 +150,8 @@ export async function isAuthenticated(request: Request, env: Env): Promise<boole
 
 async function setupAuthorized(request: Request, env: Env, supplied?: string): Promise<boolean> {
   if (await hasCredential(env)) return isAuthenticated(request, env);
-  // A fresh install must choose its primary mailbox (POST /api/setup) before
-  // the owner passkey exists; otherwise the 0010 placeholder would be adopted.
+  // A fresh install must choose its mail domain (POST /api/setup) before the
+  // owner passkey exists; otherwise the 0010 placeholder would be adopted.
   if (!(await isInitialized(env))) return false;
   return secretMatches(env.AUTH_SETUP_TOKEN, supplied);
 }

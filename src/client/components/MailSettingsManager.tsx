@@ -53,7 +53,7 @@ export function MailSettingsManager() {
         <form onSubmit={event => void save(event)}>
           <div className="branding-grid">
             <label>
-              Forward primary-mailbox mail to
+              Forward admin@ mail to
               <input type="text" inputMode="email" value={forwardTo} placeholder="Optional, e.g. me@example.net"
                 autoCapitalize="none" spellCheck={false} maxLength={254} onChange={event => setForwardTo(event.target.value)} />
             </label>
