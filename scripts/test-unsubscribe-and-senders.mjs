@@ -38,10 +38,10 @@ assert.equal(
 assert.equal(messageUnsubscribeUrl(null, "This message has no unsubscribe instructions."), null);
 
 // Sender authorization: every active mailbox on an active domain may send
-// through the Cloudflare Email Sending API (no per-address bindings or gate).
-const select = input => selectTransport({ domainStatus: "active", domainTransport: "cloudflare", emailApiConfigured: true, resendConfigured: false, ...input });
+// through Cloudflare (EMAIL binding, or the API when a token is set).
+const select = input => selectTransport({ domainStatus: "active", domainTransport: "cloudflare", cloudflareConfigured: true, resendConfigured: false, ...input });
 assert.deepEqual(select({}), { kind: "cloudflare" });
-assert.equal(select({ emailApiConfigured: false }).kind, "unavailable");
+assert.equal(select({ cloudflareConfigured: false }).kind, "unavailable");
 assert.equal(select({ domainStatus: null }).kind, "unavailable", "addresses on unknown domains never send");
 assert.equal(select({ domainStatus: "disabled" }).kind, "unavailable");
 console.log("Unsubscribe and automatic native sending regressions: passed (API transport covered by test-cloudflare-api)");

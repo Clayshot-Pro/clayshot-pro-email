@@ -1,8 +1,45 @@
+interface EmailAddressInput {
+  email: string;
+  name?: string;
+}
+
+interface OutboundAttachmentInput {
+  content: string | ArrayBuffer | ArrayBufferView;
+  filename: string;
+  type: string;
+  disposition: "attachment" | "inline";
+  contentId?: string;
+}
+
+interface OutboundEmailInput {
+  from: EmailAddressInput | string;
+  to: EmailAddressInput | EmailAddressInput[] | string | string[];
+  subject: string;
+  html?: string;
+  text?: string;
+  cc?: EmailAddressInput | EmailAddressInput[] | string | string[];
+  bcc?: EmailAddressInput | EmailAddressInput[] | string | string[];
+  replyTo?: EmailAddressInput | string;
+  attachments?: OutboundAttachmentInput[];
+  headers?: Record<string, string>;
+}
+
+interface EmailSendResult {
+  messageId: string;
+}
+
+interface EmailServiceBinding {
+  send(message: OutboundEmailInput): Promise<EmailSendResult>;
+}
+
 interface Env {
   DB: D1Database;
   MAIL: R2Bucket;
   ASSETS: Fetcher;
-  // Filled automatically at build time from CLOUDFLARE_ACCOUNT_ID (not secret).
+  // Unrestricted send_email binding: the default Cloudflare sending path, no token needed.
+  EMAIL?: EmailServiceBinding;
+  // Optional Email Sending API (used instead of the binding when the token is set).
+  // The account ID is filled automatically at build time from CLOUDFLARE_ACCOUNT_ID.
   CF_EMAIL_SENDING_ACCOUNT_ID?: string;
   // Worker secrets uploaded by scripts/secrets-push.mjs. Instance settings
   // (domains, branding, forwarding, limits) live in D1, not in Worker vars.

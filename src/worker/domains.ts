@@ -155,7 +155,10 @@ export async function listDomainsResponse(request: Request, env: Env): Promise<R
   return Response.json({
     domains: rows.results.map(present),
     transports: {
-      cloudflare: { available: config.features.emailApi },
+      cloudflare: {
+        available: config.features.emailApi || config.features.emailBinding,
+        mode: config.features.emailApi ? "api" : config.features.emailBinding ? "binding" : null,
+      },
       resend: { available: config.features.resend, webhookConfigured: config.features.resendWebhook },
     },
     webhookUrl: `${appOrigin(request)}/api/webhooks/resend`,

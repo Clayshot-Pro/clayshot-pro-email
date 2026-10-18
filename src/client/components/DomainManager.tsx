@@ -19,7 +19,7 @@ export type Domain = {
 };
 type DomainsPayload = {
   domains: Domain[];
-  transports: { cloudflare: { available: boolean }; resend: { available: boolean; webhookConfigured: boolean } };
+  transports: { cloudflare: { available: boolean; mode: "api" | "binding" | null }; resend: { available: boolean; webhookConfigured: boolean } };
   webhookUrl: string;
 };
 type MailboxOption = { id: string; email_address: string; status: string; deleted_at: string | null };
@@ -209,8 +209,9 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
                 {domain.outboundTransport === "cloudflare" && (
                   <p className="admin-domain-note">
                     {data.transports.cloudflare.available
-                      ? "Every active mailbox on this domain sends through the Cloudflare Email Sending API once the domain is onboarded for Email Sending."
-                      : "Cloudflare Email Sending is not configured: set CF_EMAIL_SENDING_TOKEN and run npm run secrets:push."}
+                      ? `Every active mailbox on this domain can send once the domain is onboarded for Cloudflare Email Sending (via the ${
+                        data.transports.cloudflare.mode === "api" ? "Email Sending API" : "Worker's send binding, no token needed"}).`
+                      : "Cloudflare Email Sending is unavailable: the Worker's EMAIL send binding is missing."}
                   </p>
                 )}
                 {domain.outboundTransport === "resend" && (

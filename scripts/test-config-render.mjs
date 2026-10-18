@@ -18,8 +18,8 @@ for (const retired of ["APP_ORIGIN", "PRIMARY_ADDRESS", "ADMIN_ADDRESS", "BRAND_
   assert.ok(!CONFIG.some(entry => entry.key === retired), `${retired} is configured in D1, not .env`);
 }
 
-// Rendering for the existing production values keeps today's bindings, minus
-// the retired send_email bindings and instance vars.
+// Rendering keeps today's bindings: one unrestricted EMAIL send binding,
+// no restricted per-address binding, and no instance vars.
 const accountId = "0123456789abcdef0123456789abcdef";
 const production = { ...defaults, CLOUDFLARE_ACCOUNT_ID: accountId, CLOUDFLARE_API_TOKEN: "deploy-token-123456" };
 const rendered = parseJsonc(renderWrangler(template, production, "11111111-2222-3333-4444-555555555555"));
@@ -40,7 +40,7 @@ for (const [key, value] of Object.entries(legacy)) {
   assert.deepEqual(actual, value, key);
 }
 assert.equal(rendered.d1_databases[0].database_id, "11111111-2222-3333-4444-555555555555");
-assert.equal(rendered.send_email, undefined, "no send bindings: sending uses the Email Sending API");
+assert.deepEqual(rendered.send_email, [{ name: "EMAIL" }], "one unrestricted send binding, no token needed");
 assert.deepEqual(rendered.vars, { CF_EMAIL_SENDING_ACCOUNT_ID: accountId }, "the account ID is the only Worker var");
 assert.deepEqual(parseJsonc(renderWrangler(template, { ...defaults }, PLACEHOLDER_DATABASE_ID)).vars, {}, "no account ID, no vars");
 assert.deepEqual(rendered.assets.run_worker_first, ["/api/*", "/", "/index.html", "/manifest.webmanifest"]);

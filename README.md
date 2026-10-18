@@ -6,7 +6,7 @@
 
 ## What you are deploying
 
-An **authenticated web application**, not a traditional mail server: there are no IMAP/POP3/SMTP accounts. Inbound mail enters through Cloudflare Email Routing's Email Worker, is indexed in D1 and stored as raw MIME/attachments in R2. Outbound mail goes through the **Cloudflare Email Sending API**, or **Resend** for domains you switch to it. Gmail accounts connect through Google OAuth.
+An **authenticated web application**, not a traditional mail server: there are no IMAP/POP3/SMTP accounts. Inbound mail enters through Cloudflare Email Routing's Email Worker, is indexed in D1 and stored as raw MIME/attachments in R2. Outbound mail goes through **Cloudflare Email Sending** (the Worker's send binding — no token needed), or **Resend** for domains you switch to it. Gmail accounts connect through Google OAuth.
 
 | Component | Responsibility |
 | --- | --- |
@@ -15,7 +15,7 @@ An **authenticated web application**, not a traditional mail server: there are n
 | D1 (`DB`) | Instance settings, domains, mailboxes, message metadata, drafts, sessions, audit log |
 | R2 (`MAIL`) | Raw MIME, attachments, profile photos and the app icon |
 | Cloudflare Email Routing | Delivers incoming mail to the Worker's `email()` handler |
-| Cloudflare Email Sending API | Outbound mail for every active mailbox (default) |
+| Cloudflare Email Sending (`EMAIL` binding) | Outbound mail for every active mailbox (default; the REST API is used instead if you set a token) |
 | Resend (optional) | Alternative outbound transport per domain, with signed delivery webhooks |
 | WebAuthn / passkeys | Owner authentication and fresh approval for sensitive admin actions |
 | Gmail API (optional) | Connected Gmail accounts |
@@ -53,9 +53,9 @@ cp .env.example .env
 
 | Key | Kind | Required | Purpose |
 | --- | --- | --- | --- |
-| `CLOUDFLARE_ACCOUNT_ID` | deploy | yes | Your account. Also passed to the Worker (not secret) for the Email Sending API. |
+| `CLOUDFLARE_ACCOUNT_ID` | deploy | yes | Your account. Also passed to the Worker (not secret) for the optional Email Sending API. |
 | `CLOUDFLARE_API_TOKEN` | deploy | yes | Deploy token: Workers Scripts edit, D1 edit, R2 edit, Account Settings read. Never sent to the Worker. |
-| `CF_EMAIL_SENDING_TOKEN` | secret | to send | Account token with **Email Sending** permission. |
+| `CF_EMAIL_SENDING_TOKEN` | secret | no | Optional. Sending works without it through the Worker's send binding; set an **Email Sending** token only to use the REST API instead. |
 | `AUTH_SETUP_TOKEN` | secret | first run | One-time secret for first-run setup. Remove afterwards. |
 | `PROVIDER_CREDENTIAL_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secret | Gmail only | OAuth client and the key that encrypts stored Gmail tokens. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | secret | push only | Web Push keypair. |
@@ -112,7 +112,7 @@ For **each** mail domain:
 
 ## 6. Outbound sending
 
-- **Cloudflare (default):** onboard each mail domain for **Email Sending** in the same Cloudflare account and set `CF_EMAIL_SENDING_TOKEN`. Every active mailbox on an active domain can then send. Check Cloudflare's terms cover your use.
+- **Cloudflare (default):** onboard each mail domain for **Email Sending** in the same Cloudflare account. That's all: the Worker sends through its built-in `EMAIL` binding, which needs no token, and every active mailbox on an active domain can send. (Optionally set `CF_EMAIL_SENDING_TOKEN` to use the REST API instead.) Check Cloudflare's terms cover your use.
 - **Resend (optional, per domain):** verify the domain in Resend, set `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET`, add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
 - A domain can also be **receive-only**.
 
@@ -159,7 +159,7 @@ Users get **Settings → Appearance** for anything you leave unlocked.
 | `Invalid credentials` as admin | Use `admin@<app hostname>`, and check the admin password was set. |
 | Passkey fails after changing hostnames | Passkeys are bound to the hostname; use the original host. |
 | Mail never arrives | Check Email Routing MX records, the catch-all → Worker rule, that the domain is **active** in Admin → Domains, and that the mailbox exists and is active. |
-| "Cloudflare Email Sending is not configured" | Set `CF_EMAIL_SENDING_TOKEN`, run `npm run secrets:push`, and make sure `CLOUDFLARE_ACCOUNT_ID` was set when the Worker was built. |
+| "Cloudflare Email Sending is not available" | The `EMAIL` send binding is missing from the deployed Worker; redeploy with the rendered `wrangler.jsonc`. |
 | Sending fails with an entitlement or domain error | Onboard the domain for Email Sending in the same account, or switch the domain to Resend. |
 | `redirect_uri_mismatch` from Google | Add the exact callback URI to the OAuth client. |
 | Build cannot resolve D1 | Run `npm run setup`, set `D1_DATABASE_ID`, or check the deploy token's D1 and Workers Scripts permissions. |

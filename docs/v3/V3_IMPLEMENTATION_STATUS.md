@@ -17,7 +17,7 @@
 
 | Decision | Result |
 | --- | --- |
-| Sending all through the Cloudflare API | `send_email` bindings, `EMAIL_MULTI`/`EMAIL_DYNAMIC` and the `MULTI_SENDER_APPROVED` gate are gone. Every active mailbox on an active domain sends through the Email Sending API. Resend stays opt-in per domain. |
+| Cloudflare sending without a token | One unrestricted `EMAIL` send binding is the default (no token, no per-address allowlist, no `MULTI_SENDER_APPROVED` gate); every active mailbox on an active domain can send. The Email Sending REST API is used instead only when `CF_EMAIL_SENDING_TOKEN` is set. `EMAIL_MULTI`/`EMAIL_DYNAMIC` are gone. Resend stays opt-in per domain. |
 | Config off the Worker | No instance vars. Origin, passkey RP ID and admin sign-in come from the request URL (v2.08). Primary mailbox and domains come from D1 via first-run setup; branding, forwarding, mailbox limit and purge are admin settings in D1. `.env` holds only Worker secrets and deploy keys. The only rendered var is `CF_EMAIL_SENDING_ACCOUNT_ID`, copied from `CLOUDFLARE_ACCOUNT_ID`. |
 | `PRIMARY_ADDRESS` removed | The primary mailbox is `native:primary` in D1; its domain is the primary domain. v2 installs are adopted automatically. |
 | Per-domain theme | Admin picks a theme per domain; mailboxes on it use that theme (falls back to the instance default). Users override it only if the theme is unlocked. |
@@ -43,7 +43,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 1. Back up D1 and R2 and test a restore.
 2. Workers Builds keeps `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; no other build variables are needed. Remove any instance build variables added earlier.
-3. Worker secrets: **`CF_EMAIL_SENDING_TOKEN` is required before deploying** — there is no binding fallback any more, so if production relied on `EMAIL_DYNAMIC` without a token, create an account token with Email Sending permission and push it first. Keep the existing Gmail/VAPID secrets. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (it is now a rendered var). `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `PRIMARY_ADDRESS` are no longer read; if you used `FORWARD_TO` or purge, re-enter them in **Admin → Mail settings**.
+3. Worker secrets: `CF_EMAIL_SENDING_TOKEN` is optional (without it, sending uses the `EMAIL` binding). Keep the existing Gmail/VAPID secrets. If `CF_EMAIL_SENDING_ACCOUNT_ID` exists as a **secret**, delete it (it is now a rendered var). `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `PRIMARY_ADDRESS` are no longer read; if you used `FORWARD_TO` or purge, re-enter them in **Admin → Mail settings**.
 4. Migrations 0016–0019 are additive and apply during the deploy. They seed no instance data.
 5. Right after deploy, in the admin panel: **Branding → App name** `LTM Mails`, and **Mailboxes → contact@ → Sender name** `Liam` (otherwise outgoing mail shows the display name `LTM Email`).
 6. Then check: Domains shows `liamthemo.com` as primary and active; `admin@liamthemo.com` and `admin@email.liamthemo.com` both sign in; passkeys, Gmail, push, inbound and a send from `contact@` work.

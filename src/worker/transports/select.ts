@@ -10,8 +10,8 @@ export type TransportChoice =
 export type SelectionInput = {
   domainStatus: "pending" | "active" | "disabled" | null;
   domainTransport: "cloudflare" | "resend" | "none" | null;
-  /** CF_EMAIL_SENDING_ACCOUNT_ID and CF_EMAIL_SENDING_TOKEN are present. */
-  emailApiConfigured: boolean;
+  /** The EMAIL send binding is bound, or the Email Sending API is configured. */
+  cloudflareConfigured: boolean;
   resendConfigured: boolean;
 };
 
@@ -21,10 +21,11 @@ export function selectTransport(input: SelectionInput): TransportChoice {
   }
   switch (input.domainTransport) {
     case "cloudflare":
-      // Every active mailbox on an onboarded domain sends through the API.
-      return input.emailApiConfigured
+      // Every active mailbox on an onboarded domain can send: through the
+      // EMAIL binding by default, or the Email Sending API when a token is set.
+      return input.cloudflareConfigured
         ? { kind: "cloudflare" }
-        : { kind: "unavailable", reason: "Cloudflare Email Sending is not configured (set CF_EMAIL_SENDING_TOKEN)" };
+        : { kind: "unavailable", reason: "Cloudflare Email Sending is not available: the EMAIL send binding is missing" };
     case "resend":
       return input.resendConfigured
         ? { kind: "resend" }

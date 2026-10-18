@@ -16,9 +16,6 @@ for (const key of keysOf("secret")) {
   if (value) secrets[key] = value;
 }
 const names = Object.keys(secrets);
-if (!secrets.CF_EMAIL_SENDING_TOKEN) {
-  console.warn("CF_EMAIL_SENDING_TOKEN is empty: mailboxes on Cloudflare domains cannot send until it is set (there is no binding fallback).");
-}
 if (!names.length) {
   console.log("No secret values set in .env; nothing to upload.");
   process.exit(0);

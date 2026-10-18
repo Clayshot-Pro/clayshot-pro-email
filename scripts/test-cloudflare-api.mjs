@@ -60,10 +60,14 @@ const send = readFileSync(new URL("../src/worker/email/send.ts", import.meta.url
 assert.ok(send.indexOf("fitsCloudflareApi(") > 0 && send.indexOf("fitsCloudflareApi(") < send.indexOf("UPDATE native_mailboxes SET used_bytes=used_bytes+?1"),
   "size is checked before quota is reserved");
 
-// No send_email bindings remain; the account ID is the only rendered var.
+// The default path is one unrestricted EMAIL binding (no token); the API is optional.
 const template = readFileSync(new URL("../wrangler.template.jsonc", import.meta.url), "utf8");
-assert.doesNotMatch(template, /send_email/);
+assert.match(template, /"send_email"[\s\S]*"name": "EMAIL"/);
+assert.doesNotMatch(template, /allowed_sender_addresses|EMAIL_DYNAMIC|EMAIL_MULTI/, "no per-address restrictions or legacy bindings");
+const transports = readFileSync(new URL("../src/worker/transports/index.ts", import.meta.url), "utf8");
+assert.ok(transports.indexOf("features.emailApi") < transports.indexOf("new CloudflareBindingTransport(env.EMAIL)"),
+  "the API is used only when configured, the binding otherwise");
 const native = readFileSync(new URL("../src/worker/providers/native.ts", import.meta.url), "utf8");
 assert.doesNotMatch(native, /env\.EMAIL\b|EMAIL_DYNAMIC|EMAIL_MULTI/);
 
-console.log("PASS: Cloudflare Email Sending API transport, payload, errors and no send bindings");
+console.log("PASS: Cloudflare Email Sending API transport, payload, errors, and binding-first selection");

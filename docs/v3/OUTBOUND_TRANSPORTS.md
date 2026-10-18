@@ -1,6 +1,6 @@
 # v3.02 — Pluggable outbound transports and Resend
 
-**Document status:** Implemented on `v3.02`; **updated in v3.05**: the Cloudflare transport uses the Email Sending REST API (no `send_email` bindings, no `MULTI_SENDER_APPROVED` gate), so every active mailbox on an active Cloudflare domain can send. Resend is unchanged. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
+**Document status:** Implemented on `v3.02`; **updated in v3.05**: Cloudflare sending uses one unrestricted `EMAIL` binding by default (no token), or the Email Sending REST API when `CF_EMAIL_SENDING_TOKEN` is set; the `MULTI_SENDER_APPROVED` gate is gone, so every active mailbox on an active Cloudflare domain can send. Resend is unchanged. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
 
 ## Decision
 

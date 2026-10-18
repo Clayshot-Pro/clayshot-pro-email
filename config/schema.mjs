@@ -10,8 +10,8 @@
 import { readFileSync, existsSync } from "node:fs";
 
 export const CONFIG = [
-  { key: "CF_EMAIL_SENDING_TOKEN", kind: "secret", example: "", group: "Sending",
-    help: "Cloudflare API token with Email Sending permission. All Cloudflare sending goes through the Email Sending API." },
+  { key: "CF_EMAIL_SENDING_TOKEN", kind: "secret", example: "", group: "Sending (optional)",
+    help: "Optional. Cloudflare sending works without it through the Worker's send binding. Set an Email Sending token only to use the REST API instead." },
   { key: "AUTH_SETUP_TOKEN", kind: "secret", example: "", group: "First-run setup",
     help: "One-time secret for choosing the primary mailbox and registering the owner passkey. Remove after setup." },
   { key: "PROVIDER_CREDENTIAL_KEY", kind: "secret", example: "", group: "Connected Gmail (optional)",

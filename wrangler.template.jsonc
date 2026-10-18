@@ -1,7 +1,8 @@
 {
   // Template for the gitignored wrangler.jsonc. Rendered by `npm run config:render`
   // (see config/schema.mjs). The Worker has no instance vars: settings live in D1,
-  // credentials are Worker secrets. Sending uses the Email Sending API, not bindings.
+  // credentials are Worker secrets. Sending uses the EMAIL binding (no token), or
+  // the Email Sending API when CF_EMAIL_SENDING_TOKEN is set.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "__WORKER_NAME__",
   "main": "./src/worker/index.ts",
@@ -25,6 +26,13 @@
     {
       "binding": "MAIL",
       "bucket_name": "__R2_BUCKET_NAME__"
+    }
+  ],
+  "send_email": [
+    {
+      // Unrestricted: sends from any domain onboarded for Email Sending in this
+      // account. The app derives From from the authenticated mailbox.
+      "name": "EMAIL"
     }
   ],
   "triggers": { "crons": ["0 4 * * *"] },

@@ -3,14 +3,16 @@
  *
  * The Worker has no instance vars: the origin and admin sign-in come from the
  * request URL (config.ts), and domains, the primary mailbox, branding and mail
- * settings live in D1 (domains.ts, branding.ts). Only secrets — and the
- * build-filled CF_EMAIL_SENDING_ACCOUNT_ID — are read here.
+ * settings live in D1 (domains.ts, branding.ts). Only secrets, the
+ * build-filled CF_EMAIL_SENDING_ACCOUNT_ID and the EMAIL binding are read here.
  */
 export type AppConfig = {
   features: {
     gmail: boolean;
     push: boolean;
     emailApi: boolean;
+    /** The EMAIL send binding is bound (no token needed). */
+    emailBinding: boolean;
     resend: boolean;
     resendWebhook: boolean;
     setup: boolean;
@@ -48,6 +50,7 @@ export function parseConfig(source: ConfigSource): AppConfig {
       gmail: has("GOOGLE_CLIENT_ID") && has("GOOGLE_CLIENT_SECRET") && has("PROVIDER_CREDENTIAL_KEY"),
       push: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY"),
       emailApi: /^[a-f0-9]{32}$/i.test(text(source, "CF_EMAIL_SENDING_ACCOUNT_ID")) && has("CF_EMAIL_SENDING_TOKEN"),
+      emailBinding: typeof (source.EMAIL as { send?: unknown } | undefined)?.send === "function",
       resend: has("RESEND_API_KEY"),
       resendWebhook: has("RESEND_WEBHOOK_SECRET"),
       setup: has("AUTH_SETUP_TOKEN"),
