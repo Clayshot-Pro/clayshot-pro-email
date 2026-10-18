@@ -16,7 +16,7 @@
 
 | # | Question | Decision | Detail |
 | --- | --- | --- | --- |
-| 1 | May other people use the software? | **Yes — personal and commercial use and self-hosting permitted, with required attribution; redistribution prohibited.** | [LICENSING.md](./LICENSING.md) |
+| 1 | May other people use the software? | **Yes — personal and commercial use and self-hosting permitted, with required attribution; redistribution and paid services prohibited.** | [LICENSING.md](./LICENSING.md) |
 | 2 | Admin model across domains | **Global:** one administrator account manages every domain and mailbox. | [MULTI_DOMAIN.md](./MULTI_DOMAIN.md#administrator-model) |
 | 3 | Should Resend replace Cloudflare sending by default? | **No.** Cloudflare stays the default; Resend is opt-in per domain. | [OUTBOUND_TRANSPORTS.md](./OUTBOUND_TRANSPORTS.md) |
 | 4 | Who controls themes/branding? | **Administrator lock:** the admin sets branding and decides which appearance options users may change. | [CUSTOMIZATION.md](./CUSTOMIZATION.md#administrator-lock) |

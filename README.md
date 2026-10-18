@@ -91,7 +91,7 @@ A documentation-only roadmap for the next major version. Nothing in it is implem
 - **v3.02 Outbound transports:** Cloudflare stays the default; Resend opt-in per domain with signed delivery webhooks
 - **v3.03 Theme foundation:** CSS colour tokenization with no visible change
 - **v3.04 Customization:** admin-locked branding, user themes, icon sets, per-mailbox accents
-- **Licensing:** others may run their own instance, including commercially, with credit given; redistribution stays prohibited
+- **Licensing:** others may run their own instance, including commercially, with credit given; redistribution and paid services stay prohibited
 
 [Roadmap and decisions](./docs/v3/README.md) · [Self-hosting guide (target state)](./docs/v3/SELF_HOSTING.md) · [Licensing change](./docs/v3/LICENSING.md)
 

@@ -2,7 +2,7 @@
 
 **Document status:** Describes how deployment **will** work once v3.00 ships. The scripts named here don't exist yet. Until then, this repository can't be deployed by anyone else, and the current [`LICENSE`](../../LICENSE) doesn't permit it.
 
-Once v3.00 ships, the new licence lets you run your own instance, personally or commercially, as long as you keep the built-in "Powered by LTM Email Service" credit visible and the licence notices intact. You may not redistribute the software. See [LICENSING.md](./LICENSING.md).
+Once v3.00 ships, the new licence lets you run your own instance, personally or commercially, as long as you keep the built-in "Powered by LTM Email Service" credit visible and the licence notices intact. You may not redistribute the software, host it for others, or charge anyone for access to it. See [LICENSING.md](./LICENSING.md).
 
 ## What you need
 
