@@ -28,6 +28,12 @@ export function allInboxesAvailable(accounts: ConnectedAccount[]): boolean {
   return unifiedAccounts(accounts).length > 1;
 }
 
+/** Where the app opens: All inboxes with two or more accounts, else the one account. */
+export function startingAccountId(accounts: ConnectedAccount[]): string | null {
+  if (allInboxesAvailable(accounts)) return ALL_INBOXES_ID;
+  return (unifiedAccounts(accounts)[0] ?? accounts[0])?.id ?? null;
+}
+
 const timestamp = (message: MessageListItem) => {
   const value = Date.parse(message.sentAt || message.receivedAt);
   return Number.isFinite(value) ? value : 0;
