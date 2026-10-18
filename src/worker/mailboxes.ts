@@ -181,6 +181,7 @@ export async function purgeNativeMailbox(env: Env, id: string): Promise<Response
     env.DB.prepare("DELETE FROM drafts WHERE mailbox_id=?1").bind(id),
     env.DB.prepare("DELETE FROM threads WHERE mailbox_id=?1").bind(id),
     env.DB.prepare("DELETE FROM outbound_attempts WHERE mailbox_id=?1").bind(id),
+    env.DB.prepare("DELETE FROM blocked_senders WHERE mailbox_id=?1").bind(id),
     env.DB.prepare("DELETE FROM native_mailboxes WHERE id=?1").bind(id),
   ]);
   // Keep minimal audit entries to establish that irreversible deletion happened.

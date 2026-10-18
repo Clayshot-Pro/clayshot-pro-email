@@ -19,6 +19,8 @@ type MessageReaderProps = {
   onPatch: (patch: Record<string, boolean>, closeAfter?: boolean) => void;
   canPermanentlyDelete: boolean;
   onPermanentDelete: () => void;
+  /** Custom mailboxes: block the sender (future mail goes to Junk). */
+  onBlockSender?: (address: string) => void;
 };
 
 function messageSender(message: MessageDetail): string {
@@ -60,7 +62,7 @@ function RichEmailBody({ html }: { html: string }) {
   );
 }
 
-export function MessageReader({ message, thread, folderLabel, loading = false, accountId, onBack, onReply, onForward, onPatch, canPermanentlyDelete, onPermanentDelete }: MessageReaderProps) {
+export function MessageReader({ message, thread, folderLabel, loading = false, accountId, onBack, onReply, onForward, onPatch, canPermanentlyDelete, onPermanentDelete, onBlockSender }: MessageReaderProps) {
   const [previewAttachment, setPreviewAttachment] = useState<MessageDetail["attachments"][number] | null>(null);
   const [unsubscribeOpen, setUnsubscribeOpen] = useState(false);
   const unsubscribeUrl = useMemo(
@@ -209,6 +211,9 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
         {accountId.startsWith("native:") && message.direction === "inbound" && !message.isDeleted && !message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: true }, true)}><Icon name="junk" size={16}/><span className="reader-action-label">Junk</span></button>
         ) : null}
+        {onBlockSender && message.direction === "inbound" ? (
+          <button className="reader-block-action" type="button" onClick={() => onBlockSender(message.fromAddress)} title={`Block ${message.fromAddress}`}><Icon name="lock" size={16}/><span className="reader-action-label">Block</span></button>
+        ) : null}
         {!message.isDeleted ? (
           <button className="destructive" type="button" onClick={() => onPatch({ isDeleted: true }, true)}><Icon name="trash" size={16}/><span className="reader-action-label">Delete</span></button>
         ) : (
@@ -249,6 +254,14 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
             ) : (
               <p>This email has no supported unsubscribe instructions in its headers or message body. You can review the message for manual instructions or use Junk to manage unwanted mail. We cannot unsubscribe you without a sender-provided method.</p>
             )}
+            {onBlockSender && message.direction === "inbound" ? (
+              <>
+                <p>Or block <strong>{message.fromAddress}</strong>: their mail to this mailbox goes straight to Junk.</p>
+                <div className="unsubscribe-dialog-actions">
+                  <button type="button" onClick={() => { setUnsubscribeOpen(false); onBlockSender(message.fromAddress); }}>Block sender</button>
+                </div>
+              </>
+            ) : null}
             {!unsubscribeUrl || message.direction === "outbound" ? (
               <div className="unsubscribe-dialog-actions"><button type="button" onClick={() => setUnsubscribeOpen(false)}>Close</button></div>
             ) : null}

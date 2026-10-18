@@ -15,11 +15,15 @@ assert.ok(mobile.includes("align-items: center;"), "Buttons must vertically cent
 const footer = reader.split('<footer className="reader-reply-bar">')[1]?.split("</footer>")[0];
 assert.ok(footer, "Message reader needs its footer action bar");
 const buttons = [...footer.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)];
-assert.equal(buttons.length, 9, "All action variants, including Trash actions, must be retained");
+assert.equal(buttons.length, 10, "All action variants, including Trash actions and Block, must be retained");
 for (const [index, button] of buttons.entries()) {
   assert.match(button[0], /<Icon\b/, "Every action must still have an icon");
   assert.match(button[0], /<span className="reader-action-label">/, "Missing text wrapper on action " + index);
 }
 assert.match(footer, /reader-action-label">Unsubscribe<\/span>/);
+// Block is a desktop footer action; phones reach it from the Unsubscribe dialog.
+assert.match(footer, /className="reader-block-action"[^>]*>.*reader-action-label">Block<\/span>/);
+assert.match(readFileSync(new URL("../src/client/layout-fixes.css", import.meta.url), "utf8"), /\.reader-reply-bar \.reader-block-action \{\s*display: none;/);
+assert.match(readFileSync(new URL("../src/client/components/MessageReader.tsx", import.meta.url), "utf8"), />Block sender<\/button>/);
 assert.match(footer, /reader-action-label">Delete forever<\/span>/);
 console.log("PASS: Reader toolbar uses dark mobile theme and optically centered labels");

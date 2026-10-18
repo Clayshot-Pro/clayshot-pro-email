@@ -316,6 +316,12 @@ export function App() {
   };
 
   const switchAccount = (id: string) => {
+    // Re-selecting the open account refreshes it; resetting state here would
+    // leave the list on "Loading mail…" because the account never changes.
+    if (id === activeAccountId) {
+      void loadMessages(folder, search);
+      return;
+    }
     openRequest.current += 1;
     listRequest.current += 1;
     setMessages([]);
@@ -1019,6 +1025,31 @@ export function App() {
     }
   };
 
+  const blockSender = async (address: string) => {
+    const accountId = readerAccountId ?? activeAccountId;
+    const mailbox = accounts.find(account => account.id === accountId)?.emailAddress ?? "this mailbox";
+    if (!confirm(`Block ${address}? Their mail to ${mailbox} will go straight to Junk, including messages already here. You can unblock them in Settings.`)) return;
+    setError(null);
+    try {
+      const response = await fetch(`/api/blocked-senders?accountId=${encodeURIComponent(accountId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: address, moveExisting: true }),
+      });
+      const data = await response.json().catch(() => ({})) as { moved?: number; error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not block the sender");
+      // Moved messages changed folders: drop cached copies and refresh.
+      for (const key of [...detailCache.current.keys()]) {
+        if (key.startsWith(`${accountId}:`)) detailCache.current.delete(key);
+      }
+      if (folder !== "junk") closeReader();
+      setBulkNotice(`${address} blocked${data.moved ? `; ${data.moved} message(s) moved to Junk` : ""}.`);
+      await loadMessages(folder, search, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not block the sender");
+    }
+  };
+
   const closeReader = () => {
     openRequest.current += 1;
     setSelected(null);
@@ -1105,6 +1136,7 @@ export function App() {
           onForward={startForward}
           onPatch={(patch, closeAfter) => void patchSelected(patch, closeAfter)}
           canPermanentlyDelete={readerAccount?.provider === "native"}
+          onBlockSender={readerAccount?.provider === "native" ? (address) => void blockSender(address) : undefined}
           onPermanentDelete={() => void permanentlyDeleteSelected()}
         />
       </div>
@@ -1148,6 +1180,7 @@ export function App() {
         sessionCount={sessionCount}
         busy={settingsBusy}
         isAdmin={isAdmin}
+        activeAccountId={unified ? readerAccountId : activeAccountId}
         onOpenAdmin={adminView.isAdmin ? adminView.openAdmin : undefined}
         onClose={() => setSettingsOpen(false)}
         onToggleNotifications={() => void toggleNotifications()}

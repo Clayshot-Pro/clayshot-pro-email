@@ -35,6 +35,7 @@ import {
 import { appOrigin } from "./config";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance } from "./bootstrap";
+import { addBlockedSender, listBlockedSenders, removeBlockedSender } from "./blockedSenders";
 import { adminKeysResponse, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
 import { setupInstance } from "./setup";
 import { instanceSettings } from "./branding";
@@ -339,6 +340,9 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     return request.method === "DELETE" ? scheduleNativeMailboxDeletion(env, id) : updateNativeMailbox(request, env, id);
   }
   if (url.pathname === "/api/messages" && request.method === "GET") return listMessages(request, env);
+  if (url.pathname === "/api/blocked-senders" && request.method === "GET") return listBlockedSenders(env, url);
+  if (url.pathname === "/api/blocked-senders" && request.method === "POST") return addBlockedSender(request, env, url);
+  if (url.pathname === "/api/blocked-senders" && request.method === "DELETE") return removeBlockedSender(env, url);
   if (url.pathname === "/api/send" && request.method === "POST") return sendEmail(request, env);
   if (url.pathname === "/api/drafts" && request.method === "POST") return saveDraft(request, env);
   if (url.pathname === "/api/profile" && request.method === "GET") return getProfile(env);

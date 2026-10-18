@@ -182,6 +182,8 @@ Users get **Settings → Appearance** for anything you leave unlocked.
 
 With two or more accounts signed in on a device, the account switcher offers **All inboxes**: every account's mail in one list, newest first, each row labelled with its account. Every folder works there, and opening, archiving, deleting, bulk actions and replies always act on the message's own account.
 
+Each custom mailbox can **block senders**: **Block** in the message reader (on phones, in the Unsubscribe dialog) or **Settings → Blocked senders**, by address (`someone@example.com`) or by domain (`example.com`, which includes its subdomains). Mail from a blocked sender goes straight to that mailbox's Junk, with no push notification or forwarding, and the sender is not told; blocking also moves the sender's existing mail to Junk. Gmail accounts use Gmail's own block.
+
 ## Optional integrations
 
 **Gmail.** Create a Google Cloud **Web application** OAuth client, enable the Gmail API, and add the redirect URI `https://<app hostname>/api/accounts/gmail/callback`. Enter the client ID and secret in **Admin → Keys** (`PROVIDER_CREDENTIAL_KEY` must be set), then use **Add Inbox → Gmail**. Scopes: `gmail.modify`, `userinfo.profile`, `contacts.readonly`.

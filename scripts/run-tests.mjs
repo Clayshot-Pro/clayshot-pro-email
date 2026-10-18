@@ -9,6 +9,7 @@ const TESTS = [
   "test-stored-keys",
   "test-all-inboxes",
   "test-admin-mailbox",
+  "test-blocked-senders",
   "test-instance-identity",
   "test-account-access",
   "test-admin-auth-boundary",

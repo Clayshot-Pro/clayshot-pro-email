@@ -15,6 +15,7 @@
 | `v3.06` | Integration keys in D1 (Admin → Keys), encrypted with `PROVIDER_CREDENTIAL_KEY`; VAPID generated automatically (migration 0020) |
 | `v3.07` | All inboxes: one merged list of every account signed in on the device |
 | `v3.08` | No primary mailbox: admin@<mail domain> is the administrator's mailbox; admins land in mail and switch to the admin panel and back |
+| `v3.09` | Per-mailbox blocked senders (migration 0021) |
 
 ## Decisions applied in v3.05
 
@@ -68,6 +69,15 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Sign-in: `admin@<main domain>` on any host, plus `admin@<app host>`; both open the same administrator record.
 - Admin sessions open the mail app (admin@ first, every mailbox listed). **Admin panel** in the sidebar and in Settings; **Back to mail** in the panel header; `#admin` keeps the panel across reloads, and the open mailbox is kept per tab.
 - Phone layout: the admin panel no longer overflows the screen; its section links scroll.
+
+## v3.09: blocked senders
+
+- `blocked_senders (mailbox_id, pattern)`: a lower-case address, or `@domain` covering the domain and its subdomains (never a bare top-level domain). At most 1000 per mailbox; removed when the mailbox is purged.
+- Inbound mail whose header From or envelope sender matches is stored with `is_junk = 1`, so it skips push notifications and forwarding; nothing is bounced.
+- `GET/POST/DELETE /api/blocked-senders?accountId=` are authorized per account like the mail API (the mailbox's own session or the admin). Custom mailboxes only; Gmail accounts get a clear refusal.
+- Blocking moves the sender's existing inbound mail in that mailbox to Junk (`moveExisting`, default on); unblocking leaves Junk as it is.
+- UI: **Block** in the desktop reader, **Block sender** in the Unsubscribe dialog (phones), **Settings → Blocked senders** with a mailbox picker, add and Unblock.
+- Fix: choosing the account that is already open no longer leaves the list on "Loading mail…"; it refreshes.
 
 ## Production rollout (LTM instance)
 

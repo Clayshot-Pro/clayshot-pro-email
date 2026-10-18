@@ -5,6 +5,7 @@ import { sendNewMailPush } from "../push";
 import { sanitizeEmailHtml } from "./html";
 import { domainOf } from "../appConfig";
 import { instanceSettings } from "../branding";
+import { isBlockedSender } from "../blockedSenders";
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENTS = 30;
@@ -125,7 +126,9 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const to = addresses(parsed.to);
   const cc = addresses(parsed.cc);
   const bodyText = truncateUtf8(parsed.text?.trim() || (parsed.html ? htmlToText(parsed.html) : ""), MAX_STORED_TEXT);
-  const isJunk = mailbox.spam_filter_enabled === 1 && suspectedJunk(parsed.subject ?? "", sender?.address || message.from, bodyText);
+  // A sender the mailbox blocked (header From or envelope) goes to Junk.
+  const isJunk = await isBlockedSender(env, mailbox.id, [sender?.address, message.from])
+    || (mailbox.spam_filter_enabled === 1 && suspectedJunk(parsed.subject ?? "", sender?.address || message.from, bodyText));
   const bodyHtml = parsed.html ? truncateUtf8(sanitizeEmailHtml(parsed.html), MAX_STORED_TEXT) || null : null;
   const threadId = await resolveThreadId(env, mailbox.id, inReplyTo, references);
   const key = `emails/${mailbox.id.replace(":", "_")}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${String(now.getUTCDate()).padStart(2, "0")}/${id}/raw.eml`;

@@ -69,4 +69,11 @@ if (migrations.includes("0020_instance_keys.sql")) {
     "the encryption key itself can never be stored in D1");
 }
 
+if (migrations.includes("0021_blocked_senders.sql")) {
+  assert.deepEqual(columns("blocked_senders"), ["mailbox_id", "pattern", "created_at"]);
+  db.exec("INSERT INTO blocked_senders (mailbox_id, pattern) VALUES ('native:primary', '@example.com')");
+  assert.throws(() => db.exec("INSERT INTO blocked_senders (mailbox_id, pattern) VALUES ('native:primary', '@example.com')"), /UNIQUE|PRIMARY/,
+    "a pattern is stored once per mailbox");
+}
+
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

@@ -1,4 +1,4 @@
-/** The stored sender photo belongs exclusively to the primary native mailbox. */
+/** The stored profile photo belongs exclusively to the admin mailbox. */
 export const primaryProfilePath = (pathname: string): boolean =>
   pathname === "/api/profile" || pathname === "/api/profile/photo";
 
@@ -18,7 +18,8 @@ export const protectedAccountPath = (pathname: string): boolean =>
   || pathname.startsWith("/api/drafts/")
   || pathname.startsWith("/api/attachment-previews/")
   || pathname.startsWith("/api/attachments/")
-  || pathname === "/api/contact-avatar";
+  || pathname === "/api/contact-avatar"
+  || pathname === "/api/blocked-senders";
 
 export async function requestedMailAccount(request: Request, url: URL): Promise<AccountTarget> {
   const query = url.searchParams.get("accountId")?.trim() || null;
