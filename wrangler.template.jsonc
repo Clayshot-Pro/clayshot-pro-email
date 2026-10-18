@@ -1,36 +1,35 @@
 {
+  // Template for the gitignored wrangler.jsonc. Rendered by `npm run config:render`
+  // from .env / build variables (see config/schema.mjs). Never put secrets here.
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "ltm-email-service",
+  "name": "__WORKER_NAME__",
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-09-12",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/", "/index.html", "/manifest.webmanifest"]
   },
-  "vars": {
-    "PRIMARY_ADDRESS": "contact@liamthemo.com",
-    "FORWARD_TO": ""
-  },
+  "vars": "__VARS__",
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "ltm-email-service",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "__D1_DATABASE_NAME__",
+      "database_id": "__D1_DATABASE_ID__",
       "migrations_dir": "./migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "MAIL",
-      "bucket_name": "ltm-email-service-mail"
+      "bucket_name": "__R2_BUCKET_NAME__"
     }
   ],
   "send_email": [
     {
       "name": "EMAIL",
-      "allowed_sender_addresses": ["contact@liamthemo.com"]
+      "allowed_sender_addresses": ["__PRIMARY_ADDRESS__"]
     },
     {
       "name": "EMAIL_MULTI"

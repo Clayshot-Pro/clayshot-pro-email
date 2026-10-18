@@ -3,7 +3,7 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import type { AuthenticationResponseJSON, AuthenticatorTransportFuture } from "@simplewebauthn/server";
-import { APP_ORIGIN, RP_ID } from "./config";
+import { appConfig } from "./appConfig";
 import { ownerSessionHash } from "./auth";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { hashMutationBody, isApprovedAdminMutation } from "./adminStepUpPolicy";
@@ -43,7 +43,7 @@ export async function stepUpOptions(request: Request, env: Env): Promise<Respons
   ).all<{id:string;transports:string|null}>();
   if (!credentials.results.length) return Response.json({error:"Passkey required"},{status:409});
   const options = await generateAuthenticationOptions({
-    rpID: RP_ID, userVerification: "required",
+    rpID: appConfig(env).rpId, userVerification: "required",
     allowCredentials: credentials.results.map(item => ({id:item.id,transports:decodeTransports(item.transports)})),
   });
   const challengeId = crypto.randomUUID();
@@ -85,8 +85,8 @@ export async function stepUpVerify(request: Request, env: Env): Promise<Response
     const result = await verifyAuthenticationResponse({
       response: payload.response,
       expectedChallenge: row.challenge,
-      expectedOrigin: APP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: appConfig(env).origin,
+      expectedRPID: appConfig(env).rpId,
       credential: {
         id: stored.id,
         publicKey: new Uint8Array(stored.public_key),

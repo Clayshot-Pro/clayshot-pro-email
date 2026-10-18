@@ -1,4 +1,4 @@
-import { APP_ORIGIN } from "../config";
+import { appConfig } from "../appConfig";
 import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, clearOAuthCookie } from "../deviceAuth";
 import { decryptSecret, encryptSecret } from "./crypto";
 import {
@@ -9,7 +9,7 @@ import {
   requireGoogleConfig,
 } from "./googleConfig";
 
-const REDIRECT_URI = `${APP_ORIGIN}/api/accounts/gmail/callback`;
+const redirectUri = (env: Env) => `${appConfig(env).origin}/api/accounts/gmail/callback`;
 const OAUTH_STATE_TTL_SECONDS = 600;
 const encoder = new TextEncoder();
 
@@ -74,7 +74,7 @@ function redirectWithStatus(status: string): Response {
   // per-device HttpOnly session cookie and clear its one-time nonce.
   return new Response(null, {
     status: 303,
-    headers: { Location: `${APP_ORIGIN}/?gmail=${encodeURIComponent(status)}`, "Cache-Control": "no-store" },
+    headers: { Location: `/?gmail=${encodeURIComponent(status)}`, "Cache-Control": "no-store" },
   });
 }
 
@@ -111,7 +111,7 @@ export async function startGoogleOAuth(_request: Request, env: Env): Promise<Res
 
   const query = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri(env),
     response_type: "code",
     scope: GOOGLE_SCOPE,
     access_type: "offline",
@@ -172,7 +172,7 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
     code,
     client_id: env.GOOGLE_CLIENT_ID,
     client_secret: env.GOOGLE_CLIENT_SECRET,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri(env),
     grant_type: "authorization_code",
     code_verifier: verifier,
   });

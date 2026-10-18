@@ -16,6 +16,7 @@ import {
   type Point,
 } from "../profilePhoto";
 import { Icon } from "./Icon";
+import { useInstance } from "../instance";
 
 type ProfileModalProps = {
   open: boolean;
@@ -34,6 +35,7 @@ type DragState = {
 const EMPTY_OFFSET: Point = { x: 0, y: 0 };
 
 export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: ProfileModalProps) {
+  const { brandName } = useInstance();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<DragState>({
     active: false,
@@ -299,7 +301,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
               <div className="profile-photo-copy">
                 <strong>Profile photo</strong>
                 <span>
-                  This photo appears in the app header and beside messages you send inside LTM Mails.
+                  This photo appears in the app header and beside messages you send inside {brandName}.
                 </span>
                 <div className="profile-photo-actions">
                   <button
@@ -327,7 +329,7 @@ export function ProfileModal({ open, photoUrl, onClose, onPhotoChange }: Profile
             <div className="profile-outbound-note">
               <Icon name="send" size={14} />
               <span>
-                Your photo is used for outbound messages inside LTM Mails. External email apps choose their own sender avatar and may not display this photo.
+                Your photo is used for outbound messages inside {brandName}. External email apps choose their own sender avatar and may not display this photo.
               </span>
             </div>
           </>

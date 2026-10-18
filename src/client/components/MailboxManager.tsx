@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { adminActionFetch, approveAdminAction, type AdminApproval } from "../adminActions";
+import { useInstance } from "../instance";
 
 type Mailbox = {
   id: string;
@@ -24,6 +25,7 @@ async function api(path: string, method = "GET", body?: unknown, approval?: Admi
 }
 
 export function MailboxManager({ onChanged }: { onChanged: () => void }) {
+  const { primaryDomain } = useInstance();
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [address, setAddress] = useState("");
@@ -175,7 +177,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
         <div>
           <p className="admin-section-kicker">Domain management</p>
           <h2>Mailboxes</h2>
-          <p>Create and manage addresses on liamthemo.com. Each mailbox has its own login and storage.</p>
+          <p>Create and manage addresses on {primaryDomain || "your domain"}. Each mailbox has its own login and storage.</p>
         </div>
         <span className="admin-mailbox-count">{loaded ? `${mailboxes.length} total` : "Loading…"}</span>
       </div>
@@ -197,7 +199,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
           <label htmlFor="new-mailbox-address">
             Email address
             <input id="new-mailbox-address" autoComplete="off" spellCheck={false} type="text" maxLength={254}
-              placeholder="example@liamthemo.com" value={address} onChange={e => setAddress(e.target.value)}
+              placeholder={`example@${primaryDomain || "example.com"}`} value={address} onChange={e => setAddress(e.target.value)}
               required className="mailbox-entry-input" />
           </label>
           <label htmlFor="new-mailbox-name">

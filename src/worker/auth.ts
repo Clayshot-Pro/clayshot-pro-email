@@ -10,7 +10,7 @@ import type {
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
-import { APP_ORIGIN, RP_ID } from "./config";
+import { appConfig } from "./appConfig";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { OWNER_IDLE_TTL_SECONDS, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS, readOwnerSessionToken } from "./ownerSessionPolicy";
 
@@ -214,11 +214,11 @@ export async function registrationOptions(request: Request, env: Env): Promise<R
   ).all<{ id: string; transports: string | null }>();
 
   const options = await generateRegistrationOptions({
-    rpName: "LTM Mails",
-    rpID: RP_ID,
+    rpName: appConfig(env).brand.name,
+    rpID: appConfig(env).rpId,
     userID: OWNER_USER_ID,
-    userName: "contact@liamthemo.com",
-    userDisplayName: "LTM Mail Owner",
+    userName: appConfig(env).primaryAddress,
+    userDisplayName: `${appConfig(env).brand.name} owner`,
     attestationType: "none",
     authenticatorSelection: {
       residentKey: "required",
@@ -263,8 +263,8 @@ export async function verifyRegistration(request: Request, env: Env): Promise<Re
     const verification = await verifyRegistrationResponse({
       response: body.response,
       expectedChallenge: challenge.challenge,
-      expectedOrigin: APP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: appConfig(env).origin,
+      expectedRPID: appConfig(env).rpId,
       requireUserVerification: true,
     });
     if (!verification.verified || !verification.registrationInfo) {
@@ -313,7 +313,7 @@ export async function authenticationOptions(request: Request, env: Env): Promise
   if (!credentials.results.length) return jsonError("Passkey setup required", 409);
 
   const options = await generateAuthenticationOptions({
-    rpID: RP_ID,
+    rpID: appConfig(env).rpId,
     userVerification: "required",
     allowCredentials: credentials.results.map((credential) => ({
       id: credential.id,
@@ -363,8 +363,8 @@ export async function verifyAuthentication(request: Request, env: Env): Promise<
     const verification = await verifyAuthenticationResponse({
       response: body.response,
       expectedChallenge: challenge.challenge,
-      expectedOrigin: APP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: appConfig(env).origin,
+      expectedRPID: appConfig(env).rpId,
       credential: {
         id: stored.id,
         publicKey: new Uint8Array(stored.public_key),

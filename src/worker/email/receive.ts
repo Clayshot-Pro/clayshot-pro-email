@@ -3,6 +3,7 @@ import { mailboxForRecipient, PRIMARY_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
 import { sanitizeEmailHtml } from "./html";
+import { appConfig, domainOf } from "../appConfig";
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENTS = 30;
@@ -94,7 +95,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const id = crypto.randomUUID();
   const now = new Date();
   const nowIso = now.toISOString();
-  const headerMessageId = (parsed.messageId?.trim() || message.headers.get("message-id")?.trim() || `<${id}@email.liamthemo.com>`).slice(0, 998);
+  const headerMessageId = (parsed.messageId?.trim() || message.headers.get("message-id")?.trim() || `<${id}@${domainOf(mailbox.email_address)}>`).slice(0, 998);
   // Delivery retries may reuse the same SMTP envelope/MIME, but two real
   // messages can share a sender-supplied RFC Message-ID. Dedup by MIME+recipient
   // over a short retention window, not by Message-ID.
@@ -178,6 +179,6 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     toAddress: message.to,
     preview: safePreview(bodyText),
   }));
-  const forwardTo = env.FORWARD_TO.trim();
+  const forwardTo = appConfig(env).forwardTo;
   if (forwardTo && mailbox.id === PRIMARY_MAILBOX_ID && !isJunk) ctx.waitUntil(message.forward(forwardTo));
 }

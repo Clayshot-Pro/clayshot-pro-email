@@ -3,6 +3,7 @@ import { startRegistration } from "@simplewebauthn/browser";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AccountSignIn } from "./AccountSignIn";
 import { unlockOwnerPasskey } from "./adminPasskey";
+import { useInstance } from "./instance";
 
 type AuthStatus = { configured: boolean; authenticated: boolean; setupAvailable: boolean; adminPasswordConfigured:boolean };
 type DeviceStatus = { authenticated: boolean; isAdmin: boolean; accountCount: number };
@@ -23,6 +24,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [setupToken, setSetupToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const instance = useInstance();
 
   const refresh = useCallback(async () => {
     try {
@@ -77,12 +79,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <img className="auth-logo" src="/apple-touch-icon.png" alt="" width="64" height="64" />
         <div className="auth-heading">
           <p className="auth-eyebrow">Private email</p>
-          <h1 id="auth-title">LTM Mails</h1>
+          <h1 id="auth-title">{instance.brandName}</h1>
         </div>
       </div>
       <p className="auth-intro">Welcome back. Sign in to access your inbox on this device.</p>
       {!device || !owner ? <div className="auth-state" role="status">Checking saved sessions…</div> : <>
-        <AccountSignIn onSignedIn={() => void refresh()} />
+        <AccountSignIn onSignedIn={() => void refresh()} showGoogle={instance.features.gmail} />
         {!owner.adminPasswordConfigured && <div className="account-signin-divider"><span>Administrator setup</span></div>}
         {owner.configured && !owner.adminPasswordConfigured ? (
           <button className="auth-secondary" disabled={busy} type="button" onClick={() => void adminLogin()}>

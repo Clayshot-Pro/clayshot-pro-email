@@ -1,11 +1,12 @@
-import { normalizeMailboxAddress } from "./mailboxRules";
+import { aliasTarget, normalizeMailboxAddress } from "./mailboxRules";
 import { credentialForMailbox } from "./deviceAuth";
+import { appConfig } from "./appConfig";
+import { addressRules, postmasterMailboxId } from "./domains";
 /**
  * Native mailboxes are addresses managed by the single existing passkey owner.
  * They are not distinct web-app login identities or SMTP accounts.
  */
 export const PRIMARY_MAILBOX_ID = "native:primary";
-const MAX_MAILBOXES = 100;
 
 function safeDisplayName(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -31,7 +32,7 @@ export async function mailboxById(env: Env, id: string): Promise<NativeMailbox |
 }
 
 export async function mailboxForRecipient(env: Env, address: string): Promise<NativeMailbox | null> {
-  const normalized = normalizeMailboxAddress(address, true);
+  const normalized = normalizeMailboxAddress(address, await addressRules(env, "routing"), true);
   if (!normalized) return null;
   // Exact mailbox routing has priority over plus-address aliases.
   const exact = await env.DB.prepare(
@@ -39,17 +40,18 @@ export async function mailboxForRecipient(env: Env, address: string): Promise<Na
   ).bind(normalized).first<NativeMailbox>();
   // An explicitly disabled address must not be revived by plus-alias fallback.
   if (exact) return exact.status === "active" && !exact.deleted_at ? exact : null;
-  const localPart = normalized.split("@", 1)[0];
-  // RFC postmaster and abuse are routed to the protected primary mailbox.
-  // Plus suffixes are accepted only if the parent mailbox exists and is active.
-  const alias = localPart === "postmaster" || localPart === "abuse"
-    ? "contact@liamthemo.com"
-    : localPart.includes("+")
-      ? `${localPart.split("+", 1)[0]}@liamthemo.com`
-      : null;
-  return alias ? env.DB.prepare(
-    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version FROM native_mailboxes WHERE email_address=?1 AND status='active'"
-  ).bind(alias).first<NativeMailbox>() : null;
+  // RFC postmaster and abuse go to the domain's postmaster mailbox (the
+  // protected primary mailbox by default). Plus suffixes are accepted only if
+  // the parent mailbox on the same domain exists and is active.
+  const alias = aliasTarget(normalized);
+  if (!alias) return null;
+  if (alias.kind === "postmaster") {
+    const box = await mailboxById(env, await postmasterMailboxId(env, alias.domain));
+    return box?.status === "active" && !box.deleted_at ? box : null;
+  }
+  return env.DB.prepare(
+    "SELECT id, email_address, display_name, status, quota_bytes, used_bytes, deleted_at, purge_after, spam_filter_enabled, usage_version FROM native_mailboxes WHERE email_address=?1 AND status='active' AND deleted_at IS NULL"
+  ).bind(alias.parent).first<NativeMailbox>();
 }
 
 export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
@@ -61,11 +63,14 @@ export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
 
 export async function createNativeMailbox(request: Request, env: Env): Promise<Response> {
   const body = await request.json<{ address?: unknown; displayName?: unknown }>().catch(() => null);
-  const address = typeof body?.address === "string" ? normalizeMailboxAddress(body.address) : null;
-  if (!address) return Response.json({ error: "Use an address under liamthemo.com with valid characters" }, { status: 400 });
+  const rules = await addressRules(env, "create");
+  const address = typeof body?.address === "string" ? normalizeMailboxAddress(body.address, rules) : null;
+  if (!address) {
+    return Response.json({ error: `Use an address under ${[...rules.domains].join(", ")} with valid characters` }, { status: 400 });
+  }
   const displayName = typeof body?.displayName === "string" ? safeDisplayName(body.displayName) : "";
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM native_mailboxes").first<{ n: number }>();
-  if ((count?.n ?? 0) >= MAX_MAILBOXES) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
+  if ((count?.n ?? 0) >= appConfig(env).limits.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
   const id = `native:${crypto.randomUUID()}`;
   const random = crypto.getRandomValues(new Uint8Array(32));
   const password = btoa(String.fromCharCode(...random))

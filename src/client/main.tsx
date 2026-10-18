@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AuthGate } from "./AuthGate";
+import { InstanceProvider } from "./instance";
 import { installMailFetchCache } from "./mailCache";
 import "./styles.css";
 import "./dark.css";
@@ -16,6 +17,6 @@ if (!root) throw new Error("Root element not found");
 
 createRoot(root).render(
   <StrictMode>
-    <AuthGate><App /></AuthGate>
+    <InstanceProvider><AuthGate><App /></AuthGate></InstanceProvider>
   </StrictMode>,
 );

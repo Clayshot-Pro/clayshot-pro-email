@@ -3,6 +3,9 @@ import { preparePassword, checkPassword } from "./passwordCrypto";
 import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
 import { checkAuthRateLimit, authRateLimitBucket } from "./security";
+import { appConfig } from "./appConfig";
+import { addressRules } from "./domains";
+import { beginAdminLogin } from "./adminAuth";
 
 const DEVICE_COOKIE = "__Host-ltm_device";
 const OAUTH_COOKIE = "__Host-ltm_oauth";
@@ -77,7 +80,7 @@ export async function rotateMailboxPassword(env: Env, id: string): Promise<strin
   return password; // only displayed once to the verified owner.
 }
 async function checkNativePassword(env: Env, address: string, password: string): Promise<string | null> {
-  const normalized = normalizeMailboxAddress(address);
+  const normalized = normalizeMailboxAddress(address, await addressRules(env, "routing"));
   const record = normalized ? await env.DB.prepare(`SELECT m.id, c.password_salt, c.password_hash, c.iterations
     FROM native_mailboxes m JOIN native_mailbox_credentials c ON c.mailbox_id=m.id
     WHERE m.email_address=?1 AND m.status='active' AND m.deleted_at IS NULL`)
@@ -118,9 +121,9 @@ export async function deviceAccountIds(request: Request, env: Env): Promise<stri
     LEFT JOIN native_mailboxes n ON g.provider='native' AND n.id=g.account_id
     LEFT JOIN connected_accounts a ON g.provider='gmail' AND a.id=g.account_id
     WHERE g.session_id=?1 AND (
-      (g.provider='native' AND n.status='active' AND n.deleted_at IS NULL AND n.email_address!='admin@liamthemo.com') OR
+      (g.provider='native' AND n.status='active' AND n.deleted_at IS NULL AND n.email_address!=?2) OR
       (g.provider='gmail' AND a.status IN ('active','reauth_required'))
-    )`).bind(session.id).all<{account_id:string}>();
+    )`).bind(session.id, appConfig(env).adminAddress).all<{account_id:string}>();
   return items.results.map(i => i.account_id);
 }
 export async function deviceStatus(request: Request, env: Env): Promise<Response> {
@@ -134,7 +137,17 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
   const input = await request.json<{ email?: unknown; password?: unknown }>().catch(() => null);
   const email = typeof input?.email === "string" ? input.email : "";
   const password = typeof input?.password === "string" ? input.password : "";
-  if (!email || email.trim().toLowerCase() === "admin@liamthemo.com" || password.length > 128) return jsonError("Invalid credentials", 401);
+  if (!email || password.length > 128) return jsonError("Invalid credentials", 401);
+  // The server, not the client, decides whether this is the reserved
+  // administrator sign-in (password + passkey); the admin address is not public.
+  if (email.trim().toLowerCase() === appConfig(env).adminAddress) {
+    if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "/api/admin/login/password")))) {
+      return jsonError("Too many authentication attempts", 429);
+    }
+    return beginAdminLogin(new Request(request.url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
+    }), env);
+  }
   if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))) {
     return jsonError("Too many attempts. Try again later.", 429);
   }

@@ -1,6 +1,7 @@
 import type { ConnectedAccount, Folder, FolderDefinition, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { Icon } from "./Icon";
+import { useInstance } from "../instance";
 
 type Props = {
   folders: FolderDefinition[];
@@ -37,10 +38,11 @@ export function Sidebar({
   onToggleNotifications,
   onOpenSettings,
 }: Props) {
+  const { brandName } = useInstance();
   return (
     <aside className="desktop-sidebar">
       <div className="brand-row">
-        <div className="brand-copy"><strong className="brand-title">LTM Mails</strong></div>
+        <div className="brand-copy"><strong className="brand-title">{brandName}</strong></div>
       </div>
 
       <button className="primary-compose" type="button" onClick={onCompose}>

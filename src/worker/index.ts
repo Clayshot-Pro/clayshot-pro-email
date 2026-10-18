@@ -32,7 +32,9 @@ import {
   verifyAuthentication,
   verifyRegistration,
 } from "./auth";
-import { APP_ORIGIN } from "./config";
+import { appConfig, ConfigError } from "./appConfig";
+import { instanceResponse, manifestResponse, shellResponse } from "./instance";
+import { bootstrapInstance, primaryAddressMismatch } from "./bootstrap";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
@@ -55,8 +57,8 @@ const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
 const jsonError = (message: string, status: number, headers?: HeadersInit) =>
   Response.json({ error: message }, { status, headers });
 
-const sameOrigin = (request: Request) =>
-  SAFE_METHODS.has(request.method) || request.headers.get("Origin") === APP_ORIGIN;
+const sameOrigin = (request: Request, origin: string) =>
+  SAFE_METHODS.has(request.method) || request.headers.get("Origin") === origin;
 
 function requestTooLarge(request: Request): boolean {
   const raw = request.headers.get("Content-Length");
@@ -99,7 +101,8 @@ function decodedRouteId(match: RegExpMatchArray): string | null {
 }
 
 async function routeApi(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
+  const config = appConfig(env);
+  if (!sameOrigin(request, config.origin)) return jsonError("Cross-origin request rejected", 403);
   if (!SAFE_METHODS.has(request.method) && requestTooLarge(request)) {
     return jsonError("Request body too large", 413);
   }
@@ -111,6 +114,9 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
   ) {
     return jsonError("Too many authentication attempts", 429, { "Retry-After": "60" });
   }
+
+  // Public instance identity for the sign-in screen (no addresses or secrets).
+  if (url.pathname === "/api/instance" && request.method === "GET") return instanceResponse(env);
 
   // Device authentication is independent from the privileged owner passkey.
   if (url.pathname === "/api/device/status" && request.method === "GET") return deviceStatus(request, env);
@@ -165,7 +171,10 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     }
   }
   if (url.pathname === "/api/admin/status" && request.method === "GET") {
-    return Response.json({passwordConfigured:await adminPasswordConfigured(env)});
+    const [passwordConfigured, primaryMismatch] = await Promise.all([
+      adminPasswordConfigured(env), primaryAddressMismatch(env),
+    ]);
+    return Response.json({ passwordConfigured, primaryMismatch });
   }
 
   // The primary mailbox owns its profile photo. Other mailbox sessions must
@@ -336,6 +345,15 @@ export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
+      try {
+        appConfig(env);
+      } catch (error) {
+        if (!(error instanceof ConfigError)) throw error;
+        // Key names only; never values.
+        console.error("instance_config_invalid", error.problems.join("; "));
+        return secureApiResponse(jsonError("Instance is not configured", 503));
+      }
+      await bootstrapInstance(env);
       const response = await routeApi(request, env, url);
       if (isApprovedAdminMutation(request.method, url.pathname)) {
         // Never retain request payload, mailbox passwords, cookies or assertions.
@@ -360,10 +378,17 @@ export default {
       }
       return secureApiResponse(response);
     }
+    if (request.method === "GET" && url.pathname === "/manifest.webmanifest") {
+      try { return await manifestResponse(env); } catch { return env.ASSETS.fetch(request); }
+    }
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+      return shellResponse(request, env);
+    }
     return env.ASSETS.fetch(request);
   },
 
   async email(message, env, ctx): Promise<void> {
+    await bootstrapInstance(env);
     await receiveEmail(message, env, ctx);
   },
 
@@ -372,7 +397,7 @@ export default {
     // Retry receipts only exist to prevent duplicate ingestion after transport
     // retries; they are not permanent message records.
     ctx.waitUntil(env.DB.prepare("DELETE FROM inbound_receipts WHERE first_seen_at<datetime('now','-7 days')").run().then(() => undefined));
-    if (env.MAILBOX_PURGE_ENABLED === "true") {
+    if (appConfig(env).features.purge) {
       ctx.waitUntil(purgeExpiredNativeMailboxes(env));
     }
     ctx.waitUntil(pruneAdminSecurityEvents(env));

@@ -47,30 +47,9 @@ jobs:
       - name: Native mailbox migration smoke test
         run: python3 scripts/test-mailbox-migration.py
 
-      - name: Per-device mailbox authorization regression
-        run: node --experimental-strip-types scripts/test-account-access.mjs
+      - name: Regression suite (config, auth boundary, mailbox rules, domains, transports, theming)
+        run: npm test
 
-      - name: Administrator privilege boundary and session policy regression
-        run: node --experimental-strip-types scripts/test-admin-auth-boundary.mjs
-
-      - name: Administrator step-up and audit regression
-        run: node --experimental-strip-types scripts/test-admin-stepup.mjs
-
-      - name: Mailbox rules and Junk heuristic tests
-        run: node --experimental-strip-types scripts/test-mailbox-rules.mjs
-
-      - name: Mailbox deletion consistency regression
-        run: node --experimental-strip-types scripts/test-mail-mutation-shields.mjs
-
-      - name: Administrator layout regression
-        run: node scripts/test-admin-layout.mjs
-
-      - name: Add Inbox and toggle label regression
-        run: node scripts/test-add-inbox-ui.mjs
- 
-      - name: Administrator password crypto regression
-        run: node --experimental-strip-types scripts/test-password-crypto.mjs
-      
       - name: Cloudflare Workers password-runtime integration
         run: |
           set -euo pipefail

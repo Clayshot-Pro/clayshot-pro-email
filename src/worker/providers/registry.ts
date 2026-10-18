@@ -2,6 +2,7 @@ import { gmailProvider } from "./gmailProvider";
 import { nativeProvider } from "./native";
 import { allNativeMailboxes, mailboxById, PRIMARY_MAILBOX_ID } from "../mailboxes";
 import type { MailProvider, MailProviderKind } from "./types";
+import { appConfig } from "../appConfig";
 
 export type ConnectedAccount = {
   id: string;
@@ -31,11 +32,11 @@ export async function ensureNativeAccount(env: Env): Promise<void> {
   await env.DB.prepare(`
     INSERT INTO connected_accounts (
       id, provider, provider_account_id, email_address, display_name, status, updated_at
-    ) VALUES (?1, 'native', ?1, ?2, 'LTM Email', 'active', CURRENT_TIMESTAMP)
+    ) VALUES (?1, 'native', ?1, ?2, ?3, 'active', CURRENT_TIMESTAMP)
     ON CONFLICT(id) DO UPDATE SET
       email_address = excluded.email_address,
       status = 'active', updated_at = CURRENT_TIMESTAMP
-  `).bind(NATIVE_ACCOUNT_ID, env.PRIMARY_ADDRESS).run();
+  `).bind(NATIVE_ACCOUNT_ID, appConfig(env).primaryAddress, appConfig(env).primaryDisplayName).run();
 }
 
 export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[]> {
@@ -64,7 +65,7 @@ export async function listConnectedAccounts(env: Env): Promise<ConnectedAccount[
       avatarUrl: box.id === NATIVE_ACCOUNT_ID ? primaryAvatarUrl : null,
       status: box.status,
       lastSyncedAt: null,
-      sendEnabled: box.id === NATIVE_ACCOUNT_ID || env.MULTI_SENDER_APPROVED === "true",
+      sendEnabled: box.id === NATIVE_ACCOUNT_ID || appConfig(env).features.multiSender,
     })),
     ...result.results.map((row) => ({
       id: row.id,
@@ -83,7 +84,7 @@ export async function resolveProvider(env: Env, accountId?: string | null): Prom
   const id = accountId?.trim() || NATIVE_ACCOUNT_ID;
   if (id.startsWith("native:")) {
     const box = await mailboxById(env, id);
-    return box?.status === "active" ? nativeProvider(env, box.id, box.email_address, box.id === NATIVE_ACCOUNT_ID ? "Liam" : box.display_name || box.email_address) : null;
+    return box?.status === "active" ? nativeProvider(env, box.id, box.email_address, box.id === NATIVE_ACCOUNT_ID ? appConfig(env).ownerDisplayName : box.display_name || box.email_address) : null;
   }
   const account = await env.DB.prepare(`
     SELECT provider, status, email_address

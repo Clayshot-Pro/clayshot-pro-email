@@ -1,5 +1,6 @@
 import type { ConnectedAccount, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
+import { useInstance } from "../instance";
 
 type Props = {
   open: boolean;
@@ -22,6 +23,7 @@ type Props = {
 };
 
 export function SettingsModal(props: Props) {
+  const { brandName } = useInstance();
   if (!props.open) return null;
 
   return (
@@ -56,7 +58,7 @@ export function SettingsModal(props: Props) {
         <div className="settings-scroll">
           <section className="settings-section">
             <h3>Inboxes</h3>
-            <p>Accounts available inside LTM Mails.</p>
+            <p>Accounts available inside {brandName}.</p>
             <div className="settings-accounts">
               {props.accounts.map((account) => (
                 <div className="settings-account" key={account.id}>

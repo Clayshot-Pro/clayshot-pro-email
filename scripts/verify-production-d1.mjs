@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
+import { loadConfigValues } from "../config/schema.mjs";
+import { PLACEHOLDER_DATABASE_ID, distWorkerDir } from "./config-lib.mjs";
 
-const CONFIG_PATH = new URL("../dist/ltm_email_service/wrangler.json", import.meta.url);
-const PLACEHOLDER_DATABASE_ID = "00000000-0000-0000-0000-000000000000";
+const { values } = loadConfigValues();
+const CONFIG_PATH = new URL(`../dist/${distWorkerDir(values.WORKER_NAME)}/wrangler.json`, import.meta.url);
 
 const config = await readFile(CONFIG_PATH, "utf8");
 

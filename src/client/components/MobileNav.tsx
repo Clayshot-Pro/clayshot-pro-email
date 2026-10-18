@@ -28,7 +28,7 @@ export function MobileNav({
         <select aria-label="Mail account" value={activeAccountId} onChange={event => onAccountChange(event.target.value)}>
           {accounts.map(account => (
             <option key={account.id} value={account.id}>
-              {account.provider === "gmail" ? "Gmail · " : "LTM · "}{account.emailAddress}
+              {account.provider === "gmail" ? "Gmail · " : ""}{account.emailAddress}
             </option>
           ))}
         </select>

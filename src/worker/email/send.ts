@@ -1,5 +1,6 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
+import { appConfig } from "../appConfig";
 
 type ReplyTarget = {
   id: string;
@@ -177,7 +178,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
 
   // Cloudflare's current binding permits only the primary sender.
   // Do not enable other addresses before provider policy and binding approval.
-  if (provider.kind === "native" && provider.address !== env.PRIMARY_ADDRESS && env.MULTI_SENDER_APPROVED !== "true") {
+  if (provider.kind === "native" && provider.address !== appConfig(env).primaryAddress && !appConfig(env).features.multiSender) {
     return Response.json({ error: "Sending from this mailbox is not enabled yet" }, { status: 403 });
   }
   const to = splitRecipients(form.get("to"));

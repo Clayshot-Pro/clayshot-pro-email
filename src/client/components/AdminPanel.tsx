@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { MailboxManager } from "./MailboxManager";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
+import { useInstance } from "../instance";
 
 export function AdminPanel() {
+  const { brandName } = useInstance();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -135,7 +137,7 @@ export function AdminPanel() {
           <div className="admin-home-identity">
             <img src="/apple-touch-icon.png" alt="" className="admin-home-logo" width={48} height={48} />
             <div>
-              <p className="admin-section-kicker">LTM Mail / Administrator</p>
+              <p className="admin-section-kicker">{brandName} / Administrator</p>
               <h1>Email administration</h1>
               <p className="admin-home-subtitle">Manage your domain's mailboxes and account security.</p>
             </div>

@@ -46,8 +46,8 @@ assert.match(worker,/await consumeAdminApproval\(request, env\)/,"Server must en
 assert.match(worker,/if \(adminMutationNeedsStepUp\(request.method, url.pathname\)\)/);
 assert.match(worker,/listAdminSecurityEvents\(env\)/);
 assert.match(stepUp,/verifyAuthenticationResponse\(/);
-assert.match(stepUp,/expectedOrigin: APP_ORIGIN/);
-assert.match(stepUp,/expectedRPID: RP_ID/);
+assert.match(stepUp,/expectedOrigin: appConfig\(env\)\.origin/);
+assert.match(stepUp,/expectedRPID: appConfig\(env\)\.rpId/);
 assert.match(stepUp,/requireUserVerification: true/);
 assert.match(stepUp,/DELETE FROM admin_stepup_challenges/);
 assert.match(stepUp,/AND uses<max_uses/);

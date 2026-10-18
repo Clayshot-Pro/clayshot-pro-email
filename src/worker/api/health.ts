@@ -1,3 +1,5 @@
+import { appConfig } from "../appConfig";
+
 export async function healthResponse(env: Env): Promise<Response> {
   const checks = {
     d1: false,
@@ -24,7 +26,7 @@ export async function healthResponse(env: Env): Promise<Response> {
     {
       ok,
       service: "ltm-email-service",
-      address: env.PRIMARY_ADDRESS,
+      address: appConfig(env).primaryAddress,
       checks,
       timestamp: new Date().toISOString(),
     },

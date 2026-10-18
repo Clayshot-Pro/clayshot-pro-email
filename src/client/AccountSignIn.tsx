@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { unlockOwnerPasskey } from "./adminPasskey";
+import { useInstance } from "./instance";
 
 export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: () => void; showGoogle?: boolean }) {
   const [email, setEmail] = useState("");
@@ -7,7 +8,10 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
   const [pending, setPending] = useState<"google" | "custom" | null>(null);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const isAdmin = email.trim().toLowerCase() === "admin@liamthemo.com";
+  // The server decides whether an address is the reserved administrator
+  // sign-in; it answers passkeyRequired and the passkey step follows.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const { primaryDomain } = useInstance();
 
   async function addGoogle() {
     setPending("google"); setError("");
@@ -26,15 +30,15 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
     event.preventDefault();
     setPending("custom"); setError("");
     try {
-      const response = await fetch(isAdmin ? "/api/admin/login/password" : "/api/device/login", {
+      const response = await fetch("/api/device/login", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       const result = await response.json() as {error?:string;passkeyRequired?:boolean};
       if (!response.ok) throw new Error(result.error || "Email sign-in failed");
       setPassword("");
-      if (isAdmin) {
-        if (!result.passkeyRequired) throw new Error("Administrator passkey verification required");
+      if (result.passkeyRequired) {
+        setIsAdmin(true);
         // A separate, server-bound passkey challenge completes the second factor.
         await unlockOwnerPasskey();
       }
@@ -70,7 +74,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
           inputMode="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@liamthemo.com"
+          placeholder={primaryDomain ? `name@${primaryDomain}` : "name@example.com"}
           autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
@@ -79,7 +83,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
         />
       </div>
       <div className="signin-field">
-        <label htmlFor="device-password">{isAdmin ? "Administrator password" : "Password"}</label>
+        <label htmlFor="device-password">Password</label>
         <div className="signin-password-field">
           <input
             id="device-password"
@@ -87,8 +91,8 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
-            minLength={isAdmin ? 8 : 16}
-            maxLength={isAdmin ? 32 : 128}
+            minLength={8}
+            maxLength={128}
             required
           />
           <button
@@ -102,7 +106,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
           </button>
         </div>
       </div>
-      {isAdmin ? <p className="signin-admin-note">Your registered passkey will be requested after your password.</p> : null}
+      {isAdmin ? <p className="signin-admin-note">Confirm with your registered passkey to finish signing in.</p> : null}
       <button className="auth-primary signin-submit" type="submit" disabled={pending !== null}>
         {pending === "custom" ? "Verifying…" : "Sign in to mailbox"}
       </button>
