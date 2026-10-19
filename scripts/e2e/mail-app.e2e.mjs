@@ -161,7 +161,14 @@ export async function run() {
         await page.evaluate(() => localStorage.setItem("ltm.remoteImages", "ask"));
         const asked = await openOrder();
         assert.equal(await asked.locator("#banner").getAttribute("src"), null, "hidden until asked");
+        await page.waitForFunction(() => {
+          const logo = document.querySelector(".rich-email-frame")?.contentDocument?.querySelector("#logo");
+          return logo?.complete && logo.naturalWidth > 0;
+        }, null, { timeout: 15_000 });
+        // The browser really requests the proxy (the frame's CSP allows it once images are shown).
+        const proxied = page.waitForRequest(request => request.url().startsWith(`${worker.origin}/api/image-proxy?url=`), { timeout: 15_000 });
         await page.getByRole("button", { name: "Show images" }).click();
+        await proxied;
         await page.waitForFunction(() => document.querySelector(".rich-email-frame")?.contentDocument?.querySelector("#banner")?.getAttribute("src")?.includes("/api/image-proxy?url="),
           null, { timeout: 15_000 });
         await page.evaluate(() => localStorage.removeItem("ltm.remoteImages"));
