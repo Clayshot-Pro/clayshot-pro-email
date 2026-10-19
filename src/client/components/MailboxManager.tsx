@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { adminActionFetch, approveAdminAction, type AdminApproval } from "../adminActions";
+import { adminJson, approveAdminAction, type AdminApproval } from "../adminActions";
 import { useInstance } from "../instance";
 
 type Mailbox = {
@@ -17,15 +17,8 @@ type Mailbox = {
   sender_name?: string | null;
 };
 
-async function api(path: string, method = "GET", body?: unknown, approval?: AdminApproval): Promise<Record<string, unknown>> {
-  const payload = body === undefined ? undefined : JSON.stringify(body);
-  const response = method === "GET"
-    ? await fetch(path, { cache: "no-store" })
-    : await adminActionFetch(path, method, payload, approval);
-  const result = await response.json() as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Mailbox operation failed");
-  return result;
-}
+const api = (path: string, method = "GET", body?: unknown, approval?: AdminApproval) =>
+  adminJson(path, method, body, "Mailbox operation failed", approval);
 
 export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   const { primaryDomain } = useInstance();
