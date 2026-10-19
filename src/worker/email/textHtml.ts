@@ -9,7 +9,8 @@ export function escapeHtml(value: string): string {
 }
 
 export function textToHtml(value: string): string {
-  return `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(value).replace(/\n/g, "<br>")}</div>`;
+  // A "\r" left in the pre-wrap block would render as a second line break.
+  return `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(value).replace(/\r\n?|\n/g, "<br>")}</div>`;
 }
 
 /** One-line message preview stored with each message. */

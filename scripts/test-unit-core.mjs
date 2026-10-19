@@ -44,6 +44,8 @@ export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE
   // Plain text becomes inert HTML.
   assert.equal(m.escapeHtml(`<a href="x" onclick='y'>&</a>`), "&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;&lt;/a&gt;");
   assert.equal(m.textToHtml("line 1\n<b>2</b>"), '<div style="white-space:pre-wrap;font-family:Arial,sans-serif">line 1<br>&lt;b&gt;2&lt;/b&gt;</div>');
+  // Browsers submit form text with CRLF; a "\r" left in a pre-wrap block shows as an extra blank line.
+  assert.equal(m.textToHtml("a\r\nb\rc"), m.textToHtml("a\nb\nc"), "every line break style becomes one <br>");
 
   // Credential encryption: round trip, bound to its name, tamper-evident, key-specific.
   const env = { PROVIDER_CREDENTIAL_KEY: Buffer.alloc(32, 9).toString("base64url") };

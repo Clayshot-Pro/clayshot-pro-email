@@ -276,7 +276,7 @@ export async function run() {
         await page.getByRole("button", { name: "New message" }).first().click();
         await page.fill(".compose-modal input[placeholder='name@example.com']", "bob@partner.test");
         await page.fill(".compose-modal input[placeholder='What’s this about?']", "Re: numbers");
-        await page.fill(".compose-modal textarea[aria-label='Message']", "Thanks Bob, received.");
+        await page.fill(".compose-modal textarea[aria-label='Message']", "Thanks Bob, received.\nSee you Friday.");
         await page.locator(".compose-modal button[type=submit]").click();
         await page.waitForFunction(() => !document.querySelector(".compose-modal") || document.querySelector(".compose-send-error"), null, { timeout: 20_000 });
         const error = await page.locator(".compose-send-error").allInnerTexts();
@@ -284,7 +284,13 @@ export async function run() {
         const aliceApi = api(alice.context, worker.origin);
         const sent = await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=sent`);
         if (!state.sendError) {
-          assert.ok(sent.json.messages.some(m => m.subject === "Re: numbers"), "the sent message is in Sent");
+          const message = sent.json.messages.find(m => m.subject === "Re: numbers");
+          assert.ok(message, "the sent message is in Sent");
+          // The form arrives with CRLF line breaks; each must stay one line break, not two.
+          const detail = (await aliceApi(`/api/messages/${encodeURIComponent(message.id)}?accountId=${encodeURIComponent(state.aliceId)}`)).json.message;
+          assert.equal(detail.bodyText, "Thanks Bob, received.\nSee you Friday.");
+          assert.doesNotMatch(detail.bodyHtml, /\r/, "no carriage return reaches the HTML part");
+          assert.match(detail.bodyHtml, /received\.<br>See you Friday\./);
         } else {
           // Local wrangler may not support outbound sending; the app must fail cleanly and keep nothing half-sent.
           assert.ok(!sent.json.messages.some(m => m.subject === "Re: numbers" && m.deliveryStatus === "sent"));

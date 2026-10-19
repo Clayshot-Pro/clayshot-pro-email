@@ -171,7 +171,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   const bcc = splitRecipients(form.get("bcc"));
   // Line breaks never reach a header, whatever the transport does with them.
   let subject = String(form.get("subject") ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_SUBJECT_CHARS);
-  const text = String(form.get("text") ?? "").slice(0, MAX_BODY_CHARS);
+  // Browsers submit form text with CRLF line breaks; store and send LF only.
+  const text = String(form.get("text") ?? "").replace(/\r\n?/g, "\n").slice(0, MAX_BODY_CHARS);
   const replyToMessageId = String(form.get("replyToMessageId") ?? "").trim() || null;
   const forwardMessageId = String(form.get("forwardMessageId") ?? "").trim() || null;
   const draftId = String(form.get("draftId") ?? "").trim() || null;
