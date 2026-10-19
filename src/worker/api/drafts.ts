@@ -1,3 +1,4 @@
+import { parseAddressList } from "../providers/native";
 import { resolveProvider } from "../providers/registry";
 type DraftRow = {
   id: string;
@@ -22,14 +23,6 @@ const MAX_ADDRESS_CHARS = 320;
 const DRAFT_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const MESSAGE_REF = /^[A-Za-z0-9_:.-]{1,256}$/;
 
-function parseArray(value: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 function splitRecipients(value: unknown): string[] {
   if (typeof value !== "string") return [];
@@ -41,9 +34,9 @@ function draftResponse(row: DraftRow) {
     id: row.id,
     accountId: row.mailbox_id,
     threadId: row.thread_id,
-    to: parseArray(row.to_addresses).join(", "),
-    cc: parseArray(row.cc_addresses).join(", "),
-    bcc: parseArray(row.bcc_addresses).join(", "),
+    to: parseAddressList(row.to_addresses).join(", "),
+    cc: parseAddressList(row.cc_addresses).join(", "),
+    bcc: parseAddressList(row.bcc_addresses).join(", "),
     subject: row.subject,
     text: row.body_text,
     replyToMessageId: row.reply_to_message_id ?? "",

@@ -1,3 +1,4 @@
+import { jsonError } from "./http";
 import { randomBase64Url, sha256Hex, toBase64Url } from "./bytes";
 import { mailboxPasswordError } from "./mailboxPasswordPolicy";
 import { preparePassword, checkPassword } from "./passwordCrypto";
@@ -13,7 +14,6 @@ import { beginAdminLogin } from "./adminAuth";
 const DEVICE_COOKIE = "__Host-ltm_device";
 const OAUTH_COOKIE = "__Host-ltm_oauth";
 const DEVICE_LIFETIME = 60 * 60 * 24 * 30;
-const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 
 type DeviceSessionRow = { id: string; token_hash: string };
 export type DeviceGrant = { account_id: string; provider: "native" | "gmail" };

@@ -1,3 +1,4 @@
+import { jsonError } from "./http";
 import { appConfig, isValidDomain } from "./appConfig";
 import { connectDomain } from "./cloudflare/domainConnect";
 import { cloudflareConnection } from "./storedKeys";
@@ -24,7 +25,6 @@ export type DomainRow = {
 };
 
 const TRANSPORTS = new Set<OutboundTransportKind>(["cloudflare", "resend", "none"]);
-const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 const validTheme = (value: unknown): value is ThemeId =>
   typeof value === "string" && (THEMES as readonly string[]).includes(value);
 

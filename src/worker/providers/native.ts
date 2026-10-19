@@ -3,7 +3,7 @@ import { transportChoice, transportFor } from "../transports";
 import { TransportError } from "../transports/types";
 import { textToHtml } from "../email/textHtml";
 
-type NativeMessageRow = {
+export type NativeMessageRow = {
   id: string;
   thread_id: string;
   direction: "inbound" | "outbound";
@@ -32,7 +32,7 @@ const folderWhere = {
   trash: "is_deleted = 1",
 } as const;
 
-function parseAddresses(value: string): string[] {
+export function parseAddressList(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
@@ -41,7 +41,7 @@ function parseAddresses(value: string): string[] {
   }
 }
 
-function toListItem(row: NativeMessageRow): ProviderMessage {
+export function toListItem(row: NativeMessageRow): ProviderMessage {
   return {
     id: row.id,
     threadId: row.thread_id,
@@ -49,7 +49,7 @@ function toListItem(row: NativeMessageRow): ProviderMessage {
     fromAddress: row.from_address,
     fromName: row.from_name,
     senderAvatarUrl: null,
-    toAddresses: parseAddresses(row.to_addresses),
+    toAddresses: parseAddressList(row.to_addresses),
     subject: row.subject,
     preview: row.preview,
     receivedAt: row.received_at,

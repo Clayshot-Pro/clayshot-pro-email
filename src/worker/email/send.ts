@@ -1,7 +1,9 @@
+import type { ProviderAttachment } from "../providers/types";
+import { forwardSubject, replySubject } from "../../client/mailUtils";
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
 import { gmailAttachment, gmailFullMessage } from "../providers/gmailProvider";
-import { textToHtml } from "./textHtml";
+import { messagePreview, textToHtml } from "./textHtml";
 import { fitsCloudflareApi } from "../transports/cloudflareApi";
 import { transportChoice } from "../transports";
 import { SAFE_DELIVERY_CODES, TransportError } from "../transports/types";
@@ -25,11 +27,7 @@ type StoredAttachment = {
   r2_key: string;
 };
 
-type Upload = {
-  filename: string;
-  type: string;
-  content: ArrayBuffer;
-};
+type Upload = ProviderAttachment;
 
 const MAX_ATTACHMENT_BYTES = 4_000_000;
 const MAX_BODY_CHARS = 500_000;
@@ -49,11 +47,6 @@ function splitRecipients(value: FormDataEntryValue | null): string[] {
         .filter(Boolean),
     ),
   ];
-}
-
-
-function preview(value: string): string {
-  return value.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
 function safeDeliveryError(error: unknown): string {
@@ -79,7 +72,7 @@ function userDeliveryError(code: string): string {
   if (code === "E_RECIPIENT_SUPPRESSED") {
     return "Recipient cannot currently receive this email";
   }
-  if (code === "E_SENDER_NOT_VERIFIED" || code === "E_SENDER_DOMAIN_NOT_AVAILABLE") {
+  if (code === "E_SENDER_NOT_VERIFIED") {
     return "This sender domain is not enabled or verified for Cloudflare Email Sending";
   }
   if (code === "E_RECIPIENT_NOT_ALLOWED") {
@@ -92,13 +85,6 @@ function userDeliveryError(code: string): string {
   return "Email delivery failed";
 }
 
-function replySubject(subject: string): string {
-  return /^re:/i.test(subject) ? subject : `Re: ${subject}`;
-}
-
-function forwardSubject(subject: string): string {
-  return /^(fwd|fw):/i.test(subject) ? subject : `Fwd: ${subject}`;
-}
 
 function attachmentKey(messageId: string, attachmentId: string, now: Date): string {
   return [
@@ -309,10 +295,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   }
 
   const allUploads = [...inheritedUploads, ...uploads];
-  if (
-    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0)
-    > MAX_ATTACHMENT_BYTES
-  ) {
+  const attachmentBytes = allUploads.reduce((sum, upload) => sum + upload.content.byteLength, 0);
+  if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
     return Response.json(
       { error: "Attachments must total less than 4 MB" },
       { status: 400 },
@@ -321,7 +305,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   // The Cloudflare Email Sending API caps a message at 5 MiB after base64
   // encoding; reject before reserving quota rather than failing in transport.
   if (nativeTransport === "cloudflare" && !fitsCloudflareApi(
-    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0), text.length + subject.length,
+    attachmentBytes, text.length + subject.length,
   )) {
     return Response.json(
       { error: "Attachments are too large for Cloudflare Email Sending (5 MB per message after encoding, about 3.7 MB of files)" },
@@ -376,7 +360,6 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   // invoked. Quota checks are atomic across concurrent mailboxes/requests.
   const bodyBytes = new TextEncoder().encode(text).byteLength
     + new TextEncoder().encode(textToHtml(text)).byteLength;
-  const attachmentBytes = allUploads.reduce((sum, upload) => sum + upload.content.byteLength, 0);
   const countedBytes = bodyBytes + attachmentBytes;
   if (provider.kind === "native") {
     const quota = await env.DB.prepare(
@@ -518,7 +501,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       JSON.stringify(cc),
       JSON.stringify(bcc),
       subject,
-      preview(text),
+      messagePreview(text),
       text,
       textToHtml(text),
       nowIso,

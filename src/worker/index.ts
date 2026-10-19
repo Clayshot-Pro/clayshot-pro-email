@@ -1,3 +1,4 @@
+import { jsonError } from "./http";
 import { sha256Hex } from "./bytes";
 import { primaryProfilePath, protectedAccountPath, requestedMailAccount } from "./accountAccess";
 import { imageProxy } from "./api/imageProxy";
@@ -66,8 +67,6 @@ const AUTH_POSTS = new Set([
   "/api/accounts/gmail/connect",
 ]);
 
-const jsonError = (message: string, status: number, headers?: HeadersInit) =>
-  Response.json({ error: message }, { status, headers });
 
 const sameOrigin = (request: Request): boolean => {
   try {

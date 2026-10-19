@@ -3,23 +3,15 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
-import type { AuthenticationResponseJSON, AuthenticatorTransportFuture } from "@simplewebauthn/server";
+import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { appOrigin, passkeyRpId } from "./config";
-import { ownerSessionHash } from "./auth";
+import { ownerSessionHash, parseTransports } from "./auth";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { hashMutationBody, isApprovedAdminMutation } from "./adminStepUpPolicy";
 
 const HASH = /^[0-9a-f]{64}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const APPROVAL_HEADER = "X-Admin-Step-Up";
-function decodeTransports(value: string | null): AuthenticatorTransportFuture[] | undefined {
-  if (!value) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is AuthenticatorTransportFuture =>
-      typeof item === "string" && ["usb", "nfc", "ble", "internal", "hybrid"].includes(item)) : undefined;
-  } catch { return undefined; }
-}
 
 
 export async function stepUpOptions(request: Request, env: Env): Promise<Response> {
@@ -37,7 +29,7 @@ export async function stepUpOptions(request: Request, env: Env): Promise<Respons
   if (!credentials.results.length) return Response.json({error:"Passkey required"},{status:409});
   const options = await generateAuthenticationOptions({
     rpID: passkeyRpId(request), userVerification: "required",
-    allowCredentials: credentials.results.map(item => ({id:item.id,transports:decodeTransports(item.transports)})),
+    allowCredentials: credentials.results.map(item => ({id:item.id,transports:parseTransports(item.transports)})),
   });
   const challengeId = crypto.randomUUID();
   await env.DB.prepare(
@@ -84,7 +76,7 @@ export async function stepUpVerify(request: Request, env: Env): Promise<Response
         id: stored.id,
         publicKey: new Uint8Array(stored.public_key),
         counter: stored.counter,
-        transports: decodeTransports(stored.transports),
+        transports: parseTransports(stored.transports),
       },
       requireUserVerification: true,
     });

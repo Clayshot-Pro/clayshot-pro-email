@@ -1,10 +1,10 @@
+import { jsonError } from "./http";
 import { deviceAuthorized } from "./deviceAuth";
 import {
   effectiveAppearance, ICON_SIZES, pngDimensions, readPreferences, readSettings, THEMES, updatePreferences, updateSettings,
   type InstanceSettings, type ThemeId,
 } from "./customization";
 
-const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 const MAX_ICON_BYTES = 1024 * 1024;
 
 export async function instanceSettings(env: Env): Promise<InstanceSettings> {

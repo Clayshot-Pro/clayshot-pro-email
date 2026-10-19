@@ -1,3 +1,4 @@
+import { jsonError } from "./http";
 import { randomBase64Url, sha256Hex } from "./bytes";
 import { adminPasswordConfigured, pendingAdminHash, consumePendingAdmin, clearPendingCookie } from "./adminAuth";
 import { revokeAllMailAlerts } from "./push";
@@ -48,8 +49,6 @@ type SessionRow = {
   user_agent: string | null;
 };
 
-const jsonError = (message: string, status: number) =>
-  Response.json({ error: message }, { status });
 
 
 function sessionCookie(token: string, maxAge = OWNER_SESSION_TTL_SECONDS): string {
@@ -60,7 +59,7 @@ function expiredSessionCookie(): string {
   return `${OWNER_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
-function parseTransports(value: string | null): AuthenticatorTransportFuture[] | undefined {
+export function parseTransports(value: string | null): AuthenticatorTransportFuture[] | undefined {
   if (!value) return undefined;
   try {
     const parsed: unknown = JSON.parse(value);

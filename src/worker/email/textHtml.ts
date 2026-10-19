@@ -11,3 +11,8 @@ export function escapeHtml(value: string): string {
 export function textToHtml(value: string): string {
   return `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(value).replace(/\n/g, "<br>")}</div>`;
 }
+
+/** One-line message preview stored with each message. */
+export function messagePreview(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 240);
+}

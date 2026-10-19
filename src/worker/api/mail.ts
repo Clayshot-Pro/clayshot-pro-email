@@ -1,3 +1,5 @@
+import { parseAddressList, toListItem, type NativeMessageRow } from "../providers/native";
+import { messagePreview } from "../email/textHtml";
 import PostalMime from "postal-mime";
 import { HTML_VERSION, sanitizeEmailHtml } from "../email/html";
 import { contentIdOf, safeFilename } from "../email/receive";
@@ -7,31 +9,14 @@ import { gmailAttachment, gmailFullMessage, gmailThread } from "../providers/gma
 import type { MailFolder, ProviderMutation } from "../providers/types";
 
 type Folder = "inbox" | "junk" | "starred" | "sent" | "drafts" | "archive" | "trash";
-type MessageRow = {
-  id: string;
-  thread_id: string;
-  direction: "inbound" | "outbound";
-  from_address: string;
-  from_name: string | null;
-  to_addresses: string;
+type MessageRow = NativeMessageRow & {
   cc_addresses: string;
   bcc_addresses: string;
-  subject: string;
-  preview: string;
   body_text: string | null;
   body_html: string | null;
-  received_at: string;
-  sent_at: string | null;
-  is_read: number;
-  is_starred: number;
-  is_archived: number;
-  is_deleted: number;
-  is_junk: number;
-  has_attachments: number;
   raw_r2_key: string | null;
   in_reply_to: string | null;
   reference_ids: string | null;
-  delivery_status: string | null;
   delivery_error: string | null;
   html_version: number;
 };
@@ -46,16 +31,6 @@ const MAX_RECOVERED_HTML = 2 * 1024 * 1024;
 const encoder = new TextEncoder();
 const folderFrom = (value: string | null): Folder => value && folders.has(value as Folder) ? value as Folder : "inbox";
 
-function parseArray(value: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-const preview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
 
 function truncateUtf8(value: string, maxBytes: number): string {
   if (encoder.encode(value).byteLength <= maxBytes) return value;
@@ -136,29 +111,6 @@ async function nativeUnsubscribeUrl(env: Env, key: string | null): Promise<strin
   }
 }
 
-function toListItem(row: MessageRow) {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    direction: row.direction,
-    fromAddress: row.from_address,
-    fromName: row.from_name,
-    toAddresses: parseArray(row.to_addresses),
-    subject: row.subject,
-    preview: row.preview,
-    receivedAt: row.received_at,
-    sentAt: row.sent_at,
-    isRead: Boolean(row.is_read),
-    isStarred: Boolean(row.is_starred),
-    isArchived: Boolean(row.is_archived),
-    isDeleted: Boolean(row.is_deleted),
-    isJunk: Boolean(row.is_junk),
-    hasAttachments: Boolean(row.has_attachments),
-    deliveryStatus: row.delivery_status,
-    isDraft: false,
-  };
-}
-
 function toDraftListItem(row: DraftListRow, primary: string) {
   return {
     id: row.id,
@@ -166,9 +118,9 @@ function toDraftListItem(row: DraftListRow, primary: string) {
     direction: "outbound" as const,
     fromAddress: primary,
     fromName: "You",
-    toAddresses: parseArray(row.to_addresses),
+    toAddresses: parseAddressList(row.to_addresses),
     subject: row.subject,
-    preview: preview(row.body_text),
+    preview: messagePreview(row.body_text),
     receivedAt: row.updated_at,
     sentAt: null,
     isRead: true,
@@ -237,8 +189,8 @@ function detailFrom(row: MessageRow, attachments: AttachmentRow[], unsubscribeUr
   const resolved = images ? resolveEmbeddedImages(row.body_html, attachments, images.origin, images.accountId) : { html: row.body_html, embedded: new Set<string>() };
   return {
     ...toListItem(row),
-    ccAddresses: parseArray(row.cc_addresses),
-    bccAddresses: parseArray(row.bcc_addresses),
+    ccAddresses: parseAddressList(row.cc_addresses),
+    bccAddresses: parseAddressList(row.bcc_addresses),
     bodyText: row.body_text ?? row.preview,
     bodyHtml: resolved.html || null,
     bodyHtmlAvailable: Boolean(row.body_html),
