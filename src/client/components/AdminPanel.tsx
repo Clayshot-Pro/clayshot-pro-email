@@ -11,6 +11,8 @@ import { adminActionFetch } from "../adminActions";
 import { instanceIconUrl, useInstance } from "../instance";
 import { useAdminView } from "../adminView";
 
+
+type AppVersion = { current: string; latest: string | null; updateAvailable: boolean };
 export function AdminPanel() {
   const { openMail } = useAdminView();
   const instance = useInstance();
@@ -22,6 +24,14 @@ export function AdminPanel() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [domainVersion, setDomainVersion] = useState(0);
+  const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/version", { cache: "no-store" })
+      .then(response => response.ok ? response.json() as Promise<AppVersion> : null)
+      .then(version => setAppVersion(version))
+      .catch(() => setAppVersion(null));
+  }, []);
 
   useEffect(() => {
     fetch("/api/admin/status", { cache: "no-store" })
@@ -165,6 +175,14 @@ export function AdminPanel() {
           </div>
         </header>
 
+        {appVersion?.updateAvailable && (
+          <section className="admin-update-notice" role="status" aria-label="Update available">
+            <strong>Version {appVersion.latest} is available</strong> (you have {appVersion.current}).
+            On GitHub, open your fork and choose <strong>Sync fork → Update branch</strong>. Cloudflare deploys it and the app
+            updates its database. <a href="https://github.com/LiamTheMo/LTM-Email-Service/commits/main" target="_blank" rel="noopener noreferrer">What's new</a>
+          </section>
+        )}
+
         <nav className="admin-home-nav" aria-label="Administrator sections">
           {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
@@ -192,7 +210,7 @@ export function AdminPanel() {
         )}
 
         <footer className="admin-home-footer">
-          <span>Administrator access requires your password and passkey.</span>
+          <span>Administrator access requires your password and passkey.{appVersion ? ` Version ${appVersion.current}.` : ""}</span>
           <a href="#admin-top">Back to top ↑</a>
         </footer>
         <PoweredBy />

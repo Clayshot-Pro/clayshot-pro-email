@@ -38,6 +38,7 @@ import { bootstrapInstance } from "./bootstrap";
 import { addBlockedSender, listBlockedSenders, removeBlockedSender } from "./blockedSenders";
 import { adminKeysResponse, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
 import { setupInstance } from "./setup";
+import { versionResponse } from "./version";
 import { deleteCloudflareToken, saveCloudflareToken } from "./cloudflare/routes";
 import { instanceSettings } from "./branding";
 import { checkDomainDns, connectDomainRoute, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
@@ -197,6 +198,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
       return jsonError("Password setup is temporarily unavailable (ADMIN_SETUP_FAILED). Please try again.", 503);
     }
   }
+  if (url.pathname === "/api/admin/version" && request.method === "GET") return versionResponse();
   if (url.pathname === "/api/admin/status" && request.method === "GET") {
     return Response.json({ passwordConfigured: await adminPasswordConfigured(env) });
   }

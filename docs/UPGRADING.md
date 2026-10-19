@@ -1,6 +1,17 @@
-# Upgrading
+# Updates
 
-Before any upgrade, back up D1 **and** R2 and test a restore. Then merge the new version into `main` (or run `npm run deploy:self`). Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
+Back up D1 **and** R2 before big updates. Then:
+
+- **Fork:** on GitHub, open your fork and choose **Sync fork → Update branch**. The admin panel shows when there is a new version.
+- **Other copies:** merge the new version into `main`, or run `npm run deploy:self`.
+
+Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
+
+## v3.13
+
+- Forks are the recommended setup and update with **Sync fork**; the admin panel shows the running version and when a newer one is out.
+- A fork built by Cloudflare needs no deploy keys: Wrangler links the database and bucket by name.
+- The GitHub Actions deploy runs only in the project repository, or in a fork that sets the repository variable `DEPLOY_WITH_ACTIONS` to `true`.
 
 ## v3.12
 

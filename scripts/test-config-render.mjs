@@ -81,6 +81,10 @@ assert.throws(() => renderWrangler({ ...committed, leak: "re_super_secret_value"
   /RESEND_API_KEY/, "a secret value appearing anywhere in the output is refused");
 assert.throws(() => renderWrangler(committed, { ...production, WORKER_NAME: "" }, DB_ID), /Missing value/);
 assert.throws(() => renderWrangler(committed, production, ""), /Missing value for D1_DATABASE_ID/);
+// null: a fork built by Workers Builds lets Wrangler link the database by name.
+const linked = parseJsonc(renderWrangler(committed, { ...defaults }, null));
+assert.equal(linked.d1_databases[0].database_id, undefined);
+assert.equal(linked.d1_databases[0].database_name, "ltm-email-service");
 const escaped = parseJsonc(renderWrangler(committed, { ...production, WORKER_NAME: "odd\"name" }, DB_ID));
 assert.equal(escaped.name, "odd\"name", "values cannot break out of their JSON string");
 

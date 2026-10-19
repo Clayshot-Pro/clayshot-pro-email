@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.12 are released; production (`main`) runs v3.12, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.13 are released; production (`main`) runs v3.13, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -19,6 +19,7 @@
 | `v3.10` | Per-mailbox profile photos; junk filter on for every mailbox with authentication and content signals (migration 0022) |
 | `v3.11` | Native HTML email reader: full reader width, app-themed rendering for ordinary mail, a light card only for designed mail |
 | `v3.12` | Easier setup: Deploy to Cloudflare button, in-app migrations, one-page setup with a Cloudflare token, automatic domain wiring (migration 0023) |
+| `v3.13` | Forks: deploy a GitHub fork with Cloudflare and update with Sync fork; app version and update notice; licence allows unmodified forks |
 
 ## Decisions applied in v3.05
 
@@ -107,9 +108,17 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Admin → Keys:** connect, replace or remove the token (`PUT`/`DELETE /api/admin/cloudflare`, passkey step-up). The token is never returned.
 - **Requires manual validation:** the Deploy button end to end in a fresh Cloudflare account; the token form link (Cloudflare publishes no template keys for the email permissions, which are added by hand); Email Sending onboarding on a paid plan.
 
+## v3.13: forks and updates
+
+- **Licence:** section 1A allows a public GitHub fork used only to run and update your own instance, while it holds no changes beyond upstream updates.
+- **Fork deploys:** Cloudflare Workers Builds imports the fork (`npm run build`, `npm run deploy`). Without deploy keys, `config-render.mjs` leaves the database ID out and Wrangler finds or creates `ltm-email-service` and its bucket by name, keeping them linked. With keys, a failed lookup still stops the deploy, so an existing instance is never bound to a new, empty database.
+- **Updates:** `package.json` carries the release version (`APP_VERSION`). `GET /api/admin/version` compares it with `main` of the project repository (cached six hours); the admin panel shows the version and an update notice pointing to **Sync fork**. Bump `version` with each release.
+- **GitHub Actions deploy** runs only in `LiamTheMo/LTM-Email-Service`, or in a fork with the variable `DEPLOY_WITH_ACTIONS=true`.
+- **Requires manual validation:** a fork imported into a fresh Cloudflare account end to end.
+
 ## Production rollout (LTM instance)
 
-**Done:** v3.12 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
+**Done:** v3.13 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
 Remaining, by hand:
 

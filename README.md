@@ -2,7 +2,7 @@
 
 **Private webmail you host on Cloudflare**: React PWA, Workers, D1, R2 and passkeys, with optional Gmail and Resend.
 
-> **License.** Free to run your own instance (personal or inside your organization, including commercially) with the "Powered by LTM Email Service" credit visible. No redistribution, public copies, hosting for others or paid access. See [LICENSE](./LICENSE).
+> **License.** Free to run your own instance (personal or inside your organization, including commercially) with the "Powered by LTM Email Service" credit visible. Forking on GitHub to run and update your instance is allowed; keep the fork unmodified. No redistribution, published modifications, hosting for others or paid access. See [LICENSE](./LICENSE).
 
 ## How it works
 
@@ -14,18 +14,20 @@ Everything about your instance (domains, mailboxes, branding, keys) lives in D1 
 
 You need a Cloudflare account with your mail domain on Cloudflare DNS, and a device with a passkey. Sending through Cloudflare needs the Workers Paid plan (or use Resend).
 
-### 1. Deploy
+### 1. Fork and deploy
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LiamTheMo/LTM-Email-Service)
-
-1. Click the button. Cloudflare copies the code to your GitHub, creates the database and storage, and deploys. No keys needed.
-2. Make your GitHub copy **private**: repository → **Settings → Danger Zone → Change visibility**.
+1. **Fork** this repository on GitHub (keep the name and the `main` branch).
+2. In Cloudflare: **Workers & Pages → Create → Import a repository**, pick your fork, then set **Build command** `npm run build` and **Deploy command** `npm run deploy`. Deploy. The database and storage are created on the first deploy; no keys needed.
 3. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address.
+
+Keep your fork unmodified: every setting lives in the app, and an unmodified fork updates cleanly.
 
 <details>
 <summary>Other ways to deploy</summary>
 
-**GitHub Actions.** In a private copy of this repository: create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, then add the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* token template plus **D1: Edit**). Every push to `main` deploys.
+**Deploy button** (a private copy that does not receive updates): [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LiamTheMo/LTM-Email-Service). Then make the GitHub copy private (**Settings → Danger Zone → Change visibility**).
+
+**GitHub Actions** instead of Cloudflare's builds: in your fork, enable Actions, set the repository variable `DEPLOY_WITH_ACTIONS` to `true`, create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, and add the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* token template plus **D1: Edit**). Every push to `main` deploys.
 
 **From your computer** (Node.js 22+):
 
@@ -39,7 +41,7 @@ npm run setup && npm run deploy:self
 
 ```text
 Deploy LTM Email Service (https://github.com/LiamTheMo/LTM-Email-Service) to my
-Cloudflare account from a private copy. Ask me for my Cloudflare account ID and a
+Cloudflare account from my fork of it. Ask me for my Cloudflare account ID and a
 deploy API token (Workers Scripts, D1 and Workers R2 Storage: Edit; Account
 Settings: Read) through a secret input; never print, commit or pass them as
 arguments. Run npm ci, copy config/env.example to .env, add both values, then run
@@ -86,7 +88,7 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 | Cloudflare token, Google OAuth, Resend, Email Sending API token | **Admin → Keys** (encrypted) |
 | `PROVIDER_CREDENTIAL_KEY` | Worker secret, created at setup. **Keep a copy:** losing it makes stored keys and Gmail connections unreadable (mail is unaffected) |
 | Push notification keys | Automatic |
-| Deploy token and account ID | GitHub secrets or `.env` (not needed with the Deploy button) |
+| Deploy token and account ID | Not needed for a fork deployed by Cloudflare; GitHub secrets or `.env` otherwise |
 | Worker, database and bucket names | `wrangler.jsonc` |
 
 ## Features
@@ -102,9 +104,9 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 - **Gmail:** create a Google OAuth *Web application* client with the Gmail API enabled and redirect URI `https://<app address>/api/accounts/gmail/callback`. Add its ID and secret in **Admin → Keys**, then **Add Inbox → Gmail**.
 - **Resend** (per domain): verify the domain in Resend, add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` in **Admin → Keys**, add the webhook URL shown in **Admin → Domains**, and switch the domain's sending to Resend.
 
-## Upgrading
+## Updates
 
-Back up D1 and R2, then merge the new version into `main` (or `npm run deploy:self`). Migrations apply automatically. Version notes: [docs/UPGRADING.md](./docs/UPGRADING.md).
+The admin panel shows when a new version is out. To update, open your fork on GitHub and choose **Sync fork → Update branch**. Cloudflare redeploys, and the app updates its database on the first request. Back up D1 and R2 before big updates. Version notes: [docs/UPGRADING.md](./docs/UPGRADING.md).
 
 ## Troubleshooting
 
@@ -147,7 +149,7 @@ docs/                  Upgrade notes, design records, security notes
 
 </details>
 
-More: [upgrading](./docs/UPGRADING.md) · [hostnames and passkeys](./docs/DEPLOYMENT_DOMAINS.md) · [admin sign-in](./docs/multi-mailbox/ADMIN_MFA.md) · [v3 status](./docs/v3/V3_IMPLEMENTATION_STATUS.md) · [security](./SECURITY.md)
+More: [updates](./docs/UPGRADING.md) · [hostnames and passkeys](./docs/DEPLOYMENT_DOMAINS.md) · [admin sign-in](./docs/multi-mailbox/ADMIN_MFA.md) · [v3 status](./docs/v3/V3_IMPLEMENTATION_STATUS.md) · [security](./SECURITY.md)
 
 ## License
 

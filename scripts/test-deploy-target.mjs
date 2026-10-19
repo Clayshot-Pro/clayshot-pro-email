@@ -20,6 +20,33 @@ const triggers = workflow.slice(workflow.indexOf("\non:"), workflow.indexOf("\np
 assert.match(triggers, /push:\n\s+branches:\n\s+- main\n/, "deploys on push to main");
 assert.doesNotMatch(triggers, /pull_request|schedule|workflow_run/, "no other automatic triggers");
 assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/, "manual runs are limited to main");
+assert.match(workflow, /github\.repository == 'LiamTheMo\/LTM-Email-Service' \|\| vars\.DEPLOY_WITH_ACTIONS == 'true'/,
+  "forks deploy with Workers Builds unless they opt in to this workflow");
+
+// A fork built by Workers Builds has no deploy keys: the render leaves the
+// database ID out (Wrangler links it by name); elsewhere a missing ID is an error.
+{
+  const { spawnSync } = await import("node:child_process");
+  const { readFileSync: read, writeFileSync: write } = await import("node:fs");
+  const file = new URL("../wrangler.jsonc", import.meta.url);
+  const committed = read(file, "utf8");
+  const clean = { ...process.env };
+  for (const key of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "D1_DATABASE_ID", "GITHUB_ACTIONS", "GITHUB_REF"]) delete clean[key];
+  const render = env => spawnSync(process.execPath, ["scripts/config-render.mjs"], { cwd: new URL("..", import.meta.url), env: { ...clean, ...env }, encoding: "utf8" });
+  try {
+    const fork = render({ WORKERS_CI: "1", WORKERS_CI_BRANCH: "main" });
+    assert.equal(fork.status, 0, fork.stderr);
+    const prepared = JSON.parse(read(file, "utf8").replace(/^\/\/.*\n/, ""));
+    assert.equal(prepared.d1_databases[0].database_id, undefined, "no ID: Wrangler links the database by name");
+    assert.equal(prepared.vars.LTM_WORKER_NAME, "ltm-email-service");
+    write(file, committed);
+    const strict = spawnSync(process.execPath, ["scripts/config-render.mjs", "--strict"], { cwd: new URL("..", import.meta.url), env: clean, encoding: "utf8" });
+    assert.notEqual(strict.status, 0, "outside Workers Builds a missing database ID and keys is an error");
+    assert.match(strict.stderr, /Missing required configuration/);
+  } finally {
+    write(file, committed);
+  }
+}
 const install = workflow.slice(workflow.indexOf("Install dependencies"), workflow.indexOf("Generate browser favicon"));
 assert.doesNotMatch(install, /CLOUDFLARE_API_TOKEN/, "the token is not exposed to npm ci");
 assert.doesNotMatch(workflow, /^\s{4}env:/m, "no job-wide secrets");

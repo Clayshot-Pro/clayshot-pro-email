@@ -9,6 +9,13 @@ Copyright (c) 2026 Sanghyuk Mo. All rights reserved except as granted below.
    instance, for your personal use or for the internal use of your
    organization, including a commercial organization.
 
+1A. Forks. You may fork the project repository on GitHub to deploy and keep
+   your own instance up to date. GitHub makes such a fork public; it is
+   permitted only while it (a) contains no changes other than updates taken
+   from the project repository, (b) keeps this license and every notice, and
+   (c) is used only to operate your own instance under section 1. Keep any
+   modifications in a private copy instead.
+
 2. Attribution. As a condition of this license, you must:
    (a) keep the software's built-in credit ("Powered by LTM Email Service",
        linking to the project repository) visible to users of your instance
@@ -21,7 +28,8 @@ Copyright (c) 2026 Sanghyuk Mo. All rights reserved except as granted below.
 
 3. Restrictions. You may not, in whole or in part, modified or unmodified:
    (a) distribute, publish, redistribute, sublicense, sell, rent, or lease
-       the software or source code, or make it available to any third party;
+       the software or source code, or make it available to any third party,
+       except through an unmodified fork permitted by section 1A;
    (b) publish your modifications, including in a public repository or fork;
    (c) provide the software, or a service substantially based on it, to third
        parties as a hosted or managed service, whether or not for a fee;
