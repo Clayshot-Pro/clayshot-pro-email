@@ -18,7 +18,7 @@ const paths: Record<IconName, ReactNode> = {
   archive: <><path d="M4 5h16v4H4z"/><path d="M6 9v10h12V9M9.5 13h5"/></>,
   trash: <><path d="M4 7h16M9 3h6l1 4H8l1-4ZM7 7l1 14h8l1-14"/><path d="M10 11v6M14 11v6"/></>,
   search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>,
-  compose: <><path d="M12 20H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7"/><path d="m14 5 5 5M11 13l8-8 2 2-8 8-4 1 1-4Z"/></>,
+  compose: <><path d="M11.5 4.5H7A2.5 2.5 0 0 0 4.5 7v10A2.5 2.5 0 0 0 7 19.5h10a2.5 2.5 0 0 0 2.5-2.5v-4.5"/><path d="M17.3 4.2a1.9 1.9 0 0 1 2.7 2.7l-7.6 7.6-3.4.8.8-3.4 7.5-7.7Z"/></>,
   reply: <><path d="m9 8-5 4 5 4"/><path d="M5 12h8a6 6 0 0 1 6 6"/></>,
   forward: <><path d="m15 8 5 4-5 4"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></>,
   back: <><path d="m15 18-6-6 6-6"/><path d="M9 12h10"/></>,
@@ -40,6 +40,7 @@ const duotoneFill: Partial<Record<IconName, ReactNode>> = {
   archive: <path d="M6 9v10h12V9z"/>,
   trash: <path d="M7 7l1 14h8l1-14z"/>,
   search: <circle cx="11" cy="11" r="6"/>,
+  compose: <path d="M17.3 4.2a1.9 1.9 0 0 1 2.7 2.7l-7.6 7.6-3.4.8.8-3.4 7.5-7.7Z"/>,
   bell: <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/>,
   lock: <rect x="5" y="10" width="14" height="11" rx="2"/>,
 };

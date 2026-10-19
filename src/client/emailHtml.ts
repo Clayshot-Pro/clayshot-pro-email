@@ -59,8 +59,11 @@ export function buildSafeEmailDocument(html: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">`;
   const finalSafetyStyles = `<style>
   html, body { margin: 0 !important; padding: 0 !important; min-width: 0; max-width: 100%; background: transparent !important; }
-  body { overflow-wrap: anywhere; word-break: normal; }
-  img, table { max-width: 100% !important; }
+  /* break-word, not anywhere: "anywhere" also lets a single letter count as a
+     table cell's minimum width, so a squeezed layout stacked text one letter
+     per line. Wide tables keep their width and the reader scales them to fit. */
+  body { overflow-wrap: break-word; word-break: normal; }
+  img { max-width: 100% !important; }
   img { height: auto !important; }
   pre { white-space: pre-wrap; }
   a { cursor: pointer; }

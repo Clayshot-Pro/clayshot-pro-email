@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.16 are released; production (`main`) runs v3.16, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.17 are released; production (`main`) runs v3.17, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -23,6 +23,7 @@
 | `v3.14` | End-to-end and unit tests; fixes from a security and bug review; real outbound Message-IDs (migration 0024) |
 | `v3.15` | Simpler fork deploys: the first GitHub Actions deploy creates the D1 database and R2 bucket; missing secrets are named |
 | `v3.16` | Fork deploys also provision when the Worker exists without a database (an earlier failed setup); an unreadable Worker names the account and permissions |
+| `v3.17` | New compose icon; mail with squeezed table layouts no longer renders one letter per line |
 
 ## Decisions applied in v3.05
 
@@ -141,6 +142,11 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Fork steps:** fork → enable Actions → token (*Edit Cloudflare Workers* + D1: Edit) → two repository secrets → run **Deploy production**.
 - **Requires manual validation:** a first deploy into a fresh Cloudflare account.
 - **v3.16:** a Worker that exists without a DB binding (made in the dashboard, or left by an earlier failed setup) has no data, so it is provisioned like a missing one. A Worker that cannot be read stops the deploy and names the account ID and token permissions to check.
+
+## v3.17: compose icon and narrow mail
+
+- **Compose icon:** a rounded square with a pencil, matching the other outline icons (and tinted in the duotone set).
+- **One letter per line:** the reader set `overflow-wrap: anywhere`, which lets a single letter count as a table cell's minimum width; a squeezed newsletter layout then stacked its text letter by letter. It now uses `break-word`, and wide tables keep their width so the reader scales them to fit, as mail apps do. The sanitizer e2e suite renders such layouts at phone width and requires whole words.
 
 ## Production rollout (LTM instance)
 

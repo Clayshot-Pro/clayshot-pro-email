@@ -93,6 +93,36 @@ window.render = html => buildSafeEmailDocument(sanitizeEmailHtml(html));`,
         assert.equal(result.ping, null, "no link pings");
         assert.equal(result.dangerous, 0, "no frames, plugins, forms, refresh, base, stylesheets or media");
       }]),
+      ["squeezed table layouts keep whole words at phone width (never one letter per line)", async () => {
+        const layouts = [
+          `<table style="width:100%"><tr><td style="width:520px">Main column text that should wrap normally.</td><td>Sidebar notes for the reader</td></tr></table>`,
+          `<table width="600"><tr><td width="180">Logo</td><td>Your order has shipped and will arrive on Thursday.</td></tr></table>`,
+          `<table width="100%"><tr><td width="95%">Wide</td><td>Receipt number and delivery details</td></tr></table>`,
+        ];
+        for (const html of layouts) {
+          const charsPerLine = await page.evaluate(async source => {
+            const frame = document.createElement("iframe");
+            frame.style.width = "360px";
+            frame.setAttribute("sandbox", "allow-same-origin");
+            frame.srcdoc = window.render(source);
+            document.body.replaceChildren(frame);
+            await new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
+            const doc = frame.contentDocument;
+            let worst = Infinity;
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              const text = node.textContent.trim();
+              if (text.length < 4) continue;
+              const range = doc.createRange();
+              range.selectNodeContents(node);
+              const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+              worst = Math.min(worst, text.length / lines);
+            }
+            return worst;
+          }, html);
+          assert.ok(charsPerLine >= 4, `${html.slice(0, 60)}… renders ${charsPerLine.toFixed(1)} characters per line`);
+        }
+      }],
       ["no request ever left the page", async () => {
         assert.deepEqual(leaks, [], "remote images, styles, frames and pings are all blocked");
       }],
