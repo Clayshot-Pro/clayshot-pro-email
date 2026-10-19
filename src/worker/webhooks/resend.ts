@@ -25,52 +25,59 @@ export async function resendWebhook(request: Request, env: Env): Promise<Respons
     return allowed ? reply({ error: "Unauthorized" }, 401) : reply({ error: "Too many requests" }, 429);
   }
 
-  // Replays of an already-processed event are acknowledged and ignored.
-  const claimed = await env.DB.prepare("INSERT OR IGNORE INTO webhook_receipts (provider, event_id) VALUES ('resend', ?1)")
-    .bind(headers.id).run();
-  if (!claimed.meta.changes) return reply({ ok: true, duplicate: true });
+  // Replays of an already-processed event are acknowledged and ignored. The receipt is
+  // written in the same batch as the event's effects, so a failure part way leaves
+  // nothing recorded and Resend's retry is processed again. Every write is idempotent,
+  // so two deliveries racing each other do no harm.
+  const seen = await env.DB.prepare("SELECT 1 AS seen FROM webhook_receipts WHERE provider = 'resend' AND event_id = ?1")
+    .bind(headers.id).first();
+  if (seen) return reply({ ok: true, duplicate: true });
+  const receipt = env.DB.prepare("INSERT OR IGNORE INTO webhook_receipts (provider, event_id) VALUES ('resend', ?1)").bind(headers.id);
 
   let event: ResendEvent;
-  try { event = JSON.parse(body) as ResendEvent; } catch { return reply({ ok: true, ignored: "malformed" }); }
+  try { event = JSON.parse(body) as ResendEvent; } catch {
+    await receipt.run();
+    return reply({ ok: true, ignored: "malformed" });
+  }
   const effect = eventEffect(event);
   const emailId = typeof event.data?.email_id === "string" ? event.data.email_id.slice(0, 200) : "";
-  if (!emailId) return reply({ ok: true, ignored: "event" });
+  if (!emailId) {
+    await receipt.run();
+    return reply({ ok: true, ignored: "event" });
+  }
 
   const attempt = await env.DB.prepare(
     "SELECT mailbox_id, message_id FROM outbound_attempts WHERE transport = 'resend' AND provider_message_id = ?1 LIMIT 1",
   ).bind(emailId).first<{ mailbox_id: string; message_id: string | null }>();
+  const statements: D1PreparedStatement[] = [];
   // Every email.* event carries the RFC Message-ID; record it if sending could not.
   const messageIdHeader = rfcMessageId(event.data?.message_id);
   if (attempt?.message_id && messageIdHeader) {
     // OR IGNORE: message_id is unique; a clash must not fail the status update below.
-    await env.DB.prepare("UPDATE OR IGNORE messages SET message_id = ?3 WHERE id = ?1 AND mailbox_id = ?2 AND message_id IS NULL")
-      .bind(attempt.message_id, attempt.mailbox_id, messageIdHeader).run();
+    statements.push(env.DB.prepare("UPDATE OR IGNORE messages SET message_id = ?3 WHERE id = ?1 AND mailbox_id = ?2 AND message_id IS NULL")
+      .bind(attempt.message_id, attempt.mailbox_id, messageIdHeader));
   }
-  if (!effect) return reply({ ok: true, ignored: "event" });
-  if (attempt) {
+  if (effect && attempt) {
     const now = new Date().toISOString();
     const message = attempt.message_id
       ? await env.DB.prepare("SELECT delivery_status FROM messages WHERE id = ?1 AND mailbox_id = ?2")
         .bind(attempt.message_id, attempt.mailbox_id).first<{ delivery_status: string | null }>()
       : null;
-    const statements = [
-      env.DB.prepare(`UPDATE outbound_attempts SET last_event = ?2, last_event_at = ?3, updated_at = CURRENT_TIMESTAMP
-        WHERE transport = 'resend' AND provider_message_id = ?1`).bind(emailId, effect.status, now),
-    ];
+    statements.push(env.DB.prepare(`UPDATE outbound_attempts SET last_event = ?2, last_event_at = ?3, updated_at = CURRENT_TIMESTAMP
+        WHERE transport = 'resend' AND provider_message_id = ?1`).bind(emailId, effect.status, now));
     if (message && attempt.message_id && shouldReplaceStatus(message.delivery_status, effect.status)) {
       statements.push(env.DB.prepare("UPDATE messages SET delivery_status = ?3, delivery_event_at = ?4 WHERE id = ?1 AND mailbox_id = ?2")
         .bind(attempt.message_id, attempt.mailbox_id, effect.status, now));
     }
-    await env.DB.batch(statements);
   }
-  if (effect.suppress) {
-    const targets = suppressionTargets(event);
-    if (targets.length) {
-      await env.DB.batch(targets.map(address => env.DB.prepare(
-        "INSERT OR IGNORE INTO suppressed_recipients (address, reason, source) VALUES (?1, ?2, 'resend')",
-      ).bind(address, effect.suppress)));
+  if (effect?.suppress) {
+    for (const address of suppressionTargets(event)) {
+      statements.push(env.DB.prepare("INSERT OR IGNORE INTO suppressed_recipients (address, reason, source) VALUES (?1, ?2, 'resend')")
+        .bind(address, effect.suppress));
     }
   }
+  await env.DB.batch([...statements, receipt]);
+  if (!effect) return reply({ ok: true, ignored: "event" });
   return reply({ ok: true });
 }
 
