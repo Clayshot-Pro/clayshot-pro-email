@@ -28,6 +28,8 @@ const INLINE_DOWNLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "
 /** Raster types an email may embed (cid:); the preview endpoint serves exactly these images. */
 const EMBEDDABLE_IMAGE_TYPES = INLINE_DOWNLOAD_TYPES;
 const MAX_RECOVERED_HTML = 2 * 1024 * 1024;
+/** Messages shown in one conversation (one bound parameter each when loading attachments). */
+const MAX_THREAD_MESSAGES = 100;
 const encoder = new TextEncoder();
 const folderFrom = (value: string | null): Folder => value && folders.has(value as Folder) ? value as Folder : "inbox";
 
@@ -255,14 +257,18 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
     ]);
   }
 
-  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) ASC LIMIT 100`)
+  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) DESC, id DESC LIMIT ${MAX_THREAD_MESSAGES}`)
     .bind(row.thread_id, provider.accountId)
     .all<MessageRow>();
+  // The newest messages, oldest first. An older opened message takes the place of the
+  // oldest one, so it is always shown and the list stays within D1's 100 bound parameters.
+  const newest = threadRows.results.reverse();
+  const listed = newest.some((entry) => entry.id === row.id) ? newest : [row, ...newest.slice(1)];
   // Older messages of the conversation are rebuilt too (a few per open), after the
   // opened one, so every message shows its images.
   let rebuilds = 10;
   const rows = [];
-  for (const entry of threadRows.results) {
+  for (const entry of listed) {
     rows.push(entry.id === row.id ? row : rebuilds > 0 && (entry.html_version ?? 1) < HTML_VERSION && entry.direction === "inbound"
       ? (rebuilds--, await recoverStoredHtml(env, entry))
       : entry);

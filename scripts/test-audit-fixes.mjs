@@ -233,6 +233,28 @@ async function run(m) {
     assert.equal((await response.json()).newlyReadCount, 1, "the archived unread message was never in the badge");
     assert.deepEqual(db.prepare("SELECT id FROM messages WHERE is_read = 1 AND direction = 'inbound' ORDER BY id").all().map(row => row.id), ["m1", "m2"]);
   }
+  {
+    // A conversation of more than 100 messages (CI alerts all referencing one root) shows
+    // its newest 100, always including the opened message, within D1's 100 bound parameters.
+    const db = database();
+    db.exec("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES ('t-long', 'native:work', '2026-10-01T02:00:00Z')");
+    const insert = db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_text, html_version)
+      VALUES (?, 'native:work', 't-long', 'inbound', 'alerts@ci.test', '[]', 'Build alerts', '', ?, 'x', 2)`);
+    const id = i => `b${String(i).padStart(3, "0")}`;
+    for (let i = 0; i <= 100; i++) insert.run(id(i), new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString());
+    const env = { DB: d1(db), MAIL: { get: async () => null } };
+    const open = async messageId => {
+      const response = await m.getMessage(new Request(`https://mail.example.org/api/messages/${messageId}?accountId=native:work`), messageId, env);
+      assert.equal(response.status, 200, `${messageId} opens`);
+      return (await response.json()).thread.map(entry => entry.id);
+    };
+    const newest = await open(id(100));
+    assert.deepEqual(newest, Array.from({ length: 100 }, (_, i) => id(i + 1)), "the newest 100, oldest first");
+    const oldest = await open(id(0));
+    assert.equal(oldest.length, 100);
+    assert.deepEqual(oldest.slice(0, 2), [id(0), id(2)], "an older opened message takes the place of the oldest shown");
+    assert.equal(oldest.at(-1), id(100));
+  }
 
   // Disabling or deleting a mailbox revokes signed-in devices; the first passkey is registered atomically.
   const mailboxes = source("worker/mailboxes.ts");
