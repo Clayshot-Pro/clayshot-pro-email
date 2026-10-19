@@ -10,6 +10,7 @@ Deploys apply migrations, and the app applies any still pending on its first req
 ## v3.18
 
 - Phone notifications keep working: open the app once after updating on each phone so it re-registers. iPhone users need the app added to the Home Screen.
+- Admin: open the app once on your phone while signed in as admin to receive alerts for every mailbox.
 
 ## v3.17
 

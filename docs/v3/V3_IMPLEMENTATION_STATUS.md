@@ -24,7 +24,7 @@
 | `v3.15` | Simpler fork deploys: the first GitHub Actions deploy creates the D1 database and R2 bucket; missing secrets are named |
 | `v3.16` | Fork deploys also provision when the Worker exists without a database (an earlier failed setup); an unreadable Worker names the account and permissions |
 | `v3.17` | New compose icon; mail with squeezed table layouts no longer renders one letter per line |
-| `v3.18` | Reliable phone notifications: re-registration on start, sign-ins renewed while used, high-urgency pushes, Home Screen hint on iPhone |
+| `v3.18` | Reliable phone notifications: re-registration on start, sign-ins renewed while used, high-urgency pushes, Home Screen hint on iPhone; sender and subject in alerts; admin phones alerted for every mailbox (migration 0025) |
 
 ## Decisions applied in v3.05
 
@@ -154,6 +154,8 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Why alerts stopped on some phones:** a push subscription is bound to the sign-in it was made in, and device sign-ins ended after a fixed 30 days. The phone kept its subscription and showed notifications as on, but the server only alerts live sign-ins, so alerts stopped silently.
 - **Fixes:** the app re-registers its subscription on every start (so a new sign-in takes it over); a device sign-in is renewed for 30 days, with the same token, when the app is opened after a week; the service worker registers a subscription the browser rotates (`pushsubscriptionchange`); pushes are sent with high urgency (Android delivers them while idle) and a 24-hour TTL; failed deliveries log the push service and its reason.
 - **iPhone/iPad:** outside an installed Home Screen app the bell says **Add to Home Screen for notifications** instead of "unavailable". Settings now says alerts show the sender, subject and a preview (they always did).
+- **Alert text:** the sender is the title; the body is the subject, then a short preview.
+- **Administrator:** a phone that turns alerts on while signed in as admin gets alerts for every mailbox (the title also names the mailbox) for 30 days, renewed each time the app starts with the admin signed in. Admin passkey sessions stay short (12 hours, 1 hour idle); signing out as admin, signing out other sessions, ending that session or changing the admin password stops it (`push_subscriptions.all_mail_until`, migration 0025).
 - **Requires manual validation:** an iPhone installed from the Home Screen and an Android phone receiving an alert after the update.
 
 ## Production rollout (LTM instance)

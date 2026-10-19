@@ -12,6 +12,7 @@ import { build } from "esbuild";
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const b64url = bytes => Buffer.from(bytes).toString("base64url");
+const sha256Hex = async value => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))).toString("hex");
 
 function d1(db) {
   const statement = (sql, args = []) => ({
@@ -90,6 +91,62 @@ async function run(m) {
   assert.ok(warnings.some(line => line.includes("web.push.apple.com 403 {\"reason\":\"BadJwtToken\"}")), "the service's reason is logged");
   assert.ok(!warnings.some(line => line.includes("misconfigured-phone")), "the endpoint itself is never logged");
 
+  // Alerts read like a mail app: sender as the title, then subject and preview;
+  // administrator alerts also name the receiving mailbox.
+  const mail = { id: "m2", subject: "Lunch on Friday?", fromAddress: "sam@example.net", fromName: "Sam Lee", toAddress: "friend@example.org", preview: "Are you free around noon" };
+  assert.deepEqual(m.notificationCopy(mail), { title: "Sam Lee", body: "Lunch on Friday?\nAre you free around noon" });
+  assert.deepEqual(m.notificationCopy({ ...mail, fromName: null, preview: "" }), { title: "sam@example.net", body: "Lunch on Friday?" });
+  assert.deepEqual(m.notificationCopy({ ...mail, subject: "" }, true), { title: "Sam Lee → friend@example.org", body: "(no subject)\nAre you free around noon" });
+
+  // The administrator's phone gets every mailbox's mail for 30 days after enabling
+  // alerts as admin, even after the short admin session has ended.
+  {
+    const adminToken = "a".repeat(43);
+    const adminHash = await sha256Hex(adminToken);
+    db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('admin-1', ?, datetime('now', '+12 hours'), datetime('now'))").run(adminHash);
+    const enable = await m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
+      method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` },
+      body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
+    }), env);
+    assert.equal(enable.status, 201);
+    const until = db.prepare("SELECT julianday(all_mail_until) - julianday('now') AS d FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().d;
+    assert.ok(until > 29.9 && until < 30.1, `all-mail alerts for 30 days (${until})`);
+    db.prepare("DELETE FROM auth_sessions WHERE session_id = 'admin-1'").run();
+
+    const deliver = async () => {
+      const calls = [];
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = async url => { calls.push(String(url)); return new Response("", { status: 201 }); };
+      try { await m.sendNewMailPush(env, mail); } finally { globalThis.fetch = realFetch; }
+      return calls;
+    };
+    assert.ok((await deliver()).some(url => url.includes("admin-phone")), "the admin phone gets the friend's mail after the admin session ended");
+
+    // Registering again without the admin session keeps it; with it, renews it.
+    await m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
+      method: "POST", body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
+    }), env).catch(() => null);
+    assert.ok(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until);
+
+    // Signing out as admin, signing out other sessions, or a password change stops it.
+    db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('admin-2', ?, datetime('now', '+12 hours'), datetime('now'))").run(adminHash);
+    await m.logout(new Request("https://mail.example.org/api/auth/logout", { method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` } }), env);
+    assert.equal(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until, null);
+    assert.ok(!(await deliver()).some(url => url.includes("admin-phone")), "after admin sign-out the phone only gets its own mailboxes");
+
+    db.prepare("UPDATE push_subscriptions SET all_mail_until = datetime('now', '+10 days'), owner_session_hash = 'other-hash' WHERE endpoint LIKE '%admin-phone'").run();
+    const keepToken = "k".repeat(43);
+    db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('keep', ?, datetime('now', '+12 hours'), datetime('now'))").run(await sha256Hex(keepToken));
+    await m.resetSessions(new Request("https://mail.example.org/api/auth/sessions/reset", { method: "POST", headers: { Cookie: `__Host-ltm_session=${keepToken}` } }), env);
+    assert.equal(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until, null,
+      "signing out other sessions stops other phones' all-mail alerts");
+    db.prepare("UPDATE push_subscriptions SET all_mail_until = datetime('now', '+10 days') WHERE endpoint LIKE '%admin-phone'").run();
+    await m.revokeAllMailAlerts(env, "all").run();
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM push_subscriptions WHERE all_mail_until IS NOT NULL").get().n, 0);
+    assert.match(readFileSync(new URL("../src/worker/adminAuth.ts", import.meta.url), "utf8"), /DELETE FROM auth_sessions"\),\s+revokeAllMailAlerts\(env, "all"\)/,
+      "a password change stops all-mail alerts with the sessions");
+  }
+
   // Signing in again re-binds the phone's existing subscription to the new session.
   assert.match(source("src/client/App.tsx"), /if \(subscription && Notification\.permission === "granted"\) \{\s+await fetch\("\/api\/push\/subscribe"/,
     "the app re-registers an existing subscription on every start");
@@ -123,7 +180,7 @@ async function run(m) {
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Linux; Android 15; Pixel 9)"), false), false);
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), false), false, "a desktop Mac");
 
-  console.log("PASS: push alerts reach live sign-ins with high urgency; phones stay registered and signed in while used");
+  console.log("PASS: push alerts (sender, subject, preview) reach live sign-ins and the admin phone for all mail; phones stay registered and signed in while used");
 }
 
 const out = mkdtempSync(join(tmpdir(), "ltm-push-"));
@@ -131,7 +188,8 @@ try {
   const entry = join(out, "entry.ts");
   const file = path => new URL(`../src/${path}`, import.meta.url).pathname;
   writeFileSync(entry, [
-    `export { sendNewMailPush } from "${file("worker/push.ts")}";`,
+    `export { notificationCopy, revokeAllMailAlerts, sendNewMailPush, subscribePush } from "${file("worker/push.ts")}";`,
+    `export { logout, resetSessions } from "${file("worker/auth.ts")}";`,
     `export { deviceStatus, tokenHash } from "${file("worker/deviceAuth.ts")}";`,
     `export { needsHomeScreenInstall } from "${file("client/appModel.ts")}";`,
   ].join("\n"));

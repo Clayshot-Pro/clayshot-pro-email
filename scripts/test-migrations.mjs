@@ -110,4 +110,8 @@ if (migrations.includes("0024_outbound_message_ids.sql")) {
     "sent mail keeps only RFC Message-IDs; received mail is untouched");
 }
 
+if (migrations.includes("0025_push_all_mail.sql")) {
+  assert.ok(columns("push_subscriptions").includes("all_mail_until"), "administrator alerts for every mailbox");
+}
+
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

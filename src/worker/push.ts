@@ -12,6 +12,7 @@ type StoredSubscription = {
   expiration_time: number | null;
   device_session_id: string | null;
   owner_session_hash: string | null;
+  all_mail: number;
 };
 type SubscriptionInput = {
   endpoint?: unknown;
@@ -54,21 +55,26 @@ function validEndpoint(value: string): boolean {
 const notificationText = (value: string | null | undefined, max: number) =>
   (value ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, max);
 
-function notificationCopy(notification: NewMailPush) {
+/**
+ * Mail-app style: the sender is the title, the subject the first body line,
+ * then a short preview. Administrator alerts (every mailbox) also name the
+ * mailbox the message was sent to.
+ */
+export function notificationCopy(notification: NewMailPush, allMail = false) {
   const subject = notificationText(notification.subject, 120) || "(no subject)";
   const fromAddress = notificationText(notification.fromAddress, 160) || "Unknown sender";
   const fromName = notificationText(notification.fromName, 100);
-  const sender = fromName && fromName.toLowerCase() !== fromAddress.toLowerCase()
-    ? `${fromName} <${fromAddress}>`
-    : fromAddress;
-  const mailbox = notificationText(notification.toAddress, 160) || "your mailbox";
+  const sender = fromName || fromAddress;
+  const mailbox = notificationText(notification.toAddress, 160);
   const preview = notificationText(notification.preview, 180);
-  const routingLine = `${sender} → ${mailbox}`;
   return {
-    title: subject,
-    body: preview ? `${routingLine}\n${preview}` : routingLine,
+    title: allMail && mailbox ? `${sender} → ${mailbox}` : sender,
+    body: preview ? `${subject}\n${preview}` : subject,
   };
 }
+
+/** How long a phone that enabled alerts as administrator keeps receiving every mailbox's alerts. */
+const ALL_MAIL_DAYS = 30;
 
 export function pushConfig(env: Env): Response {
   const keys = vapidKeys(env);
@@ -95,14 +101,19 @@ export async function subscribePush(request: Request, env: Env): Promise<Respons
   if (!device && !ownerHash) return Response.json({ error: "No verified device session" }, { status: 401 });
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
+  // Signed in as administrator: alerts for every mailbox, renewed on each
+  // registration (the app re-registers on every start). A later registration
+  // without the admin session keeps what the administrator set up.
+  const allMailUntil = ownerHash ? new Date(Date.now() + ALL_MAIL_DAYS * 86_400_000).toISOString() : null;
   await env.DB.prepare(`INSERT INTO push_subscriptions
-    (id,endpoint,p256dh,auth,expiration_time,created_at,updated_at,device_session_id,owner_session_hash)
-    VALUES (?1,?2,?3,?4,?5,?6,?6,?7,?8)
+    (id,endpoint,p256dh,auth,expiration_time,created_at,updated_at,device_session_id,owner_session_hash,all_mail_until)
+    VALUES (?1,?2,?3,?4,?5,?6,?6,?7,?8,?9)
     ON CONFLICT(endpoint) DO UPDATE SET
       p256dh=excluded.p256dh,auth=excluded.auth,expiration_time=excluded.expiration_time,
-      updated_at=excluded.updated_at,device_session_id=excluded.device_session_id,
-      owner_session_hash=excluded.owner_session_hash`)
-    .bind(id, endpoint, p256dh, auth, expirationTime, now, device?.id ?? null, ownerHash)
+      updated_at=excluded.updated_at,device_session_id=COALESCE(excluded.device_session_id,push_subscriptions.device_session_id),
+      owner_session_hash=COALESCE(excluded.owner_session_hash,push_subscriptions.owner_session_hash),
+      all_mail_until=COALESCE(excluded.all_mail_until,push_subscriptions.all_mail_until)`)
+    .bind(id, endpoint, p256dh, auth, expirationTime, now, device?.id ?? null, ownerHash, allMailUntil)
     .run();
   return Response.json({ ok: true }, { status: 201 });
 }
@@ -128,7 +139,7 @@ async function sendToSubscription(env: Env, row: StoredSubscription, notificatio
     expirationTime: row.expiration_time,
     keys: { p256dh: row.p256dh, auth: row.auth },
   };
-  const copy = notificationCopy(notification);
+  const copy = notificationCopy(notification, row.all_mail === 1);
   const payload = await buildPushPayload({
     data: JSON.stringify({
       title: copy.title,
@@ -161,12 +172,16 @@ export async function sendNewMailPush(env: Env, notification: NewMailPush): Prom
   await env.DB.prepare("DELETE FROM push_subscriptions WHERE expiration_time IS NOT NULL AND expiration_time <= ?1").bind(Date.now()).run();
   const mailbox = await mailboxForRecipient(env, notification.toAddress);
   if (!mailbox) return;
-  // Historical unscoped subscriptions are intentionally excluded. Each
-  // notification must be visible to the mailbox logged in on that device.
+  // Historical unscoped subscriptions are intentionally excluded. A phone is
+  // alerted for a mailbox signed in on it, or for every mailbox when the
+  // administrator turned alerts on there (all_mail_until).
   const subscriptions = await env.DB.prepare(`SELECT p.id,p.endpoint,p.p256dh,p.auth,p.expiration_time,
-      p.device_session_id,p.owner_session_hash
+      p.device_session_id,p.owner_session_hash,
+      CASE WHEN p.all_mail_until > ?2 OR (p.owner_session_hash IS NOT NULL AND EXISTS (
+        SELECT 1 FROM auth_sessions a WHERE a.token_hash=p.owner_session_hash AND a.expires_at>datetime('now')
+      )) THEN 1 ELSE 0 END AS all_mail
     FROM push_subscriptions p
-    WHERE (
+    WHERE p.all_mail_until > ?2 OR (
       p.device_session_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM device_session_accounts g
         JOIN device_sessions s ON s.id=g.session_id AND s.expires_at>datetime('now')
@@ -178,6 +193,17 @@ export async function sendNewMailPush(env: Env, notification: NewMailPush): Prom
       )
     )
     ORDER BY p.updated_at DESC LIMIT 100`)
-    .bind(mailbox.id).all<StoredSubscription>();
+    .bind(mailbox.id, new Date().toISOString()).all<StoredSubscription>();
   await Promise.allSettled(subscriptions.results.map(row => sendToSubscription(env, row, notification)));
+}
+
+/**
+ * Stop administrator (every-mailbox) alerts when admin sessions end: "this"
+ * session on sign-out, every other one on "sign out other sessions", or all.
+ */
+export function revokeAllMailAlerts(env: Env, scope: { only: string } | { except: string } | "all"): D1PreparedStatement {
+  if (scope === "all") return env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE all_mail_until IS NOT NULL");
+  return "only" in scope
+    ? env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE owner_session_hash=?1").bind(scope.only)
+    : env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE all_mail_until IS NOT NULL AND (owner_session_hash IS NULL OR owner_session_hash!=?1)").bind(scope.except);
 }
