@@ -12,7 +12,6 @@ type StoredSubscription = {
   expiration_time: number | null;
   device_session_id: string | null;
   owner_session_hash: string | null;
-  all_mail: number;
 };
 type SubscriptionInput = {
   endpoint?: unknown;
@@ -56,19 +55,17 @@ const notificationText = (value: string | null | undefined, max: number) =>
   (value ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, max);
 
 /**
- * Mail-app style: the sender is the title, the subject the first body line,
- * then a short preview. Administrator alerts (every mailbox) also name the
- * mailbox the message was sent to.
+ * Three lines, mail-app style: the sender's name (or address) as the title,
+ * then the subject, then the start of the message.
  */
-export function notificationCopy(notification: NewMailPush, allMail = false) {
+export function notificationCopy(notification: NewMailPush) {
   const subject = notificationText(notification.subject, 120) || "(no subject)";
   const fromAddress = notificationText(notification.fromAddress, 160) || "Unknown sender";
   const fromName = notificationText(notification.fromName, 100);
   const sender = fromName || fromAddress;
-  const mailbox = notificationText(notification.toAddress, 160);
   const preview = notificationText(notification.preview, 180);
   return {
-    title: allMail && mailbox ? `${sender} → ${mailbox}` : sender,
+    title: sender,
     body: preview ? `${subject}\n${preview}` : subject,
   };
 }
@@ -139,7 +136,7 @@ async function sendToSubscription(env: Env, row: StoredSubscription, notificatio
     expirationTime: row.expiration_time,
     keys: { p256dh: row.p256dh, auth: row.auth },
   };
-  const copy = notificationCopy(notification, row.all_mail === 1);
+  const copy = notificationCopy(notification);
   const payload = await buildPushPayload({
     data: JSON.stringify({
       title: copy.title,
@@ -176,10 +173,7 @@ export async function sendNewMailPush(env: Env, notification: NewMailPush): Prom
   // alerted for a mailbox signed in on it, or for every mailbox when the
   // administrator turned alerts on there (all_mail_until).
   const subscriptions = await env.DB.prepare(`SELECT p.id,p.endpoint,p.p256dh,p.auth,p.expiration_time,
-      p.device_session_id,p.owner_session_hash,
-      CASE WHEN p.all_mail_until > ?2 OR (p.owner_session_hash IS NOT NULL AND EXISTS (
-        SELECT 1 FROM auth_sessions a WHERE a.token_hash=p.owner_session_hash AND a.expires_at>datetime('now')
-      )) THEN 1 ELSE 0 END AS all_mail
+      p.device_session_id,p.owner_session_hash
     FROM push_subscriptions p
     WHERE p.all_mail_until > ?2 OR (
       p.device_session_id IS NOT NULL AND EXISTS (
