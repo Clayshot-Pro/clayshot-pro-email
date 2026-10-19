@@ -178,7 +178,7 @@ export function AdminPanel() {
         {appVersion?.updateAvailable && (
           <section className="admin-update-notice" role="status" aria-label="Update available">
             <strong>Version {appVersion.latest} is available</strong> (you have {appVersion.current}).
-            On GitHub, open your fork and choose <strong>Sync fork → Update branch</strong>. Cloudflare deploys it and the app
+            On GitHub, open your fork and choose <strong>Sync fork → Update branch</strong>. GitHub Actions deploys it and the app
             updates its database. <a href="https://github.com/LiamTheMo/LTM-Email-Service/commits/main" target="_blank" rel="noopener noreferrer">What's new</a>
           </section>
         )}

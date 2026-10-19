@@ -11,13 +11,12 @@ Deploys apply migrations, and the app applies any still pending on its first req
 
 - Fixes from a security and bug review; nothing to do. Devices signed in to a mailbox are signed out when it is disabled.
 - A domain whose catch-all already forwards elsewhere now asks before replacing it (**Replace the catch-all and connect**).
+- Every fork deploys with GitHub Actions on each push to `main`; `DEPLOY_WITH_ACTIONS` is no longer needed. The fork needs the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. If it deployed with Cloudflare Workers Builds, add them and disconnect Git under the Worker's **Settings → Build**.
 
 ## v3.13
 
 - Forks are the recommended setup and update with **Sync fork**; the admin panel shows the running version and when a newer one is out.
-- A fork built by Cloudflare needs no deploy keys: Wrangler links the database and bucket by name.
-- The GitHub Actions deploy runs only in the project repository, or in a fork that sets the repository variable `DEPLOY_WITH_ACTIONS` to `true`.
-- An instance whose Worker, database or bucket has other names sets them as variables (`WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`): Workers Builds build variables, or GitHub repository variables for the Actions deploy. The fork's `wrangler.jsonc` stays unmodified.
+- An instance whose Worker, database or bucket has other names sets them as repository variables (`WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`). The fork's `wrangler.jsonc` stays unmodified.
 
 ## v3.12
 

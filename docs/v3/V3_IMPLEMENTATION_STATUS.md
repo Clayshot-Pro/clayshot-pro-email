@@ -112,9 +112,8 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 ## v3.13: forks and updates
 
 - **Licence:** section 1A allows a public GitHub fork used only to run and update your own instance, while it holds no changes beyond upstream updates.
-- **Fork deploys:** Cloudflare Workers Builds imports the fork (`npm run build`, `npm run deploy`). Without deploy keys, `config-render.mjs` leaves the database ID out and Wrangler finds or creates `ltm-email-service` and its bucket by name, keeping them linked. With keys, a failed lookup still stops the deploy, so an existing instance is never bound to a new, empty database.
+- **Fork deploys:** the GitHub Actions deploy runs in every fork on pushes to `main`, with the fork's `CLOUDFLARE_*` secrets; optional repository variables override the Worker, database and bucket names. A failed database lookup stops the deploy, so an existing instance is never bound to a new, empty database. (Workers Builds without deploy keys still works: `config-render.mjs` leaves the database ID out and Wrangler links it by name.)
 - **Updates:** `package.json` carries the release version (`APP_VERSION`). `GET /api/admin/version` compares it with `main` of the project repository (cached six hours); the admin panel shows the version and an update notice pointing to **Sync fork**. Bump `version` with each release.
-- **GitHub Actions deploy** runs only in `LiamTheMo/LTM-Email-Service`, or in a fork with the variable `DEPLOY_WITH_ACTIONS=true`.
 - **Requires manual validation:** a fork imported into a fresh Cloudflare account end to end.
 
 ## v3.14: tests and review fixes

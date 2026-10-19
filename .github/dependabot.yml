@@ -4,7 +4,7 @@ updates:
   # promotion to main; update target-branch when the release train advances.
   - package-ecosystem: "npm"
     directory: "/"
-    target-branch: "v3.13"
+    target-branch: "v3.14"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -14,7 +14,7 @@ updates:
         update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "v3.13"
+    target-branch: "v3.14"
     schedule:
       interval: "weekly"
       day: "monday"
