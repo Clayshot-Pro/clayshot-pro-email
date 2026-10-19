@@ -1,6 +1,6 @@
-# v3 implementation status
+# Changelog
 
-**Status:** v3.00 → v3.20 are released; production (`main`) runs v3.20, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+What changed in each v3 version, with the technical detail. `main` runs the version in `package.json` and is deployed by GitHub Actions (`.github/workflows/deploy.yml`); each version branch `vX.XX` contains everything before it. Setup and operation: [README](../README.md). What an operator has to do when updating: [UPGRADING.md](./UPGRADING.md).
 
 ## Branches
 
@@ -27,6 +27,10 @@
 | `v3.18` | Reliable phone notifications: re-registration on start, sign-ins renewed while used, high-urgency pushes, Home Screen hint on iPhone; sender and subject in alerts; admin phones alerted for every mailbox (migration 0025) |
 | `v3.19` | Images in mail: embedded images shown, remote images through a private image proxy (or on request), older mail rebuilt once (migration 0026) |
 | `v3.20` | The deploy creates the encryption key (`PROVIDER_CREDENTIAL_KEY`) when missing, so push keys generate on their own; passkey-protected key backup in Admin → Keys |
+| `v3.21` | Status badges for every key in Admin → Keys and a **Setup incomplete** notice when an essential key is missing |
+| `v3.22` | GitHub Actions deploys hand the deploy token to the app (`CLOUDFLARE_DEPLOY_CONNECTION`), so domain setup works without connecting a token in the app |
+| `v3.23` | Three-line new-mail alerts: sender, subject, preview |
+| `v3.24` | Repository cleanup: unused routes and scripts removed, shared Worker helpers, bug and security fixes, dependency updates, reorganised docs |
 
 ## Decisions applied in v3.05
 
@@ -38,9 +42,9 @@
 | Per-domain theme | Admin picks a theme per domain; mailboxes on it use that theme (falls back to the instance default). Users override it only if the theme is unlocked. |
 | Licence | Free self-hosting for personal and internal organizational use (including commercial), credit required; no redistribution, no hosting for others, no paid services. |
 
-Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_ADDRESS` from CONFIG_UNIFICATION.md / MULTI_DOMAIN.md / CUSTOMIZATION.md no longer exist; the policy gate in OUTBOUND_TRANSPORTS.md is replaced by the API transport.
+Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_ADDRESS` from the [v3 design records](./history/v3-design/README.md) no longer exist; the policy gate in [OUTBOUND_TRANSPORTS.md](./history/v3-design/OUTBOUND_TRANSPORTS.md) is replaced by the API transport.
 
-## Verified
+## Verified at v3.06
 
 - `npm run typecheck`, `npm run build` and `npm test` pass on `v3.06` (30 Node test scripts, including all v2.08 regressions).
 - Default theme is declaration-for-declaration identical to v2.08 (3745 declarations); every preset covers v2.08's new dialogs.
@@ -49,7 +53,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Settings window scrolls to its last section on desktop and phone sizes (checked in Chromium).
 - Review fixes: passkey registration requires first-run setup; Resend webhooks only throttle failed signatures (per IP); oversized Cloudflare messages are refused before quota is reserved; accents are checked against the mailbox's domain theme; the primary domain is cached per isolate and the account list uses one domains query.
 
-## Not verified (needs a real account or devices)
+## Not verified at v3.06 (needs a real account or devices)
 
 - Live inbound mail on a second domain; real sends through the Email Sending API and Resend; Resend webhooks; bounce suppression.
 - WebAuthn ceremonies (first-run setup, step-up for admin changes).
@@ -138,7 +142,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Known limits (low):** a late autosave from a second tab can recreate a Gmail draft after sending; text typed while Send waits for a draft save is not sent; signing a device out does not revoke its Gmail token (removing the account does).
 - **Kept by decision:** mailbox passwords stay 4–32 characters; Google sign-in stays open to any Google account.
 
-## v3.15: simpler fork deploys
+## v3.15 and v3.16: simpler fork deploys
 
 - **First deploy provisions:** when the Worker does not exist yet in the account, the GitHub Actions deploy creates the D1 database and R2 bucket by name (`provisionFirstDeploy` in `scripts/config-lib.mjs`). An existing Worker resolves its own database as before, and a failed lookup still stops the deploy, so an instance is never pointed at a new, empty database.
 - **Clear failures:** a first workflow step names missing or malformed `CLOUDFLARE_*` secrets; R2 and D1 errors say which permission or dashboard step is missing. The run summary shows the workers.dev address.
@@ -195,15 +199,12 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 - Every new-mail alert is three lines: the sender's name (or address when there is none) as the title, then the subject, then the start of the message. Administrator alerts for other mailboxes no longer add "→ mailbox" to the title.
 
-## Production rollout (LTM instance)
+## v3.24: repository cleanup
 
-**Done:** v3.14 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
-
-Remaining, by hand:
-
-1. Disconnect Git under the Worker's **Settings → Build** if it is still connected, so Workers Builds stops running.
-2. Admin panel: **Branding → App name**, and sender names in **Mailboxes**; re-enter forwarding or purge in **Mail settings** if used before.
-3. Check real mail: inbound, a send, reply and forward with an attachment, Gmail and push. On an iPhone, check the bottom gap in the installed app.
-4. Optional: connect a Cloudflare token in **Admin → Keys** to set up new domains automatically.
-5. Delete Worker settings no longer read (`MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `AUTH_SETUP_TOKEN`). Delete the `GOOGLE_*`, `VAPID_*`, `RESEND_*` and `CF_EMAIL_SENDING_TOKEN` Worker secrets only once a rollback to v2.08 is no longer needed. Never delete `PROVIDER_CREDENTIAL_KEY`.
-6. Rollback if needed: redeploy the previous version branch, or v2.08 (`6c0811a`). Migrations are additive.
+- **Removed:** `GET /api/profile` (no caller since v3.10; photo state comes with the account list), `GET /api/contact-avatar` and `POST /api/auth/logout` (every sign-out uses `/api/device/logout`, which also ends the admin session). New Gmail connections ask only for mail and profile access, no longer `contacts.readonly`; existing grants keep working. The package scripts `cf-typegen`, `db:migrate:local` and `db:migrate:remote` and `scripts/audit-css-colors.mjs` (covered by `test-css-tokens`) are gone.
+- **Shared code:** one set of byte, hashing and token helpers (`src/worker/bytes.ts`), one `jsonError` (`src/worker/http.ts`), shared message-row, quota and admin-request helpers, push state in its own hook, one in-memory D1 stub for tests. A test script listed in the run but missing now fails the run.
+- **Security:** mail CSS can no longer make the reader's browser call the app's own API (the mail frame allows only embedded images and, once remote images are shown, the image proxy), so with **Ask first** a message cannot load remote images through CSS before you approve them; request bodies are capped while they are read, even without a `Content-Length`; sign-in attempts are counted per mailbox, whichever address form is typed; the app shell sends the same HSTS header as static assets; Gmail sign-in states expire after ten minutes; Resend webhook events are recorded only once processed, so a failed write is retried.
+- **Fixes:** Gmail attachments preview and download; any message of a conversation longer than 100 opens (the newest 100 are shown); HTML entities in previews and alerts are decoded once; `%` and `_` are literal in search; sent mail no longer doubles line breaks; Edge on Windows can turn on alerts (`*.notify.windows.com`); account colours and sender blocks stay within D1's 100 bound parameters; purging an attachment-heavy mailbox deletes R2 files in batches of 1,000; removing admin sessions asks for the passkey; compose and settings open above the desktop top bar; clicking a notification focuses the open window without reloading it; Reply, Forward and drafts start without stale attachments, and several list, badge and draft count glitches are fixed.
+- **CSS:** 673 declarations that were always overridden, rules for 17 classes no markup uses and four unread custom properties are gone (the stylesheet bundle drops from 209 kB to 186 kB); rendering is unchanged. `verify-css-equivalence` now compares the declarations that win the cascade, selector by selector.
+- **Dependencies:** `@simplewebauthn/server` 14, `postal-mime` 4.0.11; Node.js 22.12 or later (`engines` in `package.json`); Dependabot targets the current version branch.
+- **Docs:** sign-in docs merged into [SIGN_IN.md](./SIGN_IN.md), the v3 status page became this changelog, design records moved to [history](./history/README.md).

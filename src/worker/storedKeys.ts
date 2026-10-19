@@ -12,7 +12,7 @@ import { vapidPair, type VapidPair } from "./vapid";
  * one row too: token, account and Worker name together. Without one, the
  * GitHub Actions deploy's own token is used (v3.22, CLOUDFLARE_DEPLOY_CONNECTION).
  */
-export const EDITABLE_KEYS = [
+const EDITABLE_KEYS = [
   "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "CF_EMAIL_SENDING_TOKEN",
 ] as const;
 export type EditableKey = typeof EDITABLE_KEYS[number];
@@ -28,7 +28,7 @@ const FORMATS: Record<EditableKey, RegExp> = {
   CF_EMAIL_SENDING_TOKEN: /^[A-Za-z0-9_-]{20,256}$/,
 };
 
-export const isEditableKey = (name: string): name is EditableKey => (EDITABLE_KEYS as readonly string[]).includes(name);
+const isEditableKey = (name: string): name is EditableKey => (EDITABLE_KEYS as readonly string[]).includes(name);
 
 export function validKeyValue(name: EditableKey, value: string): boolean {
   return FORMATS[name].test(value);
@@ -202,7 +202,7 @@ export function deployCloudflareConnection(env: Env): CloudflareConnection | nul
 }
 
 /** The Cloudflare connection in use: one connected in Admin → Keys wins over the deploy's. */
-export async function cloudflareConnectionWithSource(env: Env): Promise<{ connection: CloudflareConnection; source: CloudflareSource } | null> {
+async function cloudflareConnectionWithSource(env: Env): Promise<{ connection: CloudflareConnection; source: CloudflareSource } | null> {
   const stored = await storedCloudflareConnection(env);
   if (stored) return { connection: stored, source: "stored" };
   const deployed = deployCloudflareConnection(env);

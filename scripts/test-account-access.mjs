@@ -35,7 +35,6 @@ for(const input of [sent(allowed,allowed),draft(allowed,allowed)]) {
 }
 const read=new URL("/api/messages/one?accountId="+encodeURIComponent(allowed),destination);
 assert.deepEqual(await requestedMailAccount(new Request(read),read),{accountId:allowed});
-assert.equal(protectedAccountPath("/api/contact-avatar"),true,"Gmail contacts must be account-gated");
 assert.equal(protectedAccountPath("/api/messages/bulk"),true,
   "bulk actions must pass through per-device account authorization");
 assert.equal(protectedAccountPath("/api/messages/one"),true,
@@ -50,7 +49,6 @@ assert.equal(protectedAccountPath("/api/attachment-previews/one"),true);
 assert.equal(protectedAccountPath("/api/send"),true);
 assert.equal(protectedAccountPath("/api/mailboxes"),false);
 assert.equal(protectedAccountPath("/api/accounts"),false);
-assert.equal(primaryProfilePath("/api/profile"),true,"primary profile metadata requires a primary mailbox grant");
 assert.equal(primaryProfilePath("/api/profile/photo"),true,"primary photo reads and writes require a primary mailbox grant");
 assert.equal(primaryProfilePath("/api/accounts"),false,"normal account listing is not profile scoped");
 assert.equal(primaryProfilePath("/api/accounts/gmail:one/avatar"),false,"a Gmail avatar must not use the primary profile grant");

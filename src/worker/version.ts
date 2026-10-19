@@ -6,7 +6,7 @@ import { version } from "../../package.json";
  * the admin panel says when there is something to sync.
  */
 export const APP_VERSION: string = version;
-export const PROJECT_URL = "https://github.com/LiamTheMo/LTM-Email-Service";
+const PROJECT_URL = "https://github.com/LiamTheMo/LTM-Email-Service";
 const LATEST_URL = `https://raw.githubusercontent.com${new URL(PROJECT_URL).pathname}/main/package.json`;
 const CHECK_MS = 6 * 60 * 60 * 1000;
 
@@ -23,7 +23,7 @@ export function compareVersions(a: string, b: string): number {
 let latest: { value: string | null; at: number } | null = null;
 
 /** The version on the project's main branch; cached per isolate, null when unreachable. */
-export async function latestVersion(fetcher: typeof fetch = fetch): Promise<string | null> {
+async function latestVersion(fetcher: typeof fetch = fetch): Promise<string | null> {
   if (latest && Date.now() - latest.at < CHECK_MS) return latest.value;
   const response = await fetcher(LATEST_URL, { headers: { Accept: "application/json" } }).catch(() => null);
   const body = response?.ok ? await response.json().catch(() => null) as { version?: unknown } | null : null;

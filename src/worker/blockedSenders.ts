@@ -1,5 +1,6 @@
 import { MAX_BLOCKED_SENDERS, blockPattern, senderPatterns } from "./blockedSenderRules";
 import { mailboxById } from "./mailboxes";
+import { chunked } from "./sql";
 
 /**
  * Per-mailbox blocked senders (v3.09). Inbound mail from a blocked address or
@@ -13,9 +14,13 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status, hea
 export async function isBlockedSender(env: Env, mailboxId: string, addresses: Array<string | null | undefined>): Promise<boolean> {
   const patterns = [...new Set(addresses.flatMap(address => address ? senderPatterns(address) : []))];
   if (!patterns.length) return false;
-  const row = await env.DB.prepare(`SELECT 1 FROM blocked_senders WHERE mailbox_id = ?1 AND pattern IN (${patterns.map((_, i) => `?${i + 2}`).join(",")}) LIMIT 1`)
-    .bind(mailboxId, ...patterns).first().catch(() => null);
-  return Boolean(row);
+  // In slices, within D1's bound-parameter limit (a domain may have very many labels).
+  for (const slice of chunked(patterns)) {
+    const row = await env.DB.prepare(`SELECT 1 FROM blocked_senders WHERE mailbox_id = ?1 AND pattern IN (${slice.map((_, i) => `?${i + 2}`).join(",")}) LIMIT 1`)
+      .bind(mailboxId, ...slice).first().catch(() => null);
+    if (row) return true;
+  }
+  return false;
 }
 
 async function nativeMailbox(env: Env, url: URL): Promise<string | Response> {

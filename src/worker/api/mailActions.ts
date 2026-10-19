@@ -1,3 +1,4 @@
+import { releaseMailboxBytes } from "../mailboxQuota";
 import { resolveProvider } from "../providers/registry";
 import { permanentlyDeleteNativeTrashBatch } from "./nativeBulkTrash";
 import type { ProviderMutation } from "../providers/types";
@@ -79,9 +80,7 @@ export async function permanentlyDeleteMessage(env: Env, accountId: string, id: 
   }
   // Always invalidate in-flight usage reconciliation, even if an R2 cleanup
   // failed or this message had zero physical bytes.
-  await env.DB.prepare(
-    "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?2),usage_version=usage_version+1 WHERE id=?1"
-  ).bind(provider.accountId, reclaimedBytes).run();
+  await releaseMailboxBytes(env, provider.accountId, reclaimedBytes);
   return Response.json({
     ok: true,
     permanentlyDeleted: true,

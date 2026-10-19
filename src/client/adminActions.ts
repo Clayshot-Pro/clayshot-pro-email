@@ -1,3 +1,4 @@
+import { readJson } from "./http";
 import { startAuthentication } from "@simplewebauthn/browser";
 
 export type AdminApproval = {
@@ -7,11 +8,7 @@ export type AdminApproval = {
   body: string | undefined;
 };
 
-async function jsonResult(response: Response): Promise<Record<string, unknown>> {
-  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Administrator passkey verification failed");
-  return data;
-}
+const jsonResult = (response: Response) => readJson(response, "Administrator passkey verification failed");
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes).map(byte => byte.toString(16).padStart(2,"0")).join("");
 }
@@ -50,4 +47,13 @@ export async function adminActionFetch(
     },
     body,
   });
+}
+
+/** GET, or an administrator mutation behind a passkey approval (reused when given), returning the JSON body. */
+export async function adminJson(path: string, method: string, body: unknown, fallback: string, approval?: AdminApproval): Promise<Record<string, unknown>> {
+  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const response = method === "GET"
+    ? await fetch(path, { cache: "no-store" })
+    : await adminActionFetch(path, method, payload, approval);
+  return readJson(response, fallback);
 }

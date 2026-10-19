@@ -3,7 +3,7 @@
  * appearance preferences. D1 and R2 access lives in branding.ts.
  */
 export const THEMES = ["ltm-dark", "ltm-ember", "light", "graphite", "high-contrast"] as const;
-export const ICON_SETS = ["ltm", "ltm-bold", "duotone"] as const;
+const ICON_SETS = ["ltm", "ltm-bold", "duotone"] as const;
 export const DENSITIES = ["compact", "comfortable", "spacious"] as const;
 export const TEXT_SIZES = ["sm", "md", "lg", "xl"] as const;
 export const ACCENT_SWATCHES = ["#ff8a3d", "#b6a2c9", "#5b8def", "#3fb67b", "#e5a50a", "#e06c75", "#2bb3c0", "#9aa0a6", "#2f5dff", "#1f7a4d", "#b3261e", "#6d3fd1"] as const;
@@ -15,7 +15,7 @@ export type TextSize = typeof TEXT_SIZES[number];
 export type ThemeChoice = ThemeId | "system";
 
 /** Surface colour of each theme, used to keep custom accents visible (WCAG 1.4.11, 3:1). */
-export const THEME_SURFACES: Record<ThemeId, string> = {
+const THEME_SURFACES: Record<ThemeId, string> = {
   "ltm-dark": "#12100f",
   "ltm-ember": "#141110",
   light: "#ffffff",
@@ -82,10 +82,10 @@ export const DEFAULT_SETTINGS: InstanceSettings = {
 };
 
 const ADDRESS = /^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?.)+[a-z][a-z0-9-]*$/;
-export const isMailAddress = (value: string): boolean => value.length <= 254 && ADDRESS.test(value);
+const isMailAddress = (value: string): boolean => value.length <= 254 && ADDRESS.test(value);
 
 const HEX = /^#[0-9a-f]{6}$/;
-export const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
+const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
   typeof value === "string" && (list as readonly string[]).includes(value);
 
 function luminance(hex: string): number {
@@ -101,10 +101,6 @@ export function contrastRatio(a: string, b: string): number {
   return (high + 0.05) / (low + 0.05);
 }
 
-/** Black or white, whichever reads better on the accent (always >= 4.5:1). */
-export function inkFor(accent: string): "#000000" | "#ffffff" {
-  return contrastRatio(accent, "#000000") >= contrastRatio(accent, "#ffffff") ? "#000000" : "#ffffff";
-}
 
 export function normalizeHex(value: unknown): string | null {
   if (typeof value !== "string") return null;

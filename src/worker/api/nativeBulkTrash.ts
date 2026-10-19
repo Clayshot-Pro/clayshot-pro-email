@@ -1,3 +1,4 @@
+import { releaseMailboxBytes } from "../mailboxQuota.ts";
 /** Commit native Trash removals in one D1 transaction instead of executing
  * each message's R2 cleanup synchronously in the HTTP request. Repeated requests
  * are safe when a prior request committed but its response was interrupted. */
@@ -33,9 +34,7 @@ async function cleanupObjects(env: Env, mailboxId: string, rows: RemovedRow[], a
       // A future storage reconciliation can recover quota accounting.
     }
   }
-  await env.DB.prepare(
-    "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?2),usage_version=usage_version+1 WHERE id=?1"
-  ).bind(mailboxId, reclaimed).run();
+  await releaseMailboxBytes(env, mailboxId, reclaimed);
 }
 
 export type TrashBulkResult = {

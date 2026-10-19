@@ -9,7 +9,6 @@
 export type AppConfig = {
   features: {
     gmail: boolean;
-    push: boolean;
     emailApi: boolean;
     /** The EMAIL send binding is bound (no token needed). */
     emailBinding: boolean;
@@ -48,7 +47,6 @@ export function parseConfig(source: ConfigSource): AppConfig {
   return {
     features: {
       gmail: has("GOOGLE_CLIENT_ID") && has("GOOGLE_CLIENT_SECRET") && has("PROVIDER_CREDENTIAL_KEY"),
-      push: has("VAPID_PUBLIC_KEY") && has("VAPID_PRIVATE_KEY"),
       emailApi: /^[a-f0-9]{32}$/i.test(text(source, "CF_EMAIL_SENDING_ACCOUNT_ID")) && has("CF_EMAIL_SENDING_TOKEN"),
       emailBinding: typeof (source.EMAIL as { send?: unknown } | undefined)?.send === "function",
       resend: has("RESEND_API_KEY"),

@@ -1,8 +1,8 @@
 # v3.02 — Pluggable outbound transports and Resend
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Implemented on `v3.02`; **updated in v3.05**: Cloudflare sending uses one unrestricted `EMAIL` binding by default (no token), or the Email Sending REST API when `CF_EMAIL_SENDING_TOKEN` is set; the `MULTI_SENDER_APPROVED` gate is gone, so every active mailbox on an active Cloudflare domain can send. Resend is unchanged. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
+**Document status:** Implemented on `v3.02`; **updated in v3.05**: Cloudflare sending uses one unrestricted `EMAIL` binding by default (no token), or the Email Sending REST API when `CF_EMAIL_SENDING_TOKEN` is set; the `MULTI_SENDER_APPROVED` gate is gone, so every active mailbox on an active Cloudflare domain can send. Resend is unchanged. See [changelog](../../CHANGELOG.md). Depends on [v3.01 multi-domain](./MULTI_DOMAIN.md) for the per-domain `outbound_transport` column.
 
 ## Decision
 
@@ -11,7 +11,7 @@
 Why offer Resend at all:
 
 - Cloudflare documents Email Sending as transactional-only, which is why non-primary senders sit behind `MULTI_SENDER_APPROVED` today. A domain switched to Resend can send person-to-person mail without waiting on that Cloudflare approval.
-- Resend sends signed delivery/bounce/complaint webhooks, which closes the bounce-visibility gap listed in [V2_IMPLEMENTATION_STATUS.md](../multi-mailbox/V2_IMPLEMENTATION_STATUS.md).
+- Resend sends signed delivery/bounce/complaint webhooks, which closes the bounce-visibility gap listed in the v2 implementation status (removed in v3.24; see branch `v2.08`).
 
 Inbound mail stays on Cloudflare Email Routing for every domain. Resend receiving is out of scope.
 

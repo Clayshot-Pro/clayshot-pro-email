@@ -1,10 +1,11 @@
 version: 2
 updates:
-  # Dependency PRs target the permanent version branch so CI runs before
-  # promotion to main; update target-branch when the release train advances.
+  # Dependency PRs target the current version branch so CI runs before
+  # promotion to main. Dependabot reads this file from main: set both
+  # target-branch values to each new vX.XX branch when it is created.
   - package-ecosystem: "npm"
     directory: "/"
-    target-branch: "v3.14"
+    target-branch: "v3.24"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -14,7 +15,7 @@ updates:
         update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "v3.14"
+    target-branch: "v3.24"
     schedule:
       interval: "weekly"
       day: "monday"

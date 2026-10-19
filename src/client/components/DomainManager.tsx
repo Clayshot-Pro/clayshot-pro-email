@@ -1,14 +1,14 @@
 import "../admin-domains.css";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { adminActionFetch } from "../adminActions";
+import { adminJson } from "../adminActions";
 import { THEMES, type ThemeId } from "../../worker/customization";
 import { THEME_LABELS } from "./AppearanceSettings";
 import { ConnectReportView } from "./CloudflareSetup";
 import type { ConnectReport } from "../cloudflareToken";
 
-export type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
-export type Transport = "cloudflare" | "resend" | "none";
-export type Domain = {
+type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
+type Transport = "cloudflare" | "resend" | "none";
+type Domain = {
   domain: string;
   status: "pending" | "active" | "disabled";
   isPrimary: boolean;
@@ -29,13 +29,7 @@ type MailboxOption = { id: string; email_address: string; status: string; delete
 
 const TRANSPORT_LABEL: Record<Transport, string> = { cloudflare: "Cloudflare", resend: "Resend", none: "Receive only" };
 
-async function call(path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
-  const payload = body === undefined ? undefined : JSON.stringify(body);
-  const response = method === "GET" ? await fetch(path, { cache: "no-store" }) : await adminActionFetch(path, method, payload);
-  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Domain operation failed");
-  return result;
-}
+const call = (path: string, method: string, body?: unknown) => adminJson(path, method, body, "Domain operation failed");
 
 const domainPath = (domain: string) => `/api/admin/domains/${encodeURIComponent(domain)}`;
 

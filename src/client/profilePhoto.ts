@@ -10,7 +10,7 @@ export type Point = {
   y: number;
 };
 
-export type CropMetrics = {
+type CropMetrics = {
   scale: number;
   displayedWidth: number;
   displayedHeight: number;
@@ -18,7 +18,7 @@ export type CropMetrics = {
   maxY: number;
 };
 
-export const CROP_SIZE = 260;
+const CROP_SIZE = 260;
 export const MAX_ZOOM = 3;
 const OUTPUT_SIZE = 512;
 

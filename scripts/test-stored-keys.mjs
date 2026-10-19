@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const out = mkdtempSync(join(tmpdir(), "ltm-stored-keys-"));
 try {
@@ -23,20 +24,9 @@ try {
 }
 
 /** Minimal D1 over node:sqlite: prepare().bind().run/all/first. */
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    bind: (...values) => statement(sql, values),
-    run: async () => { db.prepare(sql).run(...args); return { success: true }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return { prepare: sql => statement(sql) };
-}
 
 function database() {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   return db;
 }
 

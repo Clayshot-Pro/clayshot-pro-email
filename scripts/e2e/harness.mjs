@@ -52,19 +52,29 @@ export async function launchBrowser() {
   return chromium.launch();
 }
 
-/** A browser context with its own virtual passkey device (user verification always succeeds). */
+/** A browser context with its own virtual passkey device (user verification always succeeds).
+ * Also returns the CDP session and authenticator id, so passkeys can be copied between devices. */
 export async function contextWithPasskey(browser, options = {}) {
   const context = await browser.newContext(options);
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
-  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
     options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true,
       isUserVerified: true, automaticPresenceSimulation: true },
   });
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
-  return { context, page, errors };
+  return { context, page, errors, cdp, authenticatorId };
+}
+
+/** Copy every passkey (with its signature counter) from one virtual device to another. */
+export async function copyPasskeys(from, to) {
+  const { credentials } = await from.cdp.send("WebAuthn.getCredentials", { authenticatorId: from.authenticatorId });
+  for (const credential of credentials) {
+    await to.cdp.send("WebAuthn.removeCredential", { authenticatorId: to.authenticatorId, credentialId: credential.credentialId }).catch(() => undefined);
+    await to.cdp.send("WebAuthn.addCredential", { authenticatorId: to.authenticatorId, credential });
+  }
 }
 
 /** JSON API call sharing the context's cookies; mutations send the app's Origin like the browser does. */

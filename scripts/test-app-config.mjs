@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { appConfig, domainOf, isValidAddress, isValidDomain, parseConfig } from "../src/worker/appConfig.ts";
 
 // No instance vars are required: an empty Worker env is a valid configuration.
-assert.deepEqual(parseConfig({}).features, { gmail: false, push: false, emailApi: false, emailBinding: false, resend: false, resendWebhook: false, setup: false });
+assert.deepEqual(parseConfig({}).features, { gmail: false, emailApi: false, emailBinding: false, resend: false, resendWebhook: false, setup: false });
 assert.equal(parseConfig({ EMAIL: { send: async () => ({ messageId: "x" }) } }).features.emailBinding, true, "the send binding needs no token");
 assert.equal(parseConfig({ EMAIL: "not a binding" }).features.emailBinding, false);
 
@@ -13,7 +13,7 @@ const full = parseConfig({
   CF_EMAIL_SENDING_ACCOUNT_ID: "a".repeat(32), CF_EMAIL_SENDING_TOKEN: "token",
   RESEND_API_KEY: "re_x", RESEND_WEBHOOK_SECRET: "whsec_x", AUTH_SETUP_TOKEN: "setup",
 });
-assert.deepEqual(full.features, { gmail: true, push: true, emailApi: true, emailBinding: false, resend: true, resendWebhook: true, setup: true });
+assert.deepEqual(full.features, { gmail: true, emailApi: true, emailBinding: false, resend: true, resendWebhook: true, setup: true });
 assert.equal(parseConfig({ GOOGLE_CLIENT_ID: "a", GOOGLE_CLIENT_SECRET: "b" }).features.gmail, false, "Gmail also needs PROVIDER_CREDENTIAL_KEY");
 assert.equal(parseConfig({ CF_EMAIL_SENDING_ACCOUNT_ID: "not-an-id", CF_EMAIL_SENDING_TOKEN: "t" }).features.emailApi, false);
 assert.equal(parseConfig({ CF_EMAIL_SENDING_ACCOUNT_ID: "a".repeat(32) }).features.emailApi, false, "the token is required");

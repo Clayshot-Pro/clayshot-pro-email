@@ -2,8 +2,9 @@ import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutati
 import { transportChoice, transportFor } from "../transports";
 import { TransportError } from "../transports/types";
 import { textToHtml } from "../email/textHtml";
+import { likeContains } from "../sql";
 
-type NativeMessageRow = {
+export type NativeMessageRow = {
   id: string;
   thread_id: string;
   direction: "inbound" | "outbound";
@@ -32,7 +33,7 @@ const folderWhere = {
   trash: "is_deleted = 1",
 } as const;
 
-function parseAddresses(value: string): string[] {
+export function parseAddressList(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
@@ -41,7 +42,7 @@ function parseAddresses(value: string): string[] {
   }
 }
 
-function toListItem(row: NativeMessageRow): ProviderMessage {
+export function toListItem(row: NativeMessageRow): ProviderMessage {
   return {
     id: row.id,
     threadId: row.thread_id,
@@ -49,7 +50,7 @@ function toListItem(row: NativeMessageRow): ProviderMessage {
     fromAddress: row.from_address,
     fromName: row.from_name,
     senderAvatarUrl: null,
-    toAddresses: parseAddresses(row.to_addresses),
+    toAddresses: parseAddressList(row.to_addresses),
     subject: row.subject,
     preview: row.preview,
     receivedAt: row.received_at,
@@ -65,7 +66,7 @@ function toListItem(row: NativeMessageRow): ProviderMessage {
   };
 }
 
-export class NativeMailProvider implements MailProvider {
+class NativeMailProvider implements MailProvider {
   readonly kind = "native" as const;
   constructor(private readonly env: Env, readonly accountId: string, readonly address: string, readonly senderName: string) {}
 
@@ -74,8 +75,8 @@ export class NativeMailProvider implements MailProvider {
     const bindings: Array<string | number> = [this.accountId];
     where = `mailbox_id = ? AND (${where})`;
     if (options.search) {
-      where += " AND (LOWER(subject) LIKE ? OR LOWER(from_address) LIKE ? OR LOWER(COALESCE(from_name, '')) LIKE ? OR LOWER(preview) LIKE ?)";
-      const term = `%${options.search.toLowerCase().slice(0, 200)}%`;
+      where += " AND (LOWER(subject) LIKE ? ESCAPE '\\' OR LOWER(from_address) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(from_name, '')) LIKE ? ESCAPE '\\' OR LOWER(preview) LIKE ? ESCAPE '\\')";
+      const term = likeContains(options.search.toLowerCase().slice(0, 200));
       bindings.push(term, term, term, term);
     }
     bindings.push(Math.max(1, Math.min(100, Math.floor(options.limit))));

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ACCENT_SWATCHES, accentProblem, contrastRatio, DEFAULT_SETTINGS, effectiveAppearance, inkFor, pngDimensions,
+  ACCENT_SWATCHES, accentProblem, contrastRatio, DEFAULT_SETTINGS, effectiveAppearance, pngDimensions,
   readPreferences, readSettings, THEMES, updatePreferences, updateSettings,
 } from "../src/worker/customization.ts";
 
 // Contrast helpers.
 assert.equal(Math.round(contrastRatio("#000000", "#ffffff")), 21);
+// public/theme-boot.js picks the accent ink (black or white) before the bundle loads.
+const bootSource = readFileSync(new URL("../public/theme-boot.js", import.meta.url), "utf8");
+const inkFor = new Function(`${bootSource.match(/function ink\(hex\) \{[\s\S]*?\n  \}\n/)[0]}; return ink;`)();
 for (let value = 0; value < 256; value += 15) {
   const hex = `#${value.toString(16).padStart(2, "0").repeat(3)}`;
   assert.ok(contrastRatio(hex, inkFor(hex)) >= 4.5, `${hex} always gets readable ink`);

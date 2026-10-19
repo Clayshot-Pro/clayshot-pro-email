@@ -1,3 +1,5 @@
+import { parseAddressList, toListItem, type NativeMessageRow } from "../providers/native";
+import { messagePreview } from "../email/textHtml";
 import PostalMime from "postal-mime";
 import { HTML_VERSION, sanitizeEmailHtml } from "../email/html";
 import { contentIdOf, safeFilename } from "../email/receive";
@@ -5,33 +7,17 @@ import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { resolveProvider } from "../providers/registry";
 import { gmailAttachment, gmailFullMessage, gmailThread } from "../providers/gmailProvider";
 import type { MailFolder, ProviderMutation } from "../providers/types";
+import { likeContains } from "../sql";
 
 type Folder = "inbox" | "junk" | "starred" | "sent" | "drafts" | "archive" | "trash";
-type MessageRow = {
-  id: string;
-  thread_id: string;
-  direction: "inbound" | "outbound";
-  from_address: string;
-  from_name: string | null;
-  to_addresses: string;
+type MessageRow = NativeMessageRow & {
   cc_addresses: string;
   bcc_addresses: string;
-  subject: string;
-  preview: string;
   body_text: string | null;
   body_html: string | null;
-  received_at: string;
-  sent_at: string | null;
-  is_read: number;
-  is_starred: number;
-  is_archived: number;
-  is_deleted: number;
-  is_junk: number;
-  has_attachments: number;
   raw_r2_key: string | null;
   in_reply_to: string | null;
   reference_ids: string | null;
-  delivery_status: string | null;
   delivery_error: string | null;
   html_version: number;
 };
@@ -43,19 +29,11 @@ const INLINE_DOWNLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "
 /** Raster types an email may embed (cid:); the preview endpoint serves exactly these images. */
 const EMBEDDABLE_IMAGE_TYPES = INLINE_DOWNLOAD_TYPES;
 const MAX_RECOVERED_HTML = 2 * 1024 * 1024;
+/** Messages shown in one conversation (one bound parameter each when loading attachments). */
+const MAX_THREAD_MESSAGES = 100;
 const encoder = new TextEncoder();
 const folderFrom = (value: string | null): Folder => value && folders.has(value as Folder) ? value as Folder : "inbox";
 
-function parseArray(value: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-const preview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
 
 function truncateUtf8(value: string, maxBytes: number): string {
   if (encoder.encode(value).byteLength <= maxBytes) return value;
@@ -136,29 +114,6 @@ async function nativeUnsubscribeUrl(env: Env, key: string | null): Promise<strin
   }
 }
 
-function toListItem(row: MessageRow) {
-  return {
-    id: row.id,
-    threadId: row.thread_id,
-    direction: row.direction,
-    fromAddress: row.from_address,
-    fromName: row.from_name,
-    toAddresses: parseArray(row.to_addresses),
-    subject: row.subject,
-    preview: row.preview,
-    receivedAt: row.received_at,
-    sentAt: row.sent_at,
-    isRead: Boolean(row.is_read),
-    isStarred: Boolean(row.is_starred),
-    isArchived: Boolean(row.is_archived),
-    isDeleted: Boolean(row.is_deleted),
-    isJunk: Boolean(row.is_junk),
-    hasAttachments: Boolean(row.has_attachments),
-    deliveryStatus: row.delivery_status,
-    isDraft: false,
-  };
-}
-
 function toDraftListItem(row: DraftListRow, primary: string) {
   return {
     id: row.id,
@@ -166,9 +121,9 @@ function toDraftListItem(row: DraftListRow, primary: string) {
     direction: "outbound" as const,
     fromAddress: primary,
     fromName: "You",
-    toAddresses: parseArray(row.to_addresses),
+    toAddresses: parseAddressList(row.to_addresses),
     subject: row.subject,
-    preview: preview(row.body_text),
+    preview: messagePreview(row.body_text),
     receivedAt: row.updated_at,
     sentAt: null,
     isRead: true,
@@ -208,8 +163,8 @@ export async function listMessages(request: Request, env: Env): Promise<Response
     let where = "mailbox_id = ?";
     const bindings: Array<string | number> = [provider.accountId];
     if (search) {
-      where += " AND (LOWER(subject) LIKE ? OR LOWER(body_text) LIKE ? OR LOWER(to_addresses) LIKE ?)";
-      const term = `%${search}%`;
+      where += " AND (LOWER(subject) LIKE ? ESCAPE '\\' OR LOWER(body_text) LIKE ? ESCAPE '\\' OR LOWER(to_addresses) LIKE ? ESCAPE '\\')";
+      const term = likeContains(search);
       bindings.push(term, term, term);
     }
     bindings.push(limit);
@@ -237,8 +192,8 @@ function detailFrom(row: MessageRow, attachments: AttachmentRow[], unsubscribeUr
   const resolved = images ? resolveEmbeddedImages(row.body_html, attachments, images.origin, images.accountId) : { html: row.body_html, embedded: new Set<string>() };
   return {
     ...toListItem(row),
-    ccAddresses: parseArray(row.cc_addresses),
-    bccAddresses: parseArray(row.bcc_addresses),
+    ccAddresses: parseAddressList(row.cc_addresses),
+    bccAddresses: parseAddressList(row.bcc_addresses),
     bodyText: row.body_text ?? row.preview,
     bodyHtml: resolved.html || null,
     bodyHtmlAvailable: Boolean(row.body_html),
@@ -303,14 +258,18 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
     ]);
   }
 
-  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) ASC LIMIT 100`)
+  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) DESC, id DESC LIMIT ${MAX_THREAD_MESSAGES}`)
     .bind(row.thread_id, provider.accountId)
     .all<MessageRow>();
+  // The newest messages, oldest first. An older opened message takes the place of the
+  // oldest one, so it is always shown and the list stays within D1's 100 bound parameters.
+  const newest = threadRows.results.reverse();
+  const listed = newest.some((entry) => entry.id === row.id) ? newest : [row, ...newest.slice(1)];
   // Older messages of the conversation are rebuilt too (a few per open), after the
   // opened one, so every message shows its images.
   let rebuilds = 10;
   const rows = [];
-  for (const entry of threadRows.results) {
+  for (const entry of listed) {
     rows.push(entry.id === row.id ? row : rebuilds > 0 && (entry.html_version ?? 1) < HTML_VERSION && entry.direction === "inbound"
       ? (rebuilds--, await recoverStoredHtml(env, entry))
       : entry);
@@ -371,10 +330,11 @@ export async function downloadAttachment(request: Request, id: string, env: Env)
   if (!provider) return Response.json({ error: "Account not found or unavailable" }, { status: 404 });
 
   if (provider.kind === "gmail") {
-    const messageId = new URL(request.url).searchParams.get("messageId")?.trim();
+    const query = new URL(request.url).searchParams;
+    const messageId = query.get("messageId")?.trim();
     if (!messageId) return Response.json({ error: "Message id is required" }, { status: 400 });
     try {
-      const attachment = await gmailAttachment(env, provider.accountId, messageId, id);
+      const attachment = await gmailAttachment(env, provider.accountId, messageId, id, query.get("partId"));
       const inline = INLINE_DOWNLOAD_TYPES.has(attachment.contentType);
       return new Response(attachment.data, {
         headers: {

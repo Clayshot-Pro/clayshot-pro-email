@@ -24,7 +24,7 @@ export function remoteImageCount(html: string): number {
   return (html.match(/\bdata-remote-src\s*=/gi) ?? []).length;
 }
 
-export type EmailDocumentOptions = {
+type EmailDocumentOptions = {
   /** Load remote images through the app's image proxy. */
   remoteImages?: boolean;
   origin?: string;
@@ -75,7 +75,9 @@ export function buildSafeEmailDocument(html: string, options: EmailDocumentOptio
   document.documentElement.removeAttribute("bgcolor");
   document.body?.removeAttribute("bgcolor");
 
-  const securityHead = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${origin}; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'">
+  // Images: inline data, embedded images stored with the mail, and the image proxy only when remote images are allowed.
+  const imageSources = `data: ${origin}/api/attachment-previews/${options.remoteImages ? ` ${origin}/api/image-proxy` : ""}`;
+  const securityHead = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources}; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">`;
   const finalSafetyStyles = `<style>
   html, body { margin: 0 !important; padding: 0 !important; min-width: 0; max-width: 100%; background: transparent !important; }

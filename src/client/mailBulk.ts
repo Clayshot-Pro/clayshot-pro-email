@@ -1,7 +1,7 @@
 /** Selection is based on the currently visible/filter-matched mail rows.
  * The API accepts at most 50 IDs per bulk request, but the UI can select
  * all visible results and submit them in bounded chunks. */
-export const BULK_REQUEST_LIMIT = 50;
+const BULK_REQUEST_LIMIT = 50;
 
 export function toggleVisibleSelection(selected: string[], visibleIds: string[]): string[] {
   const visible = [...new Set(visibleIds)];

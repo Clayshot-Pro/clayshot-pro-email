@@ -75,7 +75,15 @@ assert.match(stepUp,/AND session_hash=\?2/);
 assert.match(stepUp,/AND body_hash=\?5/);
 assert.match(panel,/adminActionFetch\("\/api\/admin\/password"/);
 assert.match(manager,/approveAdminAction\(path, "POST"\)/);
-assert.match(manager,/adminActionFetch\(path, method, payload, approval\)/);
+assert.match(manager,/adminJson\(path, method, body, "Mailbox operation failed", approval\)/);
+const app=readFileSync(new URL("../src/client/App.tsx",import.meta.url),"utf8");
+// Settings > Active sessions: removing one session or signing out the others is a
+// passkey-approved admin action, as the server requires.
+assert.match(app,/adminActionFetch\(`\/api\/auth\/sessions\/\$\{encodeURIComponent\(sessionId\)\}`, "DELETE"\)/);
+assert.match(app,/adminActionFetch\("\/api\/auth\/sessions\/reset", "POST"\)/);
+assert.doesNotMatch(app,/\bfetch\((`|")\/api\/auth\/sessions\//,"no plain fetch changes sessions");
+const actions=readFileSync(new URL("../src/client/adminActions.ts",import.meta.url),"utf8");
+assert.match(actions,/adminActionFetch\(path, method, payload, approval\)/);
 const migration=readFileSync(new URL("../migrations/0015_admin_stepup_audit.sql",import.meta.url),"utf8");
 for (const table of ["admin_stepup_challenges","admin_stepup_approvals","admin_security_events"])
   assert.ok(migration.includes(table));

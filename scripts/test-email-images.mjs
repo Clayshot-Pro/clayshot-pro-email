@@ -9,17 +9,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    sql, args,
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return { prepare: sql => statement(sql), batch: async list => Promise.all(list.map(item => item.run())) };
-}
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const RAW = [
@@ -89,9 +80,7 @@ async function run(m) {
 
   // Older mail is rebuilt once from its raw message: remote addresses return,
   // the embedded logo points at its attachment and leaves the attachment list.
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec("INSERT INTO native_mailboxes (id, email_address, display_name) VALUES ('native:work', 'work@example.org', 'Work')");
   db.exec("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES ('t1', 'native:work', '2026-10-01T00:00:00Z')");
   db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_html, raw_r2_key, has_attachments)

@@ -27,7 +27,7 @@ export class CloudflareApiError extends Error {
 }
 
 /** The permission a request needs, for error messages. */
-export function permissionHint(path: string): string {
+function permissionHint(path: string): string {
   if (/\/email\/routing\/rules/.test(path)) return "The token needs Email Routing Rules: Edit on this zone";
   if (/\/email\/routing/.test(path)) return "The token needs Zone Settings: Edit and DNS: Edit on this zone";
   if (/\/email\/sending/.test(path)) return "The token needs Email Sending: Edit";

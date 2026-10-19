@@ -28,7 +28,7 @@ export const CLOUDFLARE_TOKEN_PERMISSIONS = [
   { scope: "Zone", name: "Email Routing Rules", access: "Edit", prefilled: false },
 ] as const;
 
-export type ConnectStep = { id: string; label: string; status: "done" | "skipped" | "failed" | "action"; detail: string };
+type ConnectStep = { id: string; label: string; status: "done" | "skipped" | "failed" | "action"; detail: string };
 export type ConnectReport = {
   domain: string;
   steps: ConnectStep[];

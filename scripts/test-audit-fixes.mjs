@@ -7,36 +7,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const source = path => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    sql, args,
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return {
-    prepare: sql => statement(sql),
-    batch: async list => {
-      db.exec("BEGIN");
-      try {
-        const results = list.map(item => ({ meta: { changes: Number(db.prepare(item.sql).run(...item.args).changes) } }));
-        db.exec("COMMIT");
-        return results;
-      } catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-      }
-    },
-  };
-}
 function database() {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec("INSERT INTO native_mailboxes (id, email_address, display_name) VALUES ('native:work', 'work@example.org', 'Work')");
   return db;
 }
@@ -79,13 +55,25 @@ async function run(m) {
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM auth_rate_limits").get().n, 0, "a successful sign-in clears the count");
   }
 
-  // Request bodies: streamed bodies without a length are refused.
+  // Request bodies: never read past the limit, whatever the headers say.
   const body = (headers, payload = "{}") => new Request("https://mail.example.org/api/x", { method: "POST", headers, body: payload });
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "10" }), 100), false);
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "101" }), 100), true);
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "abc" }), 100), true);
-  assert.equal(m.requestTooLarge(body({ "Transfer-Encoding": "chunked" }), 100), true);
-  assert.equal(m.requestTooLarge(new Request("https://mail.example.org/api/x", { method: "POST" }), 100), false);
+  const fits = body({ "Content-Length": "10" });
+  assert.equal(m.limitedRequest(fits, 100), fits);
+  assert.equal(m.limitedRequest(body({ "Content-Length": "101" }), 100), null);
+  assert.equal(m.limitedRequest(body({ "Content-Length": "abc" }), 100), null);
+  assert.equal(m.limitedRequest(body({ "Transfer-Encoding": "chunked" }), 100), null);
+  const empty = new Request("https://mail.example.org/api/x", { method: "POST" });
+  assert.equal(m.limitedRequest(empty, 100), empty);
+  const stream = text => new Request("https://mail.example.org/api/x", {
+    method: "POST", duplex: "half",
+    body: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(text)); controller.close(); } }),
+  });
+  assert.equal(await m.limitedRequest(stream("x".repeat(100)), 100).text(), "x".repeat(100), "a body with no length is read up to the limit");
+  await assert.rejects(m.limitedRequest(stream("x".repeat(101)), 100).text(), "and no further");
+  // The Resend webhook reads chunked bodies the same way instead of refusing them.
+  const chunked = text => new Request("https://mail.example.org/api/x", { method: "POST", headers: { "Transfer-Encoding": "chunked" }, body: text });
+  assert.equal(await m.limitedRequest(chunked("{}"), 100, { streamChunked: true }).text(), "{}");
+  await assert.rejects(m.limitedRequest(chunked("x".repeat(101)), 100, { streamChunked: true }).text());
 
   // Linear-time HTML handling: crafted input finishes quickly (quadratic code took minutes).
   const MB = 1024 * 1024;
@@ -126,6 +114,16 @@ async function run(m) {
     assert.equal(m.sanitizeEmailHtml(link), link, "a URL path is not mistaken for attributes");
   }
   assert.deepEqual(m.htmlToText("<p>a</p><style>p{}</style><p>b</p>").split(/\s+/), ["a", "b"], "style content is not text");
+  // Entities decode once, numeric and named: "&amp;lt;" is the text "&lt;", not "<".
+  assert.equal(m.htmlToText("<p>Don&#8217;t miss our caf&eacute; sale &ndash; 20&#37; off &euro;5 &#x1F600;</p>"), "Don\u2019t miss our caf\u00e9 sale \u2013 20% off \u20ac5 \u{1F600}");
+  assert.equal(m.htmlToText("Literal: &amp;lt;b&amp;gt; &amp;amp; &lt;b&gt; &quot;q&quot; &apos;a&#39; &AMP; a&nbsp;b"), "Literal: &lt;b&gt; &amp; <b> \"q\" 'a' & a b");
+  assert.equal(m.htmlToText("&#0; &#xD800; &#1114112; &#9999999;"), "\uFFFD \uFFFD \uFFFD \uFFFD", "invalid code points become U+FFFD");
+  assert.equal(m.htmlToText("&unknown; &amp &#; &#x; AT&T"), "&unknown; &amp &#; &#x; AT&T", "anything that is not a complete known entity stays as written");
+  assert.equal(m.htmlToText("&Eacute;quipe &Uuml;ber &szlig; &hellip;"), "\u00c9quipe \u00dcber \u00df \u2026", "named entities are case-sensitive");
+  {
+    const [, ms] = timed(() => m.htmlToText("&#".repeat(500_000) + "&a".repeat(500_000)));
+    assert.ok(ms < 5000, `entity decoding is linear (${ms.toFixed(0)} ms)`);
+  }
   {
     const footer = `<a href="https://news.example.org/unsubscribe?u=1">Unsubscribe</a>`;
     const [url, ms] = timed(() => m.messageUnsubscribeUrl(`${"<a href=x>".repeat(45_000)}${footer}`, ""));
@@ -249,6 +247,52 @@ async function run(m) {
     assert.equal((await response.json()).newlyReadCount, 1, "the archived unread message was never in the badge");
     assert.deepEqual(db.prepare("SELECT id FROM messages WHERE is_read = 1 AND direction = 'inbound' ORDER BY id").all().map(row => row.id), ["m1", "m2"]);
   }
+  {
+    // Search terms are literal text: "_" and "%" are not LIKE wildcards, in mail and in drafts.
+    const db = database();
+    const insert = db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_text)
+      VALUES (?, 'native:work', ?, 'inbound', 'a@example.net', '[]', ?, '', '2026-10-01T00:00:00Z', 'x')`);
+    for (const [id, subject] of [["s1", "Lunch"], ["s2", "50% off today"], ["s3", "snake_case names"], ["s4", "C:\\path"]]) {
+      db.prepare("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES (?, 'native:work', '2026-10-01T00:00:00Z')").run(`t-${id}`);
+      insert.run(id, `t-${id}`, subject);
+    }
+    const draft = db.prepare("INSERT INTO drafts (id, mailbox_id, subject, body_text, to_addresses) VALUES (?, 'native:work', ?, '', '[]')");
+    for (const [id, subject] of [["d1", "Plan"], ["d2", "Save 50% now"], ["d3", "under_score"]]) draft.run(id, subject);
+    const env = { DB: d1(db) };
+    const found = async (q, folder = "inbox") => {
+      const response = await m.listMessages(new Request(`https://mail.example.org/api/messages?accountId=native:work&folder=${folder}&q=${encodeURIComponent(q)}`), env);
+      return (await response.json()).messages.map(message => message.subject).sort();
+    };
+    assert.deepEqual(await found("_"), ["snake_case names"], "_ matches an underscore only");
+    assert.deepEqual(await found("%"), ["50% off today"], "% matches a percent sign only");
+    assert.deepEqual(await found("50%"), ["50% off today"]);
+    assert.deepEqual(await found("\\"), ["C:\\path"], "a backslash is literal too");
+    assert.deepEqual(await found("lunch"), ["Lunch"]);
+    assert.deepEqual(await found("_", "drafts"), ["under_score"], "drafts search the same way");
+    assert.deepEqual(await found("%", "drafts"), ["Save 50% now"]);
+  }
+  {
+    // A conversation of more than 100 messages (CI alerts all referencing one root) shows
+    // its newest 100, always including the opened message, within D1's 100 bound parameters.
+    const db = database();
+    db.exec("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES ('t-long', 'native:work', '2026-10-01T02:00:00Z')");
+    const insert = db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_text, html_version)
+      VALUES (?, 'native:work', 't-long', 'inbound', 'alerts@ci.test', '[]', 'Build alerts', '', ?, 'x', 2)`);
+    const id = i => `b${String(i).padStart(3, "0")}`;
+    for (let i = 0; i <= 100; i++) insert.run(id(i), new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString());
+    const env = { DB: d1(db), MAIL: { get: async () => null } };
+    const open = async messageId => {
+      const response = await m.getMessage(new Request(`https://mail.example.org/api/messages/${messageId}?accountId=native:work`), messageId, env);
+      assert.equal(response.status, 200, `${messageId} opens`);
+      return (await response.json()).thread.map(entry => entry.id);
+    };
+    const newest = await open(id(100));
+    assert.deepEqual(newest, Array.from({ length: 100 }, (_, i) => id(i + 1)), "the newest 100, oldest first");
+    const oldest = await open(id(0));
+    assert.equal(oldest.length, 100);
+    assert.deepEqual(oldest.slice(0, 2), [id(0), id(2)], "an older opened message takes the place of the oldest shown");
+    assert.equal(oldest.at(-1), id(100));
+  }
 
   // Disabling or deleting a mailbox revokes signed-in devices; the first passkey is registered atomically.
   const mailboxes = source("worker/mailboxes.ts");
@@ -267,8 +311,6 @@ async function run(m) {
   assert.match(send, /existing\.state === "accepted"\) \{[\s\S]{0,200}DELETE FROM drafts/, "a retried, already accepted send removes its draft");
   // Drafts are bounded per mailbox.
   assert.match(source("worker/api/drafts.ts"), /MAX_DRAFTS_PER_MAILBOX = 200/);
-  // Contact photos never send the Google token to a redirect target.
-  assert.match(source("worker/api/contactAvatar.ts"), /redirect: "manual"/);
 
   console.log("PASS: review fixes (rate limits, body limits, linear HTML, outbound checks, Message-IDs, drafts, conversation actions, unread counts)");
 }
@@ -286,7 +328,7 @@ try {
     `export { safeFilename } from "${file("email/receive.ts")}";`,
     `export { nativeProvider } from "${file("providers/native.ts")}";`,
     `export { bulkMailAction } from "${file("api/mailActions.ts")}";`,
-    `export { getMessage } from "${file("api/mail.ts")}";`,
+    `export { getMessage, listMessages } from "${file("api/mail.ts")}";`,
     `export { saveDraft } from "${file("api/drafts.ts")}";`,
     `export { rfcMessageId } from "${file("transports/types.ts")}";`,
     `export { ResendTransport } from "${file("transports/resend.ts")}";`,

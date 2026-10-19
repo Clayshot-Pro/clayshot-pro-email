@@ -1,10 +1,7 @@
+import { sha256Hex } from "./bytes";
 const WINDOW_SECONDS = 60;
 const MAX_ATTEMPTS = 12;
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-}
 
 export async function checkAuthRateLimit(env: Env, bucket: string, windowSeconds = WINDOW_SECONDS, maxAttempts = MAX_ATTEMPTS): Promise<boolean> {
   const key = await sha256Hex(bucket);
@@ -46,7 +43,7 @@ export function authRateLimitBucket(request: Request, route: string): string {
  * many addresses doesn't help. A success clears the count, so the owner
  * signing in never uses up the allowance.
  */
-export const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
+const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
 export const ACCOUNT_LOGIN_MAX_ATTEMPTS = 30;
 export const accountRateLimitBucket = (route: string, address: string) => `${route}:account:${address.trim().toLowerCase()}`;
 
@@ -62,13 +59,28 @@ export async function clearAccountLoginFailures(env: Env, bucket: string): Promi
 export const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
 
 /**
- * A declared length over the limit, or a streamed (chunked) body with no
- * length to check up front: refuse it, so handlers that parse JSON before
- * authentication never read unbounded input.
+ * The request with its body capped at maxBytes, or null when it is already
+ * known to be too large, so handlers that parse JSON before authentication
+ * never read unbounded input. A declared length over the limit (or invalid)
+ * is refused up front, and so is a chunked body unless `streamChunked` is set;
+ * a body with no length at all (HTTP/2 and HTTP/3 may send neither header) is
+ * counted while it is read and fails once it passes the limit.
  */
-export function requestTooLarge(request: Request, maxBytes: number): boolean {
+export function limitedRequest(request: Request, maxBytes: number, { streamChunked = false } = {}): Request | null {
+  if (!request.body) return request;
   const raw = request.headers.get("Content-Length");
-  if (!raw) return request.body !== null && request.headers.has("Transfer-Encoding");
-  const length = Number(raw);
-  return !Number.isFinite(length) || length > maxBytes;
+  if (raw !== null) {
+    const length = Number(raw);
+    return Number.isSafeInteger(length) && length >= 0 && length <= maxBytes ? request : null;
+  }
+  if (request.headers.has("Transfer-Encoding") && !streamChunked) return null;
+  let seen = 0;
+  const body = request.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      seen += chunk.byteLength;
+      if (seen > maxBytes) controller.error(new Error("Request body too large"));
+      else controller.enqueue(chunk);
+    },
+  }));
+  return new Request(request, { body, duplex: "half" } as RequestInit);
 }

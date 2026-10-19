@@ -11,7 +11,7 @@
  *
  * Colour helpers are pure; classifyEmail and applyNativeColors work on any Document.
  */
-export type Rgba = { r: number; g: number; b: number; a: number };
+type Rgba = { r: number; g: number; b: number; a: number };
 /** `scheme` is the app's color-scheme: the email must match it, or the browser paints the frame on an opaque canvas. */
 export type EmailTheme = { text: string; link: string; background: string; font: string; scheme: string };
 export type EmailMode = "native" | "paper";
