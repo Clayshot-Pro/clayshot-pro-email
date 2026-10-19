@@ -17,6 +17,7 @@
 | `v3.08` | No primary mailbox: admin@<mail domain> is the administrator's mailbox; admins land in mail and switch to the admin panel and back |
 | `v3.09` | Per-mailbox blocked senders (migration 0021) |
 | `v3.10` | Per-mailbox profile photos; junk filter on for every mailbox with authentication and content signals (migration 0022) |
+| `v3.11` | Native HTML email reader: full reader width, app-themed rendering for ordinary mail, a light card only for designed mail |
 
 ## Decisions applied in v3.05
 
@@ -87,6 +88,14 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Admin → Mailboxes no longer offers "Change password" for admin@ (it uses the administrator sign-in).
 - Start: the app opens on All inboxes when two or more usable accounts are signed in, otherwise on the one account; the last mailbox used on the device no longer decides. Returning from the admin panel in the same tab keeps the open mailbox.
 - Phone reader spacing: the open reader's toolbar no longer adds the top safe area a second time; reader actions sit in one compact row (icon above label, labels sized to the screen; 360px and wider fit in full); and in the installed iOS app (`display-mode: standalone`) the root is at least screen-tall, the workaround for the iOS 26 regression (WebKit 301108) that left an empty band under the tab bar. Chromium cannot reproduce that regression, so the last part needs a check on an iPhone.
+
+## v3.11: native email reader
+
+- HTML mail fills the reader column (the 760px cap and the always-white card are gone).
+- After the sandboxed document loads, `emailTheme.ts` classifies it from computed styles. Any background image, or coloured (not white, not clear) backgrounds covering over 20% of the email, makes it **paper**: shown on a light card with its own colours. Everything else is **native**: transparent, the app font and text colour, accent links; white backgrounds are dropped, and text colours under 4.5:1 contrast against what is actually behind them are replaced.
+- The email document is given the app's `color-scheme`; a mismatch makes browsers paint the frame on an opaque white canvas. Paper mail uses `color-scheme: light`.
+- Wider-than-reader mail (600px newsletters on phones) is scaled with `zoom` to fit; the frame height follows the content with a ResizeObserver; the frame stays hidden until it is adapted, so there is no flash of unadapted mail. A real theme change re-renders the open email.
+- Unchanged: sanitization in `emailHtml.ts`, the CSP (no remote images, scripts, forms or frames) and the iframe sandbox (no `allow-scripts`). `email-html.css` is excluded from `verify-css-equivalence` as a redesigned stylesheet; `test-email-reader` covers it.
 
 ## Production rollout (LTM instance)
 

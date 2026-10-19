@@ -27,6 +27,7 @@ const TESTS = [
   "test-compose-sender",
   "test-unsubscribe-ui",
   "test-reader-action-bar",
+  "test-email-reader",
   "test-reader-bulk-delete",
   "test-bulk-trash-consistency",
   "test-cloudflare-api",

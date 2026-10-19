@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { messageUnsubscribeUrl } from "../../worker/email/unsubscribe";
 import { buildSafeEmailDocument } from "../emailHtml";
+import { applyNativeColors, classifyEmail, emailBaseStyles, fitEmailWidth, parseColor, type EmailMode, type EmailTheme } from "../emailTheme";
 import type { MessageDetail } from "../mailTypes";
 import { formatBytes, formatFullDate, senderLabel } from "../mailUtils";
 import { AttachmentPreview } from "./AttachmentPreview";
@@ -33,30 +34,92 @@ function messageSecondary(message: MessageDetail): string {
     : message.fromName ? message.fromAddress : `to ${message.toAddresses.join(", ") || "you"}`;
 }
 
+/** The theme behind the reader, read from the live page so every theme works. */
+function readerTheme(shell: HTMLElement): EmailTheme {
+  const style = getComputedStyle(shell);
+  let background = "";
+  for (let node: HTMLElement | null = shell; node && !background; node = node.parentElement) {
+    const colour = parseColor(getComputedStyle(node).backgroundColor);
+    if (colour && colour.a > 0.9) background = `rgb(${colour.r}, ${colour.g}, ${colour.b})`;
+  }
+  // Resolve the theme's link colour to rgb through a probe, whatever its token holds.
+  const probe = document.createElement("span");
+  probe.style.color = "var(--color-accent-text, var(--color-accent))";
+  shell.appendChild(probe);
+  const link = getComputedStyle(probe).color;
+  probe.remove();
+  return { text: style.color, link: link || style.color, background: background || "rgb(18, 18, 18)", font: style.fontFamily, scheme: style.colorScheme || "normal" };
+}
+
+/**
+ * HTML email in a sandboxed frame. Ordinary mail is shown natively in the app
+ * theme; designed mail keeps its own colours on a light card (emailTheme.ts).
+ * The frame stays hidden until it is adapted, and its height follows the
+ * content as the reader resizes or images load.
+ */
 function RichEmailBody({ html }: { html: string }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const [mode, setMode] = useState<EmailMode | null>(null);
+  // Native colours are written into the document, so a theme change re-renders it.
+  const [themeVersion, setThemeVersion] = useState(0);
   const srcDoc = useMemo(() => buildSafeEmailDocument(html), [html]);
 
-  const resizeFrame = () => {
-    const frame = frameRef.current;
-    const document = frame?.contentDocument;
-    if (!frame || !document) return;
-    requestAnimationFrame(() => {
-      const height = Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0, 100);
-      frame.style.height = `${Math.min(height + 4, 12000)}px`;
+  useEffect(() => () => observerRef.current?.disconnect(), []);
+  // Synchronous with the commit, so it always runs before the new document loads.
+  useLayoutEffect(() => setMode(null), [srcDoc, themeVersion]);
+  useEffect(() => {
+    const root = document.documentElement;
+    const signature = () => [root.getAttribute("data-theme"), root.getAttribute("data-text-size"), root.style.getPropertyValue("--user-accent")].join("|");
+    let last = signature();
+    // Appearance is re-applied often with the same values; only a real change reloads the email.
+    const watcher = new MutationObserver(() => {
+      const next = signature();
+      if (next === last) return;
+      last = next;
+      setThemeVersion(version => version + 1);
     });
+    watcher.observe(root, { attributes: true, attributeFilter: ["data-theme", "data-text-size", "style"] });
+    return () => watcher.disconnect();
+  }, []);
+
+  const onLoad = () => {
+    const frame = frameRef.current;
+    const doc = frame?.contentDocument;
+    const shell = shellRef.current;
+    if (!frame || !doc?.body || !shell) return;
+    const theme = readerTheme(shell);
+    const next = classifyEmail(doc);
+    const style = doc.createElement("style");
+    style.textContent = emailBaseStyles(next, theme);
+    doc.head.appendChild(style);
+    if (next === "native") applyNativeColors(doc, theme);
+    const fit = () => {
+      fitEmailWidth(doc);
+      const height = Math.ceil(doc.documentElement.getBoundingClientRect().height);
+      frame.style.height = `${Math.min(Math.max(height, 24) + 2, 20000)}px`;
+    };
+    fit();
+    observerRef.current?.disconnect();
+    const Observer = (doc.defaultView as (Window & typeof globalThis) | null)?.ResizeObserver ?? ResizeObserver;
+    observerRef.current = new Observer(fit);
+    observerRef.current.observe(doc.documentElement);
+    setMode(next);
   };
 
   return (
-    <div className="rich-email-shell">
+    <div ref={shellRef} className={`rich-email-shell${mode ? ` is-${mode}` : ""}`}>
       <iframe
+        key={themeVersion}
         ref={frameRef}
         className="rich-email-frame"
         title="Email content"
         srcDoc={srcDoc}
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         referrerPolicy="no-referrer"
-        onLoad={resizeFrame}
+        style={mode ? undefined : { visibility: "hidden" }}
+        onLoad={onLoad}
       />
     </div>
   );

@@ -186,6 +186,8 @@ Each custom mailbox can **block senders**: **Block** in the message reader (on p
 
 **Junk filtering** is on for every custom mailbox (it can be turned off per mailbox in Admin → Mailboxes). Mail goes to Junk when an upstream filter already flagged it, when sender authentication failed (DMARC, or SPF without a valid DKIM signature; mailing lists are exempt), or when enough content signals add up: scam and phishing wording, links to bare IP addresses, sender names that impersonate another sender, replies redirected to another domain, and similar. Senders the mailbox has written to skip the content checks. Junk is never deleted automatically, so **Not junk** moves a false positive back. Gmail accounts keep Gmail's own spam filtering.
 
+**Reading HTML mail:** ordinary mail is shown natively in the app's theme, with the app's font, theme text colour and accent links, and only colours that would be unreadable on the theme are replaced. Designed mail (newsletters, receipts, anything with coloured or image backgrounds) keeps its own design on a light card, the way native mail apps show it. Either way the message fills the reader, and fixed-width newsletters are scaled down to fit a phone screen. Every email still renders in a sandboxed frame with no scripts, no forms and no remote content (tracking images stay blocked).
+
 **Profile photos:** every custom mailbox can set its own photo (Settings → Edit profile). It shows in the account switcher and next to the mailbox in Admin → Mailboxes; mailboxes without one show their initial.
 
 ## Optional integrations
