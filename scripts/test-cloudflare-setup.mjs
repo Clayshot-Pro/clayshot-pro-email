@@ -85,7 +85,8 @@ function fakeCloudflare(options = {}) {
     if ((m = path.match(/^\/zones\/(\w+)\/email\/routing\/dns$/)) && method === "POST") {
       state.routing = true;
       const zoneName = state.zones.find(zone => zone.id === m[1])?.name;
-      state.mx = [{ id: "mx1", name: body?.name ?? zoneName, content: "route1.mx.cloudflare.net", priority: 13 }];
+      const name = body?.name ?? zoneName;
+      state.mx = [...state.mx.filter(r => r.name !== name), { id: `mx-${name}`, name, content: "route1.mx.cloudflare.net", priority: 13 }];
       return ok({ enabled: true });
     }
     if ((m = path.match(/^\/zones\/(\w+)\/email\/routing\/rules\/catch_all$/))) {
@@ -236,6 +237,28 @@ async function run(m) {
     // A subdomain finds its parent zone; a domain outside the account is refused.
     const sub = await m.connectDomain(connection, "mail.example.org", { sending: false }, fakeCloudflare().fetch);
     assert.equal(sub.steps[0].detail, "Zone example.org");
+    // Routing already on for the zone is not enough: the subdomain gets its own MX records.
+    const zoneOnly = fakeCloudflare({ routing: true, mx: [{ id: "mx1", name: "example.org", content: "route1.mx.cloudflare.net" }] });
+    const subReport = await m.connectDomain(connection, "mail.example.org", { sending: false }, zoneOnly.fetch);
+    assert.equal(subReport.steps.find(step => step.id === "routing").status, "done");
+    assert.ok(zoneOnly.mutations().includes("POST /zones/zone1/email/routing/dns"));
+    assert.equal(subReport.routingReady, true);
+
+    // A catch-all that already forwards elsewhere is only replaced after confirmation.
+    const forwarding = { enabled: true, actions: [{ type: "forward", value: ["owner@elsewhere.net"] }] };
+    const shared = fakeCloudflare({ catchAll: forwarding });
+    const held = await m.connectDomain(connection, "example.org", { sending: false }, shared.fetch);
+    assert.equal(held.catchAllConflict, "forward owner@elsewhere.net");
+    assert.equal(held.steps.find(step => step.id === "catch-all").status, "action");
+    assert.equal(held.routingReady, false);
+    assert.ok(!shared.mutations().some(call => call.includes("catch_all")), "the catch-all is untouched before confirmation");
+    const replaced = await m.connectDomain(connection, "example.org", { sending: false, replaceCatchAll: true }, shared.fetch);
+    assert.equal(replaced.catchAllConflict, null);
+    assert.equal(replaced.routingReady, true);
+    // A catch-all that only drops mail is replaced without asking.
+    const dropping = fakeCloudflare({ catchAll: { enabled: true, actions: [{ type: "drop" }] } });
+    assert.equal((await m.connectDomain(connection, "example.org", { sending: false }, dropping.fetch)).routingReady, true);
+
     const missing = await m.connectDomain(connection, "elsewhere.net", {}, fakeCloudflare().fetch);
     assert.match(missing.steps[0].detail, /not in this Cloudflare account/);
   }

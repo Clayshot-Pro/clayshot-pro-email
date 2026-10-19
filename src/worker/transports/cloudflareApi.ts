@@ -92,7 +92,8 @@ export class CloudflareApiTransport implements OutboundTransport {
     const accepted = (data.result?.delivered?.length ?? 0) + (data.result?.queued?.length ?? 0);
     // A 200 with only permanent bounces is not a successful send.
     if (accepted === 0) throw new TransportError("E_DELIVERY_FAILED");
-    // The REST API reports delivery categories, not a message ID.
+    // The REST API reports delivery categories, not a message ID. The
+    // Message-ID is learned from the first reply (see receive.ts).
     return { providerMessageId: null };
   }
 }

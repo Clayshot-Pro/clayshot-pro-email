@@ -37,6 +37,9 @@ export type ProviderMutation = Partial<{
   isJunk: boolean;
 }>;
 
+/** One conversation-wide change. */
+export type ThreadMutation = Pick<ProviderMutation, "isDeleted" | "isArchived" | "isJunk">;
+
 export type ProviderAttachment = {
   filename: string;
   type: string;
@@ -57,6 +60,8 @@ export type ProviderSendInput = {
 
 export type ProviderSendResult = {
   providerMessageId: string | null;
+  /** RFC Message-ID of the sent mail, when the transport reports it. */
+  messageIdHeader?: string | null;
   transport?: "cloudflare" | "resend";
 };
 
@@ -68,6 +73,7 @@ export interface MailProvider {
   listMessages(options: ProviderListOptions): Promise<ProviderMessage[]>;
   getMessage(id: string): Promise<ProviderMessage | null>;
   patchMessage(id: string, mutation: ProviderMutation): Promise<boolean>;
-  patchThread(id: string, isDeleted: boolean): Promise<boolean>;
+  /** Delete/restore, archive/unarchive or junk/not-junk a whole conversation. */
+  patchThread(id: string, mutation: ThreadMutation): Promise<boolean>;
   sendMessage(input: ProviderSendInput): Promise<ProviderSendResult>;
 }

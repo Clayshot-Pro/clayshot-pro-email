@@ -249,11 +249,13 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
   if (!initialRow) return Response.json({ error: "Message not found" }, { status: 404 });
   const row = await recoverStoredHtml(env, initialRow);
 
-  const unread = await env.DB.prepare("SELECT COUNT(*) AS count FROM messages WHERE thread_id=?1 AND mailbox_id=?2 AND direction='inbound' AND is_read=0")
+  // Opening a conversation reads all of it. newlyReadCount reports only the
+  // messages the unread badge counts (inbox mail), so the client can adjust it.
+  const unread = await env.DB.prepare("SELECT COUNT(*) AS count, SUM(CASE WHEN is_archived=0 AND is_deleted=0 AND is_junk=0 THEN 1 ELSE 0 END) AS counted FROM messages WHERE thread_id=?1 AND mailbox_id=?2 AND direction='inbound' AND is_read=0")
     .bind(row.thread_id, provider.accountId)
-    .first<{ count: number }>();
-  const newlyReadCount = unread?.count ?? 0;
-  if (newlyReadCount > 0) {
+    .first<{ count: number; counted: number | null }>();
+  const newlyReadCount = unread?.counted ?? 0;
+  if ((unread?.count ?? 0) > 0) {
     await env.DB.batch([
       env.DB.prepare("UPDATE messages SET is_read=1 WHERE thread_id=?1 AND mailbox_id=?2 AND direction='inbound' AND is_read=0").bind(row.thread_id, provider.accountId),
       env.DB.prepare("UPDATE threads SET is_read=1 WHERE id=?1 AND mailbox_id=?2").bind(row.thread_id, provider.accountId),
@@ -300,12 +302,13 @@ export async function patchMessage(request: Request, id: string, env: Env): Prom
   if (scope !== undefined && scope !== "thread") {
     return Response.json({ error: "Invalid message mutation scope" }, { status: 400 });
   }
-  if (scope === "thread" &&
-      (typeof mutation.isDeleted !== "boolean" || Object.keys(mutation).length !== 1)) {
-    return Response.json({ error: "Only deleting or restoring a conversation is supported" }, { status: 400 });
+  const threadMutation = Object.keys(mutation).length === 1 &&
+    (["isDeleted", "isArchived", "isJunk"] as const).find(key => typeof mutation[key] === "boolean");
+  if (scope === "thread" && !threadMutation) {
+    return Response.json({ error: "Only deleting, archiving or moving a conversation to Junk is supported" }, { status: 400 });
   }
-  const changed = scope === "thread"
-    ? await provider.patchThread(id, mutation.isDeleted!)
+  const changed = scope === "thread" && threadMutation
+    ? await provider.patchThread(id, { [threadMutation]: mutation[threadMutation] })
     : await provider.patchMessage(id, mutation);
   return changed
     ? Response.json({ ok: true, accountId: provider.accountId })

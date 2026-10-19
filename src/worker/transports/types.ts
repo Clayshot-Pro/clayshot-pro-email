@@ -15,7 +15,19 @@ export type OutboundMessage = {
 };
 
 export type TransportKind = "cloudflare" | "resend";
-export type TransportResult = { providerMessageId: string | null };
+/**
+ * providerMessageId is the provider's own id (Resend email id, used by its
+ * webhooks). messageIdHeader is the RFC 5322 Message-ID recipients see, when
+ * the provider reports it; replies refer to it in In-Reply-To.
+ */
+export type TransportResult = { providerMessageId: string | null; messageIdHeader?: string | null };
+
+/** `<local@domain>` from a provider-reported Message-ID, or null when it is not one. */
+export function rfcMessageId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const bare = value.trim().replace(/^<|>$/g, "");
+  return bare.length <= 900 && /^[^\s<>@]+@[^\s<>@]+$/.test(bare) ? `<${bare}>` : null;
+}
 
 /** User-safe delivery codes. Raw provider messages never reach the client. */
 export const SAFE_DELIVERY_CODES = new Set([

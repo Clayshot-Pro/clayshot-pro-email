@@ -52,7 +52,8 @@ const ok = new ResendTransport("re_test", async (url, init) => {
   seen = { url, init };
   return new Response(JSON.stringify({ id: "email_123" }), { status: 200 });
 });
-assert.deepEqual(await ok.send(message), { providerMessageId: "email_123" });
+// The Message-ID arrives with Resend's webhooks.
+assert.deepEqual(await ok.send(message), { providerMessageId: "email_123", messageIdHeader: null });
 assert.equal(seen.url, "https://api.resend.com/emails");
 assert.equal(seen.init.headers.Authorization, "Bearer re_test");
 assert.equal(seen.init.headers["Idempotency-Key"], "native:x:key-123456789012");

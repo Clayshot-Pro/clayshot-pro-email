@@ -1,4 +1,4 @@
-import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
+import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult, ThreadMutation } from "./types";
 import { transportChoice, transportFor } from "../transports";
 import { TransportError } from "../transports/types";
 import { textToHtml } from "../email/textHtml";
@@ -116,16 +116,22 @@ export class NativeMailProvider implements MailProvider {
     return Boolean(result.meta.changes);
   }
 
-  async patchThread(id: string, isDeleted: boolean): Promise<boolean> {
+  async patchThread(id: string, mutation: ThreadMutation): Promise<boolean> {
     // Resolve the thread from an authenticated mailbox-owned message, never
     // from an arbitrary client-provided thread identifier.
     const message = await this.env.DB.prepare(
       "SELECT thread_id FROM messages WHERE id=?1 AND mailbox_id=?2"
     ).bind(id, this.accountId).first<{ thread_id: string }>();
     if (!message) return false;
+    const [key, value] = Object.entries(mutation)[0] ?? [];
+    const column = key === "isDeleted" ? "is_deleted" : key === "isArchived" ? "is_archived" : key === "isJunk" ? "is_junk" : null;
+    if (!column || typeof value !== "boolean") return false;
+    // Archiving or junking moves the received mail and the opened message, so
+    // your own replies stay in Sent; undoing it, and deleting, take everything.
+    const scope = column === "is_deleted" || !value ? "" : " AND (direction='inbound' OR id=?4)";
     const result = await this.env.DB.prepare(
-      "UPDATE messages SET is_deleted=?1 WHERE mailbox_id=?2 AND thread_id=?3"
-    ).bind(isDeleted ? 1 : 0, this.accountId, message.thread_id).run();
+      `UPDATE messages SET ${column}=?1 WHERE mailbox_id=?2 AND thread_id=?3${scope}`
+    ).bind(...[value ? 1 : 0, this.accountId, message.thread_id], ...(scope ? [id] : [])).run();
     return Boolean(result.meta.changes);
   }
 
@@ -146,7 +152,7 @@ export class NativeMailProvider implements MailProvider {
       attachments: input.attachments,
       idempotencyKey: input.idempotencyKey,
     });
-    return { providerMessageId: result.providerMessageId, transport: transport.kind };
+    return { providerMessageId: result.providerMessageId, messageIdHeader: result.messageIdHeader ?? null, transport: transport.kind };
   }
 }
 

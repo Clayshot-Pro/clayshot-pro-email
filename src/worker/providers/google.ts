@@ -295,6 +295,16 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   return response;
 }
 
+/**
+ * Disconnect a Gmail account no device uses any more: its refresh token is
+ * revoked and deleted instead of staying in D1 indefinitely.
+ */
+export async function disconnectGoogleIfUnused(accountId: string, env: Env): Promise<void> {
+  if (!accountId.startsWith("gmail:")) return;
+  const inUse = await env.DB.prepare("SELECT 1 AS yes FROM device_session_accounts WHERE account_id=?1 LIMIT 1").bind(accountId).first();
+  if (!inUse) await disconnectGoogle(accountId, env);
+}
+
 export async function disconnectGoogle(accountId: string, env: Env): Promise<Response> {
   if (!accountId.startsWith("gmail:")) {
     return Response.json({ error: "Gmail account not found" }, { status: 404 });

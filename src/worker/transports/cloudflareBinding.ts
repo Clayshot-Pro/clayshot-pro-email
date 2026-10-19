@@ -1,4 +1,9 @@
-import type { OutboundMessage, OutboundTransport, TransportResult } from "./types";
+import { rfcMessageId, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types";
+
+/** Only threading headers, and never a value with a line break or NUL (header injection). */
+const ALLOWED_HEADERS = new Set(["in-reply-to", "references"]);
+export const safeHeaders = (headers: Record<string, string> | undefined) => Object.fromEntries(Object.entries(headers ?? {})
+  .filter(([name, value]) => ALLOWED_HEADERS.has(name.toLowerCase()) && !/[\r\n\u0000]/.test(value)));
 
 /**
  * Cloudflare Email Sending through the unrestricted `EMAIL` send_email
@@ -15,6 +20,7 @@ export class CloudflareBindingTransport implements OutboundTransport {
   }
 
   async send(message: OutboundMessage): Promise<TransportResult> {
+    const headers = safeHeaders(message.headers);
     const result = await this.binding.send({
       from: message.from,
       to: message.to,
@@ -24,7 +30,7 @@ export class CloudflareBindingTransport implements OutboundTransport {
       subject: message.subject,
       text: message.text,
       html: message.html,
-      headers: message.headers && Object.keys(message.headers).length ? message.headers : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       attachments: message.attachments.map(attachment => ({
         content: attachment.content,
         filename: attachment.filename,
@@ -32,6 +38,6 @@ export class CloudflareBindingTransport implements OutboundTransport {
         disposition: "attachment" as const,
       })),
     });
-    return { providerMessageId: result.messageId };
+    return { providerMessageId: result.messageId, messageIdHeader: rfcMessageId(result.messageId) };
   }
 }

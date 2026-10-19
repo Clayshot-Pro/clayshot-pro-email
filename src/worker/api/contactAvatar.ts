@@ -24,15 +24,20 @@ export async function getContactAvatar(request: Request, env: Env): Promise<Resp
     const photoUrl = new URL(rawPhotoUrl);
     if (!isAllowedGoogleImageUrl(photoUrl)) return notFound();
 
+    // The access token goes only to the allowlisted host; a redirect is
+    // checked before it is followed and never receives the token.
     const token = await getGoogleAccessToken(env, accountId);
-    const response = await fetch(photoUrl.toString(), {
+    let response = await fetch(photoUrl.toString(), {
       headers: { Authorization: `Bearer ${token}` },
-      redirect: "follow",
+      redirect: "manual",
     });
-    if (!response.ok || !response.url) return notFound();
-
-    const finalUrl = new URL(response.url);
-    if (!isAllowedGoogleImageUrl(finalUrl)) return notFound();
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("Location");
+      const next = location ? new URL(location, photoUrl) : null;
+      if (!next || !isAllowedGoogleImageUrl(next)) return notFound();
+      response = await fetch(next.toString(), { redirect: "manual" });
+    }
+    if (!response.ok) return notFound();
 
     const image = await readValidatedGoogleImage(response);
     return image ? googleImageResponse(image) : notFound();

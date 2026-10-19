@@ -7,6 +7,11 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.14
+
+- Fixes from a security and bug review; nothing to do. Devices signed in to a mailbox are signed out when it is disabled.
+- A domain whose catch-all already forwards elsewhere now asks before replacing it (**Replace the catch-all and connect**).
+
 ## v3.13
 
 - Forks are the recommended setup and update with **Sync fork**; the admin panel shows the running version and when a newer one is out.

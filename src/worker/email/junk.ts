@@ -4,7 +4,7 @@
  * Mail goes to Junk when an upstream filter already flagged it, when sender
  * authentication failed (DMARC, or SPF without a passing DKIM signature), or
  * when content signals add up to JUNK_SCORE. Content scoring is skipped for
- * senders the mailbox has written to. Junk is never deleted, so a false
+ * authenticated senders the mailbox has written to. Junk is never deleted, so a false
  * positive is one "Not junk" away; each weight below is tuned so ordinary
  * newsletters, receipts and account notices stay under the threshold.
  */
@@ -23,6 +23,12 @@ export type JunkInput = {
   headers?: HeaderSource;
   /** The mailbox has sent mail to this sender before. */
   knownSender?: boolean;
+  /**
+   * Every Authentication-Results and ARC-Authentication-Results header, top
+   * first (postal-mime `headers` order). When given, only the receiving
+   * server's result is trusted (see trustedResult).
+   */
+  authenticationHeaders?: Array<{ key: string; value: string }>;
 };
 
 export type JunkVerdict = { junk: boolean; score: number; reasons: string[] };
@@ -41,7 +47,7 @@ const domainOf = (address: string | null | undefined) => {
   const at = value.lastIndexOf("@");
   return at >= 0 ? value.slice(at + 1).replace(/>$/, "") : "";
 };
-/** example.co.uk and mail.example.co.uk share "example.co.uk"; good enough to compare origins. */
+/** Last two labels: a rough origin for content signals only (never for authentication). */
 const baseDomain = (domain: string) => domain.split(".").slice(-2).join(".");
 
 function upstreamFlag(headers: HeaderSource): boolean {
@@ -50,11 +56,52 @@ function upstreamFlag(headers: HeaderSource): boolean {
     || /^\s*(?:yes|true|spam)\b/i.test(headers.get("x-spam") ?? "");
 }
 
-/** Only failures are used: a forged header can make mail look worse, never better. */
-function authenticationFailure(headers: HeaderSource): string | null {
-  // Mailing lists and forwarders legitimately break SPF/DMARC alignment.
-  if (headers.get("list-id")) return null;
-  const results = headers.get("authentication-results") ?? "";
+const authservId = (value: string) => value.replace(/^\s*i=\d+\s*;/i, "").split(";")[0].trim().toLowerCase();
+const isCloudflare = (value: string) => /(?:^|\.)cloudflare\.(?:net|com)$/.test(authservId(value));
+
+/**
+ * The authentication result written by the server that received the mail.
+ * Receiving servers add theirs above everything the sender wrote, so a
+ * forged result can never sit above the real one. Take the topmost
+ * Cloudflare-labelled result, plain or ARC, by position; otherwise the
+ * topmost plain result.
+ */
+export function trustedResult(headers: Array<{ key: string; value: string }>): string {
+  const results = headers.filter(header => /^(?:arc-)?authentication-results$/i.test(header.key));
+  return results.find(header => isCloudflare(header.value))?.value
+    ?? results.find(header => header.key.toLowerCase() === "authentication-results")?.value ?? "";
+}
+
+/** DMARC passed, or DKIM passed for the sender's domain, a parent or a subdomain of it (relaxed alignment). */
+function authenticatedSender(results: string, senderDomain: string): boolean {
+  if (/\bdmarc=pass\b/i.test(results)) return true;
+  return Boolean(senderDomain) && [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
+    .some(match => {
+      const signer = match[1].toLowerCase().replace(/\.$/, "");
+      return signer.includes(".") && (senderDomain === signer || senderDomain.endsWith(`.${signer}`) || signer.endsWith(`.${senderDomain}`));
+    });
+}
+
+/** `List-Id: Name <news.lists.example.org>` signed with DKIM by lists.example.org or example.org. */
+function listSigned(listId: string | null, results: string): boolean {
+  const id = /<([a-z0-9.-]{1,253})>/i.exec(listId ?? "")?.[1]?.toLowerCase();
+  if (!id) return false;
+  return [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
+    .some(match => {
+      const signer = match[1].toLowerCase().replace(/\.$/, "");
+      return signer.includes(".") && id.endsWith(`.${signer}`);
+    });
+}
+
+/** The receiving server authenticated the From domain (DMARC, or aligned DKIM). */
+export const senderAuthenticated = (headers: Array<{ key: string; value: string }>, sender: string) =>
+  authenticatedSender(trustedResult(headers), domainOf(sender));
+
+function authenticationFailure(headers: HeaderSource, results: string): string | null {
+  // Mailing lists and forwarders legitimately break SPF/DMARC alignment. A
+  // List-Id header is easy to add, so it only counts when the list domain
+  // itself signed the message (a passing DKIM signature aligned with it).
+  if (listSigned(headers.get("list-id"), results)) return null;
   if (/\bdmarc=fail\b/i.test(results)) return "DMARC failed";
   if (/\bspf=fail\b/i.test(results) && !/\bdkim=pass\b/i.test(results)) return "SPF failed without a valid DKIM signature";
   return null;
@@ -63,10 +110,15 @@ function authenticationFailure(headers: HeaderSource): string | null {
 export function junkVerdict(input: JunkInput): JunkVerdict {
   const reasons: string[] = [];
   if (input.headers && upstreamFlag(input.headers)) reasons.push("Flagged as spam by an upstream filter");
-  const auth = input.headers ? authenticationFailure(input.headers) : null;
+  const results = input.authenticationHeaders
+    ? trustedResult(input.authenticationHeaders)
+    : input.headers?.get("authentication-results") ?? "";
+  const auth = input.headers ? authenticationFailure(input.headers, results) : null;
   if (auth) reasons.push(auth);
   if (reasons.length) return { junk: true, score: JUNK_SCORE, reasons };
-  if (input.knownSender) return { junk: false, score: 0, reasons };
+  // A From address is easy to forge: a contact skips content checks only
+  // when the receiving server authenticated that sender.
+  if (input.knownSender && authenticatedSender(results, domainOf(input.sender))) return { junk: false, score: 0, reasons };
 
   const subject = input.subject.slice(0, 500);
   const text = input.text.slice(0, 8000);

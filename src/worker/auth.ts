@@ -272,15 +272,12 @@ export async function verifyRegistration(request: Request, env: Env): Promise<Re
     }
 
     const { credential } = verification.registrationInfo;
-    await env.DB.prepare(`
-      INSERT OR REPLACE INTO auth_credentials (
-        id,
-        public_key,
-        counter,
-        transports,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, datetime('now'))
+    // Only the first owner passkey is ever stored, even if two registrations
+    // with the same setup grant race each other.
+    const inserted = await env.DB.prepare(`
+      INSERT INTO auth_credentials (id, public_key, counter, transports, created_at)
+      SELECT ?1, ?2, ?3, ?4, datetime('now')
+      WHERE NOT EXISTS (SELECT 1 FROM auth_credentials)
     `)
       .bind(
         credential.id,
@@ -289,6 +286,7 @@ export async function verifyRegistration(request: Request, env: Env): Promise<Re
         credential.transports ? JSON.stringify(credential.transports) : null,
       )
       .run();
+    if (!inserted.meta.changes) return jsonError("Passkey registration is disabled", 403);
 
     await clearSetupGrants(env);
     const token = await createSession(env, request);

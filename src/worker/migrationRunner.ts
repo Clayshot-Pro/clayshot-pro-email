@@ -28,14 +28,19 @@ export class MigrationError extends Error {
 
 /**
  * Split a migration file into statements: semicolons inside quotes, comments
- * and CREATE TRIGGER … END blocks do not end a statement.
+ * and CREATE TRIGGER … END blocks (including CASE … END inside them) do not
+ * end a statement.
  */
 export function splitStatements(sql: string): string[] {
   const statements: string[] = [];
   let current = "";
   let index = 0;
-  let depth = 0; // BEGIN … END nesting inside a trigger body
-  const word = (at: number) => sql.slice(at).match(/^[A-Za-z_]+/)?.[0]?.toUpperCase() ?? "";
+  let depth = 0; // BEGIN/CASE … END nesting inside a trigger body
+  const wordPattern = /[A-Za-z_][A-Za-z0-9_]*/y;
+  const word = (at: number) => {
+    wordPattern.lastIndex = at;
+    return wordPattern.exec(sql)?.[0]?.toUpperCase() ?? "";
+  };
   while (index < sql.length) {
     const char = sql[index];
     const next = sql[index + 1];
@@ -68,6 +73,7 @@ export function splitStatements(sql: string): string[] {
     if (/[A-Za-z_]/.test(char) && !/[A-Za-z0-9_]/.test(sql[index - 1] ?? "")) {
       const token = word(index);
       if (token === "BEGIN" && /\bCREATE\s+(?:TEMP\w*\s+)?TRIGGER\b/i.test(current)) depth++;
+      else if (token === "CASE" && depth > 0) depth++;
       else if (token === "END" && depth > 0) depth--;
       current += sql.slice(index, index + token.length);
       index += token.length;

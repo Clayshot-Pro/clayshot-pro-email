@@ -33,5 +33,6 @@ export type ConnectReport = {
   domain: string;
   steps: ConnectStep[];
   mxConflict: Array<{ host: string; priority: number }> | null;
+  catchAllConflict: string | null;
   routingReady: boolean;
 };

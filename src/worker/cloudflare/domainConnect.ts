@@ -5,8 +5,9 @@ import type { CloudflareConnection } from "./connection";
  * Wire a mail domain with the stored Cloudflare token (v3.12): Email Routing
  * on, the catch-all to this Worker, Email Sending onboarding and a monitoring
  * DMARC record. Each step is idempotent and reports what it did; a step that
- * fails does not undo the others. MX records of another mail service are only
- * removed after the administrator confirms (replaceMx).
+ * fails does not undo the others. MX records of another mail service, and a
+ * catch-all rule that already delivers somewhere else, are only replaced after
+ * the administrator confirms (replaceMx, replaceCatchAll).
  */
 export type StepStatus = "done" | "skipped" | "failed" | "action";
 export type ConnectStep = { id: string; label: string; status: StepStatus; detail: string };
@@ -16,10 +17,12 @@ export type ConnectReport = {
   steps: ConnectStep[];
   /** Another mail service's MX records, when the administrator must confirm replacing them. */
   mxConflict: Array<{ host: string; priority: number }> | null;
+  /** Where the zone's enabled catch-all sends mail now, when replacing it needs confirmation. */
+  catchAllConflict: string | null;
   /** Cloudflare confirms mail for the domain reaches this Worker. */
   routingReady: boolean;
 };
-export type ConnectOptions = { replaceMx?: boolean; sending?: boolean };
+export type ConnectOptions = { replaceMx?: boolean; replaceCatchAll?: boolean; sending?: boolean };
 
 type Zone = { id: string; name: string };
 type CatchAll = { enabled?: boolean; actions?: Array<{ type: string; value?: string[] }> };
@@ -46,7 +49,7 @@ async function mxRecords(api: CloudflareClient, zoneId: string, domain: string):
 export async function connectDomain(connection: CloudflareConnection, domain: string, options: ConnectOptions = {},
   fetcher?: Fetcher): Promise<ConnectReport> {
   const api = cloudflareClient(connection.token, fetcher);
-  const report: ConnectReport = { domain, steps: [], mxConflict: null, routingReady: false };
+  const report: ConnectReport = { domain, steps: [], mxConflict: null, catchAllConflict: null, routingReady: false };
   const step = (id: string, label: string, status: StepStatus, detail: string) => { report.steps.push({ id, label, status, detail }); };
 
   let zone: Zone | null;
@@ -82,8 +85,10 @@ export async function connectDomain(connection: CloudflareConnection, domain: st
   }
 
   try {
+    // Routing is on for the zone, but a subdomain also needs its own MX records.
     const routing = await api<{ enabled?: boolean; status?: string }>(`/zones/${zone.id}/email/routing`).catch(() => null);
-    if (routing?.enabled) {
+    const domainRouted = (await mxRecords(api, zone.id, domain)).some(isCloudflareMx);
+    if (routing?.enabled && domainRouted) {
       step("routing", "Email Routing", "skipped", "Already on");
     } else {
       await api(`/zones/${zone.id}/email/routing/dns`, { method: "POST", ...(domain === zone.name ? {} : { body: { name: domain } }) });
@@ -96,8 +101,18 @@ export async function connectDomain(connection: CloudflareConnection, domain: st
   try {
     const current = await api<CatchAll>(`/zones/${zone.id}/email/routing/rules/catch_all`).catch(() => null);
     const routed = current?.enabled && current.actions?.some(action => action.type === "worker" && action.value?.includes(connection.scriptName));
+    // The catch-all covers the whole zone: never silently take over one that
+    // already delivers (forwards or runs another Worker) somewhere else.
+    const elsewhere = current?.enabled && !routed
+      ? (current.actions ?? []).filter(action => action.type !== "drop")
+        .map(action => `${action.type === "worker" ? "Worker" : action.type} ${(action.value ?? []).join(", ")}`.trim())
+      : [];
     if (routed) {
       step("catch-all", "Deliver mail to this app", "skipped", "The catch-all already sends mail here");
+    } else if (elsewhere.length && !options.replaceCatchAll) {
+      report.catchAllConflict = elsewhere.join("; ");
+      step("catch-all", "Deliver mail to this app", "action",
+        `The catch-all for ${zone.name} already sends mail to ${report.catchAllConflict}. Replace it to receive unknown addresses here.`);
     } else {
       await api(`/zones/${zone.id}/email/routing/rules/catch_all`, {
         method: "PUT",

@@ -130,6 +130,7 @@ export async function bulkMailAction(request: Request, env: Env, ctx: ExecutionC
           throw new Error(body.error || "Unable to permanently delete");
         }
       } else {
+        // Selection mode lists single messages: act on exactly those.
         const updated = await provider.patchMessage(id, ACTIONS[action as keyof typeof ACTIONS]);
         if (!updated) throw new Error("Message not found");
       }

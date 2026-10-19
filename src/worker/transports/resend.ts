@@ -79,6 +79,8 @@ export class ResendTransport implements OutboundTransport {
     }
     const body = await response.json().catch(() => null) as { id?: unknown; name?: unknown } | null;
     if (!response.ok) throw new TransportError(mapResendError(response.status, body?.name));
-    return { providerMessageId: typeof body?.id === "string" ? body.id : null };
+    // Resend's response has only its own id; the Message-ID arrives with its
+    // webhooks (or is learned from the first reply, see receive.ts).
+    return { providerMessageId: typeof body?.id === "string" ? body.id : null, messageIdHeader: null };
   }
 }
