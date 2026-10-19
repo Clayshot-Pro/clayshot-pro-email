@@ -1,4 +1,5 @@
 import { AddInboxModal, type AddInboxMode } from "./components/AddInboxModal";
+import { adminActionFetch } from "./adminActions";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DETAIL_CACHE_MS,
@@ -402,9 +403,7 @@ export function App() {
 
     setSettingsBusy(`session:${sessionId}`);
     try {
-      const response = await fetch(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, {
-        method: "DELETE",
-      });
+      const response = await adminActionFetch(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, "DELETE");
       if (!response.ok) throw new Error();
 
       setSessions((current) => current
@@ -424,7 +423,7 @@ export function App() {
     }
     setSettingsBusy("sessions");
     try {
-      const response = await fetch("/api/auth/sessions/reset", { method: "POST" });
+      const response = await adminActionFetch("/api/auth/sessions/reset", "POST");
       if (!response.ok) throw new Error();
       setSessions((current) => current ? current.filter((session) => session.current) : current);
       setSessionCount(1);

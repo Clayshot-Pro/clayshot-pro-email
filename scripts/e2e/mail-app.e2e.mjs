@@ -1,7 +1,7 @@
 // End-to-end: first-run setup, administration, receiving, reading, sending,
 // junk and blocking, All inboxes and access control, against the real Worker.
 import assert from "node:assert/strict";
-import { SETUP_SECRET, api, contextWithPasskey, deliver, launchBrowser, mime, startWorker, steps } from "./harness.mjs";
+import { SETUP_SECRET, api, contextWithPasskey, copyPasskeys, deliver, launchBrowser, mime, startWorker, steps } from "./harness.mjs";
 
 const DOMAIN = "e2e.test";
 const navItem = (page, name) => page.locator(".desktop-sidebar .nav-item", { hasText: name });
@@ -63,6 +63,54 @@ export async function run() {
         const boxes = await adminApi("/api/mailboxes");
         state.aliceId = boxes.json.mailboxes.find(box => box.email_address === `alice@${DOMAIN}`).id;
         assert.ok(state.aliceId);
+      }],
+
+      ["the administrator signs other sessions out from Settings (passkey approval)", async () => {
+        // Two more administrator sessions, signed in with a copy of the passkey. The copy's
+        // signature counter goes back to the original device, as one physical passkey would.
+        const others = [];
+        try {
+          for (let i = 0; i < 2; i++) {
+            const other = await contextWithPasskey(browser);
+            others.push(other);
+            await copyPasskeys(admin, other);
+            await other.page.goto(worker.origin);
+            await other.page.fill("#device-email", `admin@${DOMAIN}`);
+            await other.page.fill("#device-password", ADMIN_PASSWORD);
+            await other.page.locator("button.signin-submit").click();
+            await other.page.waitForSelector(".mail-list-pane, .admin-home", { timeout: 20_000 });
+            await copyPasskeys(other, admin);
+          }
+          const count = async () => (await adminApi("/api/auth/sessions")).json.sessions.length;
+          assert.equal(await count(), 3);
+
+          const { page } = admin;
+          state.page = page;
+          const confirmAll = dialog => void dialog.accept();
+          page.on("dialog", confirmAll);
+          try {
+            await page.goto(worker.origin);
+            await page.waitForSelector(".mail-list-pane, .admin-home", { timeout: 20_000 });
+            await page.getByRole("button", { name: /settings/i }).first().click();
+            await page.getByRole("button", { name: "View all" }).click();
+            await page.locator(".sessions-modal .session-card").nth(2).waitFor({ timeout: 15_000 });
+            await page.locator(".sessions-modal button.session-remove").first().click();
+            await page.waitForFunction(() => document.querySelectorAll(".sessions-modal .session-card").length === 2, null, { timeout: 20_000 });
+            assert.equal(await count(), 2, "Remove signs that session out");
+            await page.locator(".sessions-modal button.sessions-danger").click();
+            await page.waitForFunction(() => document.querySelectorAll(".sessions-modal .session-card").length === 1, null, { timeout: 20_000 });
+            assert.equal(await count(), 1, "Reset other sessions leaves only this one");
+            assert.deepEqual(await page.locator("[role=alert]").allInnerTexts(), [], "no error is shown");
+            await page.getByRole("button", { name: "Done" }).click();
+          } finally {
+            page.off("dialog", confirmAll);
+          }
+          for (const other of others) {
+            assert.ok([401, 403].includes((await api(other.context, worker.origin)("/api/auth/sessions")).status), "the other sessions are signed out");
+          }
+        } finally {
+          for (const other of others) await other.context.close();
+        }
       }],
 
       ["inbound mail is delivered, unknown recipients are rejected", async () => {
