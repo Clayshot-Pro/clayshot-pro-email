@@ -2,6 +2,8 @@ name: Deploy production
 
 # Deploys main to Cloudflare. Use this or Cloudflare Workers Builds, not both.
 # Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets.
+# Forks deploy with Workers Builds by default; a fork that prefers this
+# workflow sets the repository variable DEPLOY_WITH_ACTIONS to true.
 # Only main deploys: the triggers, the job condition and `npm run deploy`'s
 # guard all refuse other branches and pull requests.
 on:
@@ -20,7 +22,7 @@ concurrency:
 jobs:
   deploy:
     name: Build, migrate, and deploy
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.repository == 'LiamTheMo/LTM-Email-Service' || vars.DEPLOY_WITH_ACTIONS == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

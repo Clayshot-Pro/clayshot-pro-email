@@ -11,8 +11,10 @@ export const PLACEHOLDER_DATABASE_ID = "00000000-0000-0000-0000-000000000000";
  */
 export function renderWrangler(base, values, databaseId) {
   const config = structuredClone(base);
+  // databaseId null: Wrangler finds or creates the database by name on deploy
+  // and keeps it linked (a fork deployed by Workers Builds without deploy keys).
   for (const [key, value] of Object.entries({ WORKER_NAME: values.WORKER_NAME, D1_DATABASE_NAME: values.D1_DATABASE_NAME,
-    R2_BUCKET_NAME: values.R2_BUCKET_NAME, D1_DATABASE_ID: databaseId })) {
+    R2_BUCKET_NAME: values.R2_BUCKET_NAME, ...(databaseId === null ? {} : { D1_DATABASE_ID: databaseId }) })) {
     if (!String(value ?? "").trim()) throw new Error(`Missing value for ${key}`);
   }
   config.name = values.WORKER_NAME;
@@ -20,7 +22,8 @@ export function renderWrangler(base, values, databaseId) {
   const bucket = config.r2_buckets?.find(binding => binding.binding === "MAIL");
   if (!db || !bucket) throw new Error("wrangler.jsonc must bind DB (D1) and MAIL (R2)");
   db.database_name = values.D1_DATABASE_NAME;
-  db.database_id = databaseId;
+  if (databaseId === null) delete db.database_id;
+  else db.database_id = databaseId;
   bucket.bucket_name = values.R2_BUCKET_NAME;
   // Worker vars: the Worker's own name, and the account ID the Email Sending
   // API needs (already a deploy key, not secret). All instance settings live in D1.

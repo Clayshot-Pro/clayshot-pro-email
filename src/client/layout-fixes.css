@@ -149,3 +149,8 @@
 .connect-step-mark { font-weight: 700; color: var(--accent); text-align: center; }
 .connect-step.is-failed, .connect-step.is-action { border-color: var(--ui-error-border); }
 .connect-step.is-failed .connect-step-mark, .connect-step.is-action .connect-step-mark { color: var(--ui-error-text); }
+
+/* v3.13 update notice in the admin panel */
+.admin-update-notice { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 12px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.admin-update-notice strong { color: var(--text); }
+.admin-update-notice a { color: var(--accent); }

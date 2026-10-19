@@ -20,4 +20,4 @@ Mail domains are managed in **Admin → Domains**. The main one is chosen at fir
 
 ## New instance on another address
 
-Deploy a separate Worker, D1 database and R2 bucket (the Deploy to Cloudflare button does this), add the custom domain, then run first-run setup on that address. See the [README](../README.md).
+Deploy a separate Worker, D1 database and R2 bucket (importing a fork in Cloudflare does this), add the custom domain, then run first-run setup on that address. See the [README](../README.md).
