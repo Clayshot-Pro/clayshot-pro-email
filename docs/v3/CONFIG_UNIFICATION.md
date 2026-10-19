@@ -1,6 +1,6 @@
 # v3.00 — Config unification
 
-> **Design document.** Written before implementation; where it differs from the code, the code and the [README](../../README.md) win. Since v3.05 instance settings live in D1 (not `.env` vars), since v3.06 integration keys are managed in Admin → Keys, and since v3.12 `wrangler.jsonc` is committed again (no account IDs, for the Deploy to Cloudflare button), `.env.example` is `config/env.example`, and first-run setup uses a Cloudflare API token. Setup steps are in the [README](../../README.md).
+> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
 
 **Document status:** Implemented on `v3.00`, then **superseded in v3.05**: the Worker has no instance vars at all. The origin and admin sign-in come from the request URL; the primary mailbox, domains, branding and mail settings live in D1; `.env` holds only secrets and deploy keys. The var tables below describe the v3.00 design. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
 

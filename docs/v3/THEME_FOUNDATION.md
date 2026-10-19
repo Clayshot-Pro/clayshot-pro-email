@@ -1,6 +1,6 @@
 # v3.03 — Theme foundation (CSS tokenization)
 
-> **Design document.** Written before implementation; where it differs from the code, the code and the [README](../../README.md) win. Since v3.05 instance settings live in D1 (not `.env` vars), and since v3.06 integration keys are managed in Admin → Keys. Setup steps are in the [README](../../README.md).
+> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
 
 **Document status:** Implemented on `v3.03` (rules kept in place rather than moved, proven equivalent by a static check). See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Independent of v3.01–v3.02; can be developed in parallel. Required by [v3.04 customization](./CUSTOMIZATION.md).
 
