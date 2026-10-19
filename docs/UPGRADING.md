@@ -12,6 +12,7 @@ Deploys apply migrations, and the app applies any still pending on its first req
 - Forks are the recommended setup and update with **Sync fork**; the admin panel shows the running version and when a newer one is out.
 - A fork built by Cloudflare needs no deploy keys: Wrangler links the database and bucket by name.
 - The GitHub Actions deploy runs only in the project repository, or in a fork that sets the repository variable `DEPLOY_WITH_ACTIONS` to `true`.
+- An instance whose Worker, database or bucket has other names sets them as variables (`WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`): Workers Builds build variables, or GitHub repository variables for the Actions deploy. The fork's `wrangler.jsonc` stays unmodified.
 
 ## v3.12
 
