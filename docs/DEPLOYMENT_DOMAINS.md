@@ -21,7 +21,7 @@ Since v3.08, `admin@<main mail domain>` (for example `admin@liamthemo.com`) is a
 
 **Changing the hostname of an existing installation does not migrate its passkeys.** WebAuthn credentials are restricted to the relying-party ID for which they were registered. Pointing a new hostname at an existing D1 database with previously registered passkeys does **not** automatically make them work at the new hostname; registration is intentionally locked once any credential exists.
 
-For a truly new standalone deployment, provision a separate D1 database, R2 bucket and Worker secrets (`PROVIDER_CREDENTIAL_KEY`, `AUTH_SETUP_TOKEN`), then complete first-run setup and enroll the passkey on that new hostname before setting the administrator password. For an existing installation, preserve the original hostname and passkey until a separately verified, owner-controlled credential migration/recovery path is established. **Do not delete authentication rows or disable WebAuthn as a shortcut.**
+For a truly new standalone deployment, provision a separate Worker, D1 database and R2 bucket (the Deploy to Cloudflare button does this), then complete first-run setup on that new hostname: it creates the `PROVIDER_CREDENTIAL_KEY` secret, sets the administrator password and enrolls the passkey. For an existing installation, preserve the original hostname and passkey until a separately verified, owner-controlled credential migration/recovery path is established. **Do not delete authentication rows or disable WebAuthn as a shortcut.**
 
 ## Gmail connection: manual Google Console change
 

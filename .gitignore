@@ -4,10 +4,7 @@ dist/
 .dev.vars
 .env
 .env.*
-!.env.example
 .DS_Store
 *.log
 public/favicon.ico
 
-# Rendered from wrangler.template.jsonc by npm run config:render
-wrangler.jsonc

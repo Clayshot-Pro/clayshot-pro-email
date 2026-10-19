@@ -38,8 +38,9 @@ import { bootstrapInstance } from "./bootstrap";
 import { addBlockedSender, listBlockedSenders, removeBlockedSender } from "./blockedSenders";
 import { adminKeysResponse, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
 import { setupInstance } from "./setup";
+import { deleteCloudflareToken, saveCloudflareToken } from "./cloudflare/routes";
 import { instanceSettings } from "./branding";
-import { checkDomainDns, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
+import { checkDomainDns, connectDomainRoute, createDomain, deleteDomain, listDomainsResponse, updateDomain } from "./domains";
 import { addSuppression, listSuppressions, pruneWebhookReceipts, removeSuppression, resendWebhook } from "./webhooks/resend";
 import {
   adminSettingsResponse, deleteLogo, getPreferences, iconResponse, savePreferences, saveInstanceSettings, uploadLogo,
@@ -201,11 +202,12 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   }
   if (url.pathname === "/api/admin/domains" && request.method === "GET") return listDomainsResponse(request, env);
   if (url.pathname === "/api/admin/domains" && request.method === "POST") return createDomain(request, env);
-  const domainRoute = url.pathname.match(/^\/api\/admin\/domains\/([^/]+)(\/dns)?$/);
+  const domainRoute = url.pathname.match(/^\/api\/admin\/domains\/([^/]+)(\/dns|\/connect)?$/);
   if (domainRoute) {
     const domain = decodePathSegment(domainRoute[1]);
     if (!domain) return jsonError("Invalid domain", 400);
-    if (domainRoute[2] && request.method === "GET") return checkDomainDns(env, domain);
+    if (domainRoute[2] === "/dns" && request.method === "GET") return checkDomainDns(env, domain);
+    if (domainRoute[2] === "/connect" && request.method === "POST") return connectDomainRoute(request, env, domain);
     if (!domainRoute[2] && request.method === "PATCH") return updateDomain(request, env, domain);
     if (!domainRoute[2] && request.method === "DELETE") return deleteDomain(env, domain);
     return jsonError("Method not allowed", 405);
@@ -218,6 +220,8 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   const keyRoute = url.pathname.match(/^\/api\/admin\/keys\/([A-Z_]+)$/);
   if (keyRoute && request.method === "PUT") return saveStoredKey(request, env, keyRoute[1]);
   if (keyRoute && request.method === "DELETE") return deleteStoredKey(env, keyRoute[1]);
+  if (url.pathname === "/api/admin/cloudflare" && request.method === "PUT") return saveCloudflareToken(request, env);
+  if (url.pathname === "/api/admin/cloudflare" && request.method === "DELETE") return deleteCloudflareToken(env);
   if (url.pathname === "/api/admin/suppressions" && request.method === "GET") return listSuppressions(env);
   if (url.pathname === "/api/admin/suppressions" && request.method === "POST") return addSuppression(request, env);
   const suppressionRoute = url.pathname.match(/^\/api\/admin\/suppressions\/([^/]+)$/);
@@ -426,6 +430,9 @@ export default {
         }
       }
       return secureApiResponse(response);
+    }
+    if (request.method === "GET" && (url.pathname === "/manifest.webmanifest" || url.pathname === "/" || url.pathname === "/index.html")) {
+      await bootstrapInstance(env);
     }
     if (request.method === "GET" && url.pathname === "/manifest.webmanifest") {
       try { return await manifestResponse(env); } catch { return env.ASSETS.fetch(request); }

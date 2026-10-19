@@ -1,3 +1,4 @@
+import type { CloudflareConnection } from "./cloudflare/connection";
 import { credentialEncryptionAvailable, decryptSecret, encryptSecret, toBase64Url } from "./providers/crypto";
 import { vapidPair, type VapidPair } from "./vapid";
 
@@ -6,14 +7,15 @@ import { vapidPair, type VapidPair } from "./vapid";
  * PROVIDER_CREDENTIAL_KEY Worker secret. A Worker secret with the same name
  * still wins and is mirrored into D1, so deleting it later keeps the latest
  * value. The VAPID pair is one row so it can never mismatch, and is generated
- * when neither D1 nor the Worker has one.
+ * when neither D1 nor the Worker has one. The Cloudflare connection (v3.12) is
+ * one row too: token, account and Worker name together.
  */
 export const EDITABLE_KEYS = [
   "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "CF_EMAIL_SENDING_TOKEN",
 ] as const;
 export type EditableKey = typeof EDITABLE_KEYS[number];
-type StoredName = EditableKey | "VAPID";
-type StoredValue = string | VapidPair;
+type StoredName = EditableKey | "VAPID" | "CLOUDFLARE";
+type StoredValue = string | VapidPair | CloudflareConnection;
 export type KeySource = "worker" | "stored" | "none";
 
 const FORMATS: Record<EditableKey, RegExp> = {
@@ -32,7 +34,7 @@ export function validKeyValue(name: EditableKey, value: string): boolean {
 
 /** A short, non-secret fragment shown in the admin panel. */
 export function keyHint(name: StoredName, value: StoredValue): string {
-  if (typeof value !== "string") return `${value.publicKey.slice(0, 8)}…`;
+  if (typeof value !== "string") return "token" in value ? `…${value.token.slice(-4)}` : `${value.publicKey.slice(0, 8)}…`;
   return name === "GOOGLE_CLIENT_ID" ? `${value.slice(0, 8)}…` : `…${value.slice(-4)}`;
 }
 
@@ -61,7 +63,7 @@ export function planKeys(stored: Map<StoredName, StoredValue>, env: Record<strin
   }
   const workerPair = vapidPair(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
   const storedPair = stored.get("VAPID");
-  const validStored = typeof storedPair === "object" ? vapidPair(storedPair.publicKey, storedPair.privateKey) : null;
+  const validStored = typeof storedPair === "object" && "publicKey" in storedPair ? vapidPair(storedPair.publicKey, storedPair.privateKey) : null;
   if (workerPair) {
     plan.vapid = workerPair;
     if (validStored?.publicKey !== workerPair.publicKey || validStored.privateKey !== workerPair.privateKey) {
@@ -108,7 +110,7 @@ async function generateVapidPair(): Promise<VapidPair> {
 async function ensureVapid(env: Env): Promise<VapidPair | null> {
   await writeStored(env, "VAPID", await generateVapidPair(), true);
   const stored = (await readStored(env)).get("VAPID");
-  return typeof stored === "object" ? vapidPair(stored.publicKey, stored.privateKey) : null;
+  return typeof stored === "object" && "publicKey" in stored ? vapidPair(stored.publicKey, stored.privateKey) : null;
 }
 
 async function resolveKeys(env: Env): Promise<Env> {
@@ -159,11 +161,41 @@ export async function adminKeysResponse(env: Env): Promise<Response> {
     return { name, source, hint: source === "worker" ? keyHint(name, fromWorker) : hints.get(name) ?? "" };
   };
   const workerPair = vapidPair(worker.VAPID_PUBLIC_KEY, worker.VAPID_PRIVATE_KEY);
+  const connection = hints.has("CLOUDFLARE") ? await cloudflareConnection(env) : null;
   return Response.json({
     encryption: await credentialEncryptionAvailable(env),
     keys: EDITABLE_KEYS.map(name => status(name, workerValue(worker, name))),
     push: status("VAPID", workerPair?.publicKey ?? ""),
+    cloudflare: connection
+      ? { connected: true, hint: hints.get("CLOUDFLARE") ?? "", accountId: connection.accountId, worker: connection.scriptName }
+      : { connected: false },
   }, { headers: { "Cache-Control": "no-store" } });
+}
+
+/** The stored Cloudflare connection, or null (none, or unreadable with the current key). */
+export async function cloudflareConnection(env: Env): Promise<CloudflareConnection | null> {
+  if (!(await credentialEncryptionAvailable(env))) return null;
+  const row = await env.DB.prepare("SELECT value FROM instance_keys WHERE name = 'CLOUDFLARE'").first<{ value: string }>()
+    .catch(() => null);
+  if (!row) return null;
+  try {
+    const value = await decryptSecret<CloudflareConnection>(env, row.value, aad("CLOUDFLARE"));
+    return value && typeof value.token === "string" && typeof value.accountId === "string" && typeof value.scriptName === "string" ? value : null;
+  } catch {
+    console.error("stored_key_unreadable", "CLOUDFLARE");
+    return null;
+  }
+}
+
+/** Store the connection. `env` must carry a valid PROVIDER_CREDENTIAL_KEY (possibly just created). */
+export async function storeCloudflareConnection(env: Env, connection: CloudflareConnection): Promise<void> {
+  await writeStored(env, "CLOUDFLARE", connection);
+  generation++;
+}
+
+export async function removeCloudflareConnection(env: Env): Promise<void> {
+  await env.DB.prepare("DELETE FROM instance_keys WHERE name = 'CLOUDFLARE'").run();
+  generation++;
 }
 
 async function editable(env: Env, name: string): Promise<Response | EditableKey> {

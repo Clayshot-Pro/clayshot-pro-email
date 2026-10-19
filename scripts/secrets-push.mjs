@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { keysOf, loadConfigValues } from "../config/schema.mjs";
 
 const { values, hasFile } = loadConfigValues();
-if (!hasFile) throw new Error("No .env file found. Copy .env.example to .env first.");
+if (!hasFile) throw new Error("No .env file found. Copy config/env.example to .env first.");
 
 const secrets = {};
 for (const key of keysOf("secret")) {

@@ -1,30 +1,29 @@
-// Render the gitignored wrangler.jsonc from wrangler.template.jsonc. There
-// are no instance vars to supply: strict mode (a production deploy from main
-// by Workers Builds or GitHub Actions, or --strict) only requires the
-// Cloudflare deploy keys and a resolved D1 database; other builds use a
-// placeholder database ID for typecheck/bundle.
+// Prepare wrangler.jsonc for a production deploy. The committed file is the
+// Deploy to Cloudflare button's source and works as is for local development
+// and validation builds, so this only rewrites it in strict mode (a production
+// deploy from main by Workers Builds or GitHub Actions, or --strict): it fills
+// in the D1 database ID and the Worker vars. Command-line deploys restore the
+// committed file afterwards (scripts/deploy-self.mjs, scripts/setup.mjs).
 import { readFile, writeFile } from "node:fs/promises";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
-import {
-  PLACEHOLDER_DATABASE_ID, renderWrangler,
-  databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy,
-} from "./config-lib.mjs";
-
-const TEMPLATE = new URL("../wrangler.template.jsonc", import.meta.url);
-const OUTPUT = new URL("../wrangler.jsonc", import.meta.url);
+import { WRANGLER_FILE, parseJsonc } from "../config/wrangler-file.mjs";
+import { renderWrangler, databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy } from "./config-lib.mjs";
 
 const strict = process.argv.includes("--strict") || isProductionDeploy();
-const { values } = loadConfigValues();
-
-if (strict) {
-  const missing = missingRequired(values, ["deploy"]);
-  if (missing.length) {
-    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub repository secrets.`);
-  }
+if (!strict) {
+  console.log("Using the committed wrangler.jsonc (not a production deploy).");
+  process.exit(0);
 }
 
+const { values } = loadConfigValues();
 let databaseId = values.D1_DATABASE_ID?.trim() || "";
-if (!databaseId && strict) {
+if (!databaseId) {
+  // Not in wrangler.jsonc (the Deploy button writes it there) or .env: look it
+  // up with the deploy keys.
+  const missing = missingRequired(values, ["deploy"]);
+  if (missing.length) {
+    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub repository secrets, or put the database_id in wrangler.jsonc.`);
+  }
   databaseId = (isProductionDeploy() ? await databaseIdFromDeployedWorker(values) : null)
     ?? await databaseIdByName(values)
     ?? "";
@@ -33,6 +32,6 @@ if (!databaseId && strict) {
   }
 }
 
-const template = await readFile(TEMPLATE, "utf8");
-await writeFile(OUTPUT, renderWrangler(template, values, databaseId || PLACEHOLDER_DATABASE_ID), "utf8");
-console.log(`Rendered wrangler.jsonc for worker ${values.WORKER_NAME}${strict ? " (deployable)" : ""}.`);
+const base = parseJsonc(await readFile(WRANGLER_FILE, "utf8"));
+await writeFile(WRANGLER_FILE, renderWrangler(base, values, databaseId), "utf8");
+console.log(`Prepared wrangler.jsonc for worker ${values.WORKER_NAME} (deployable).`);

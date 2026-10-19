@@ -67,11 +67,16 @@ export async function beginAdminLogin(request: Request, env: Env): Promise<Respo
     },
   });
 }
-export async function saveAdminPassword(env: Env,newPassword: unknown,currentPassword?:unknown): Promise<{error?:string}> {
+/**
+ * Set or change the administrator password. `firstRun` (first-run setup,
+ * before any owner passkey exists) may replace a password set by an earlier,
+ * unfinished setup attempt without the current one.
+ */
+export async function saveAdminPassword(env: Env,newPassword: unknown,currentPassword?:unknown,firstRun=false): Promise<{error?:string}> {
   const invalid=adminPasswordError(newPassword);
   if (invalid) return {error:invalid};
   const existing=await adminPasswordConfigured(env);
-  if (existing) {
+  if (existing && !firstRun) {
     if (typeof currentPassword!=="string" || !(await verifyAdminPassword(env,currentPassword))) {
       return {error:"Current admin password is incorrect"};
     }

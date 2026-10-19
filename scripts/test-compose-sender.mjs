@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const source = (path) => readFileSync(new URL("../" + path, import.meta.url), "utf8");
 // One unrestricted EMAIL binding: no per-address sender allowlist.
-assert.match(source("wrangler.template.jsonc"), /"name": "EMAIL"/);
-assert.doesNotMatch(source("wrangler.template.jsonc"), /allowed_sender_addresses/);
+assert.match(source("wrangler.jsonc"), /"name": "EMAIL"/);
+assert.doesNotMatch(source("wrangler.jsonc"), /allowed_sender_addresses/);
 const registry = source("src/worker/providers/registry.ts");
 assert.match(registry, /sendEnabled: sendable\[index\]/);
 assert.match(registry, /sendableMailboxes\(env, active\)/, "one domains query for the whole account list");

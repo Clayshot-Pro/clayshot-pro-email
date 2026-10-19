@@ -41,6 +41,10 @@ interface Env {
   // Optional Email Sending API (used instead of the binding when the token is set).
   // The account ID is filled automatically at build time from CLOUDFLARE_ACCOUNT_ID.
   CF_EMAIL_SENDING_ACCOUNT_ID?: string;
+  // The Worker's own name (wrangler.jsonc "name"), for Email Routing and the Cloudflare API.
+  LTM_WORKER_NAME?: string;
+  // The running version; proves a Cloudflare API token belongs to this Worker's account.
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
   // Worker secrets uploaded by scripts/secrets-push.mjs. Instance settings
   // (domains, branding, forwarding, limits) live in D1, not in Worker vars.
   CF_EMAIL_SENDING_TOKEN?: string;

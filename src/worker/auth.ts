@@ -14,6 +14,7 @@ import { adminLoginAddress, appOrigin, passkeyRpId } from "./config";
 import { brandNames, instanceSettings } from "./branding";
 import { secretMatches } from "./constantTime";
 import { isInitialized } from "./domains";
+import { clearSetupGrants, validSetupGrant } from "./setupGrants";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { OWNER_IDLE_TTL_SECONDS, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS, readOwnerSessionToken } from "./ownerSessionPolicy";
 
@@ -91,7 +92,7 @@ function parseTransports(value: string | null): AuthenticatorTransportFuture[] |
   }
 }
 
-async function hasCredential(env: Env): Promise<boolean> {
+export async function hasCredential(env: Env): Promise<boolean> {
   return Boolean(await env.DB.prepare("SELECT 1 FROM auth_credentials LIMIT 1").first());
 }
 
@@ -153,7 +154,8 @@ async function setupAuthorized(request: Request, env: Env, supplied?: string): P
   // A fresh install must choose its mail domain (POST /api/setup) before the
   // owner passkey exists; otherwise the 0010 placeholder would be adopted.
   if (!(await isInitialized(env))) return false;
-  return secretMatches(env.AUTH_SETUP_TOKEN, supplied);
+  // The legacy setup secret, or the grant from a token-verified POST /api/setup.
+  return secretMatches(env.AUTH_SETUP_TOKEN, supplied) || validSetupGrant(env, supplied);
 }
 
 async function saveChallenge(env: Env, ceremony: Ceremony, challenge: string, adminPendingHash: string | null = null): Promise<string> {
@@ -186,7 +188,9 @@ export async function authStatus(request: Request, env: Env): Promise<Response> 
   return Response.json({
     configured,
     authenticated: configured ? await isAuthenticated(request, env) : false,
-    setupAvailable: !configured && Boolean(env.AUTH_SETUP_TOKEN),
+    // Setup is always possible with a Cloudflare token; the setup secret is optional.
+    setupAvailable: !configured,
+    setupTokenEnabled: !configured && Boolean(env.AUTH_SETUP_TOKEN),
     adminPasswordConfigured: await adminPasswordConfigured(env),
   });
 }
@@ -286,6 +290,7 @@ export async function verifyRegistration(request: Request, env: Env): Promise<Re
       )
       .run();
 
+    await clearSetupGrants(env);
     const token = await createSession(env, request);
     return new Response(JSON.stringify({ ok: true }), {
       headers: {

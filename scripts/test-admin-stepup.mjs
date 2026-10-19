@@ -39,6 +39,13 @@ assert.equal(adminMutationEvent("PUT","/api/admin/keys/RESEND_API_KEY"),"admin.k
 assert.equal(adminMutationEvent("DELETE","/api/admin/keys/RESEND_API_KEY"),"admin.key.removed");
 assert.equal(adminMutationNeedsStepUp("GET","/api/admin/keys"),false,"listing keys returns no values");
 assert.equal(isApprovedAdminMutation("POST","/api/admin/keys/RESEND_API_KEY"),false);
+// v3.12: the Cloudflare connection and automatic domain wiring need a fresh passkey too.
+for (const [method, path] of [["PUT","/api/admin/cloudflare"],["DELETE","/api/admin/cloudflare"],["POST","/api/admin/domains/example.org/connect"]]) {
+  assert.equal(adminMutationNeedsStepUp(method,path),true,path);
+  assert.equal(isApprovedAdminMutation(method,path),true,path);
+}
+assert.equal(isApprovedAdminMutation("POST","/api/admin/cloudflare"),false);
+assert.equal(isApprovedAdminMutation("POST","/api/admin/domains/a/b/connect"),false);
 assert.equal(isApprovedAdminMutation("PUT","/api/admin/keys/resend_api_key/../x"),false);
 
 const emptyHash = await hashMutationBody(new Request("https://example.com", {method:"POST"}));

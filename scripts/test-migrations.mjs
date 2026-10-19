@@ -15,6 +15,10 @@ for (const name of migrations) {
     db.exec(`INSERT INTO native_mailboxes (id, email_address, display_name) VALUES ('native:work', 'Work@Example.com', 'Work')`);
     db.exec(`UPDATE native_mailboxes SET email_address = 'hello@example.com' WHERE id = 'native:primary'`);
   }
+  if (name === "0023_setup_grants.sql") {
+    // Keys stored before v3.12 must survive the table rebuild.
+    db.exec("INSERT INTO instance_keys (name, value, hint) VALUES ('RESEND_API_KEY', 'v1.enc.data', '…abcd')");
+  }
   db.exec(readFileSync(new URL(name, dir), "utf8"));
 }
 
@@ -79,6 +83,15 @@ if (migrations.includes("0021_blocked_senders.sql")) {
 if (migrations.includes("0022_photos_and_junk_filter.sql")) {
   assert.ok(columns("native_mailboxes").includes("photo_version"));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM native_mailboxes WHERE spam_filter_enabled = 0").get().n, 0, "the junk filter is on for existing mailboxes");
+}
+
+if (migrations.includes("0023_setup_grants.sql")) {
+  assert.deepEqual(columns("setup_grants"), ["token_hash", "expires_at"]);
+  assert.deepEqual({ ...db.prepare("SELECT name, value, hint FROM instance_keys WHERE name = 'RESEND_API_KEY'").get() },
+    { name: "RESEND_API_KEY", value: "v1.enc.data", hint: "…abcd" }, "existing keys survive the rebuild");
+  db.exec("INSERT INTO instance_keys (name, value) VALUES ('CLOUDFLARE', 'v1.x.y')");
+  assert.throws(() => db.exec("INSERT INTO instance_keys (name, value) VALUES ('PROVIDER_CREDENTIAL_KEY', 'x')"), /CHECK/,
+    "the encryption key itself still can never be stored in D1");
 }
 
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

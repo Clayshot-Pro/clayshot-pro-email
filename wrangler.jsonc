@@ -1,0 +1,49 @@
+{
+  // Cloudflare Worker configuration. The Deploy to Cloudflare button reads this
+  // file and creates the D1 database and R2 bucket named here; production
+  // deploys (scripts/config-render.mjs) fill in the database ID and vars.
+  // The Worker has no instance settings: they live in D1, credentials are
+  // Worker secrets or stored encrypted in D1 (Admin → Keys).
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ltm-email-service",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-09-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/", "/index.html", "/manifest.webmanifest"]
+  },
+  "vars": {
+    // The Worker's own name, used to route mail to it and to find it through
+    // the Cloudflare API. Deploys keep it in step with "name".
+    "LTM_WORKER_NAME": "ltm-email-service"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ltm-email-service",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MAIL",
+      "bucket_name": "ltm-email-service-mail"
+    }
+  ],
+  "send_email": [
+    {
+      // Unrestricted: sends from any domain onboarded for Email Sending in this
+      // account. The app derives From from the authenticated mailbox.
+      "name": "EMAIL"
+    }
+  ],
+  // Identifies the running version, which proves a Cloudflare API token
+  // belongs to the account that runs this Worker (first-run setup).
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "triggers": { "crons": ["0 4 * * *"] },
+  "observability": {
+    "enabled": true
+  }
+}

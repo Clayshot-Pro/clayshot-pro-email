@@ -61,7 +61,7 @@ assert.ok(send.indexOf("fitsCloudflareApi(") > 0 && send.indexOf("fitsCloudflare
   "size is checked before quota is reserved");
 
 // The default path is one unrestricted EMAIL binding (no token); the API is optional.
-const template = readFileSync(new URL("../wrangler.template.jsonc", import.meta.url), "utf8");
+const template = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 assert.match(template, /"send_email"[\s\S]*"name": "EMAIL"/);
 assert.doesNotMatch(template, /allowed_sender_addresses|EMAIL_DYNAMIC|EMAIL_MULTI/, "no per-address restrictions or legacy bindings");
 const transports = readFileSync(new URL("../src/worker/transports/index.ts", import.meta.url), "utf8");

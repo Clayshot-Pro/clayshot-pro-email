@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { adminActionFetch } from "../adminActions";
 import { THEMES, type ThemeId } from "../../worker/customization";
 import { THEME_LABELS } from "./AppearanceSettings";
+import { ConnectReportView } from "./CloudflareSetup";
+import type { ConnectReport } from "../cloudflareToken";
 
 export type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
 export type Transport = "cloudflare" | "resend" | "none";
@@ -21,6 +23,7 @@ type DomainsPayload = {
   domains: Domain[];
   transports: { cloudflare: { available: boolean; mode: "api" | "binding" | null }; resend: { available: boolean; webhookConfigured: boolean } };
   webhookUrl: string;
+  cloudflareConnected?: boolean;
 };
 type MailboxOption = { id: string; email_address: string; status: string; deleted_at: string | null };
 
@@ -43,6 +46,7 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [reports, setReports] = useState<Record<string, ConnectReport>>({});
 
   const load = useCallback(async () => {
     try {
@@ -55,26 +59,50 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  async function run(key: string, action: () => Promise<unknown>, success: string) {
+  async function run(key: string, action: () => Promise<unknown>, success: string): Promise<boolean> {
     setBusy(key); setNotice(null);
     try {
       await action();
       await load();
       onChanged?.();
-      setNotice(success);
+      setNotice(success || null);
+      return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Domain operation failed");
+      return false;
     } finally { setBusy(null); }
   }
+
+  const connected = Boolean(data?.cloudflareConnected);
+  const keepReport = (result: Record<string, unknown>) => {
+    const report = result.report as ConnectReport | undefined;
+    if (report) setReports(current => ({ ...current, [report.domain]: report }));
+    return report;
+  };
+  const outcome = (report: ConnectReport | undefined, domain: string) => !report ? `${domain} added.`
+    : report.mxConflict ? `${domain} still receives mail elsewhere. Review the MX records below.`
+    : report.steps.some(step => step.status === "failed") ? `${domain} is partly set up. See the steps below.`
+    : report.routingReady ? `${domain} is set up and active.` : `${domain} is set up. Run a DNS check in a few minutes.`;
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const domain = newDomain.trim().toLowerCase();
-    await run("new", async () => {
-      await call("/api/admin/domains", "POST", { domain });
+    let report: ConnectReport | undefined;
+    const ok = await run("new", async () => {
+      report = keepReport(await call("/api/admin/domains", "POST", { domain, connect: connected }));
       setNewDomain("");
       setOpen(domain);
-    }, `${domain} added as pending. Complete the checklist, run a DNS check, then activate it.`);
+    }, connected ? "" : `${domain} added as pending. Complete the checklist, run a DNS check, then activate it.`);
+    if (ok && connected) setNotice(outcome(report, domain));
+  }
+
+  async function connect(domain: Domain, replaceMx = false) {
+    if (replaceMx && !window.confirm(`Delete the MX records that send ${domain.domain} mail to another service? Mail will come here instead.`)) return;
+    let report: ConnectReport | undefined;
+    const ok = await run(domain.domain, async () => {
+      report = keepReport(await call(`${domainPath(domain.domain)}/connect`, "POST", { replaceMx }));
+    }, "");
+    if (ok) setNotice(outcome(report, domain.domain));
   }
 
   const checkDns = (domain: Domain) =>
@@ -97,7 +125,9 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
         <div>
           <p className="admin-section-kicker">Domains</p>
           <h2>Mail domains</h2>
-          <p>Each domain needs Cloudflare Email Routing with its catch-all rule sent to this Worker.</p>
+          <p>{connected
+            ? "Adding a domain sets it up in Cloudflare with your connected token: Email Routing, delivery to this app, Email Sending and DMARC."
+            : "Each domain needs Cloudflare Email Routing with its catch-all rule sent to this Worker. Connect a Cloudflare token in Admin → Keys to do this automatically."}</p>
         </div>
         <span className="admin-mailbox-count">{data ? `${data.domains.length} total` : "Loading…"}</span>
       </div>
@@ -132,7 +162,13 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
 
             {open === domain.domain && (
               <div className="admin-domain-details">
-                {domain.status === "pending" && (
+                {reports[domain.domain] && <ConnectReportView report={reports[domain.domain]} />}
+                {reports[domain.domain]?.mxConflict && (
+                  <button type="button" className="auth-secondary danger" disabled={busy !== null} onClick={() => void connect(domain, true)}>
+                    Replace the MX records and connect
+                  </button>
+                )}
+                {domain.status === "pending" && !connected && (
                   <ol className="admin-domain-checklist">
                     <li>Add {domain.domain} as a zone on Cloudflare DNS in the same account.</li>
                     <li>Enable Email Routing for the zone (Cloudflare adds the MX records).</li>
@@ -154,6 +190,11 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
                 )}
 
                 <div className="admin-domain-actions">
+                  {connected && (
+                    <button type="button" className="settings-primary" disabled={busy !== null} onClick={() => void connect(domain)}>
+                      {busy === domain.domain ? "Working…" : domain.status === "pending" ? "Set up in Cloudflare" : "Re-check Cloudflare setup"}
+                    </button>
+                  )}
                   <button type="button" className="auth-secondary" disabled={busy !== null} onClick={() => void checkDns(domain)}>
                     {busy === domain.domain ? "Working…" : "Check DNS"}
                   </button>
