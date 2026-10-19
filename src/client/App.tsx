@@ -5,12 +5,10 @@ import {
   EMPTY_COMPOSE,
   FOLDERS,
   ADMIN_ACCOUNT_ID,
-  base64UrlToArrayBuffer,
   belongsInFolder,
   draftSenderKey,
   forwardedBody,
   hasDraftContent,
-  needsHomeScreenInstall,
   notificationControlsDisabled,
   type DetailCacheEntry,
 } from "./appModel";
@@ -30,13 +28,13 @@ import type {
   Folder,
   MessageDetail,
   MessageListItem,
-  NotificationState,
 } from "./mailTypes";
 import { forwardSubject, replySubject } from "./mailUtils";
 import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
 import { useActiveAccountAppearance } from "./appearance";
 import { useAdminView } from "./adminView";
+import { usePushNotifications } from "./usePushNotifications";
 import {
   ALL_INBOXES_ID,
   accountLabel,
@@ -73,6 +71,7 @@ export function App() {
     folder: Folder;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { notificationState, toggleNotifications } = usePushNotifications(setError);
   const [composeOpen, setComposeOpen] = useState(false);
   const [compose, setCompose] = useState<ComposeState>(EMPTY_COMPOSE);
   const [composeAccountId, setComposeAccountId] = useState(ADMIN_ACCOUNT_ID);
@@ -80,8 +79,6 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [draftStatus, setDraftStatus] = useState<"saving" | "saved" | "failed" | null>(null);
-  const [notificationState, setNotificationState] = useState<NotificationState>("checking");
-  const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -153,65 +150,6 @@ export function App() {
     if (settingsOpen) void refreshSessions();
   }, [settingsOpen, refreshSessions]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (needsHomeScreenInstall(navigator, matchMedia("(display-mode: standalone)").matches)) {
-        setNotificationState("install");
-        return;
-      }
-      if (
-        !("serviceWorker" in navigator)
-        || !("PushManager" in window)
-        || !("Notification" in window)
-      ) {
-        setNotificationState("unsupported");
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/push/config", { cache: "no-store" });
-        const config = await response.json() as {
-          configured: boolean;
-          publicKey: string | null;
-        };
-        if (!config.configured || !config.publicKey) {
-          setNotificationState("unconfigured");
-          return;
-        }
-
-        setPushPublicKey(config.publicKey);
-        const registration = await navigator.serviceWorker.register("/sw.js", {
-          scope: "/",
-        });
-        const subscription = await registration.pushManager.getSubscription();
-        // A subscription belongs to the sign-in it was made in. Re-register it on
-        // every start, so a new sign-in (or an expired one) keeps receiving alerts.
-        if (subscription && Notification.permission === "granted") {
-          await fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(subscription.toJSON()),
-          }).catch(() => undefined);
-        }
-        if (!cancelled) {
-          setNotificationState(
-            Notification.permission === "denied"
-              ? "blocked"
-              : subscription
-                ? "on"
-                : "off",
-          );
-        }
-      } catch {
-        if (!cancelled) setNotificationState("unsupported");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const loadMessages = useCallback(
     async (activeFolder = folder, query = search, silent = false) => {
@@ -427,50 +365,6 @@ export function App() {
     setSearch("");
   };
 
-  const toggleNotifications = async () => {
-    if (
-      !pushPublicKey
-      || notificationControlsDisabled(notificationState)
-    ) {
-      return;
-    }
-
-    setNotificationState("working");
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const existing = await registration.pushManager.getSubscription();
-      if (existing) {
-        await fetch("/api/push/unsubscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: existing.endpoint }),
-        });
-        await existing.unsubscribe();
-        setNotificationState("off");
-        return;
-      }
-
-      if (await Notification.requestPermission() !== "granted") {
-        setNotificationState("off");
-        return;
-      }
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64UrlToArrayBuffer(pushPublicKey),
-      });
-      const response = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      if (!response.ok) throw new Error();
-      setNotificationState("on");
-    } catch {
-      setNotificationState("off");
-      setError("Could not update notifications");
-    }
-  };
 
   const removeAccount = async (id: string) => {
     if (!confirm("Sign out this email account on this device? Other devices stay signed in.")) return;

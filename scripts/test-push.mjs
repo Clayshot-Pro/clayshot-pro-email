@@ -149,7 +149,7 @@ async function run(m) {
   }
 
   // Signing in again re-binds the phone's existing subscription to the new session.
-  assert.match(source("src/client/App.tsx"), /if \(subscription && Notification\.permission === "granted"\) \{\s+await fetch\("\/api\/push\/subscribe"/,
+  assert.match(source("src/client/usePushNotifications.ts"), /if \(subscription && Notification\.permission === "granted"\) \{\s+await fetch\("\/api\/push\/subscribe"/,
     "the app re-registers an existing subscription on every start");
   assert.match(source("public/sw.js"), /addEventListener\("pushsubscriptionchange"[\s\S]{0,700}\/api\/push\/subscribe/,
     "a subscription the browser replaces is registered again");
