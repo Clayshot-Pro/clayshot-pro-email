@@ -87,6 +87,20 @@ export async function ensureCredentialKeySecret(values) {
 }
 
 /**
+ * The Worker secret that hands this deploy's own Cloudflare token to the app
+ * (v3.22), so Admin → Keys and domain setup work without pasting a token.
+ * One JSON value, like the stored connection: token, account and Worker name.
+ * Null when any part is missing or malformed.
+ */
+export function deployConnectionSecret(values) {
+  const token = values.CLOUDFLARE_API_TOKEN?.trim() ?? "";
+  const accountId = values.CLOUDFLARE_ACCOUNT_ID?.trim() ?? "";
+  const scriptName = values.WORKER_NAME?.trim() ?? "";
+  if (!/^[A-Za-z0-9_-]{30,200}$/.test(token) || !/^[0-9a-f]{32}$/i.test(accountId) || !scriptName) return null;
+  return { CLOUDFLARE_DEPLOY_CONNECTION: JSON.stringify({ token, accountId, scriptName }) };
+}
+
+/**
  * The Worker's database, as deployed: "missing" (no such Worker), "unbound"
  * (the Worker exists without a DB binding, for example a placeholder made in
  * the dashboard or an earlier failed setup), "bound" with its database ID, or

@@ -17,9 +17,9 @@ You need a Cloudflare account with your mail domain on Cloudflare DNS, and a dev
 ### 1. Fork and deploy
 
 1. **Fork** this repository on GitHub (keep the name and the `main` branch), then open the fork's **Actions** tab and enable workflows.
-2. In Cloudflare, create an API token from the *Edit Cloudflare Workers* template and add **D1: Edit**. Copy your **Account ID** (Workers & Pages → Account details).
+2. In Cloudflare, create an API token from the *Edit Cloudflare Workers* template and add **D1: Edit**. So the app can set up your mail domains with the same token, also add **Zone: Read**, **Zone Settings: Edit**, **DNS: Edit**, **Email Routing Rules: Edit** and **Email Sending: Edit**. Copy your **Account ID** (Workers & Pages → Account details).
 3. In the fork: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Forks do not copy secrets, so this is always needed.
-4. **Actions → Deploy production → Run workflow.** The first run creates the D1 database, the R2 bucket and the encryption key (`PROVIDER_CREDENTIAL_KEY`); the run summary shows the app's address. After that, every push to `main` deploys.
+4. **Actions → Deploy production → Run workflow.** The first run creates the D1 database, the R2 bucket and the encryption key (`PROVIDER_CREDENTIAL_KEY`), and hands the deploy token to the app, so **Admin → Keys** shows Cloudflare as connected; the run summary shows the app's address. After that, every push to `main` deploys.
 5. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address.
 
 Keep your fork unmodified: every setting lives in the app, and an unmodified fork updates cleanly. To use other names, add the repository variables `WORKER_NAME`, `D1_DATABASE_NAME` or `R2_BUCKET_NAME` instead of editing `wrangler.jsonc`.
@@ -57,7 +57,7 @@ Open the app and fill in one page:
 
 1. **Mail domain**, for example `example.com`. This creates `admin@example.com`, your mailbox and admin sign-in.
 2. **Admin password** (4–32 characters).
-3. **Cloudflare API token.** Use **Create a Cloudflare token**, add **Email Sending: Edit** and **Email Routing Rules: Edit**, then create and paste the token.
+3. **Cloudflare API token**, to prove you own this Cloudflare account. Paste the token you added as `CLOUDFLARE_API_TOKEN`, or use **Create a Cloudflare token**, add **Email Sending: Edit** and **Email Routing Rules: Edit**, then create and paste the token.
 
 **Continue** sets up mail routing, sending and DMARC for your domain, and shows your encryption key once. **Save it in a password manager.** Then tap **Create administrator passkey** and you're in.
 
@@ -85,7 +85,8 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 | Setting | Where |
 | --- | --- |
 | Domains, mailboxes, branding, themes, forwarding, limits | The admin panel |
-| Cloudflare token, Google OAuth, Resend, Email Sending API token | **Admin → Keys** (encrypted) |
+| Cloudflare token | The deploy token, handed over by every GitHub Actions deploy (Worker secret `CLOUDFLARE_DEPLOY_CONNECTION`). A token connected in **Admin → Keys** is used instead |
+| Google OAuth, Resend, Email Sending API token | **Admin → Keys** (encrypted) |
 | `PROVIDER_CREDENTIAL_KEY` | Worker secret, created at setup. **Keep a copy:** losing it makes stored keys and Gmail connections unreadable (mail is unaffected) |
 | Push notification keys | Automatic |
 | Deploy token and account ID | GitHub repository secrets (`.env` when deploying from your computer) |
@@ -113,7 +114,7 @@ The admin panel shows when a new version is out. To update, open your fork on Gi
 | Problem | Fix |
 | --- | --- |
 | Token "cannot see the Worker that runs this app" | Create it in the same Cloudflare account, with **Workers Scripts: Edit**, and paste the token value (not its ID). |
-| A domain step says "The token needs …" | Add that permission to the token in Cloudflare, then **Re-check Cloudflare setup** in Admin → Domains. |
+| A domain step says "The token needs …" | Add that permission to the token in Cloudflare (Admin → Keys says which token is used), then **Re-check Cloudflare setup** in Admin → Domains. No redeploy is needed. |
 | Email Sending step fails | Needs the Workers Paid plan and no other provider's MX records. Or use Resend. |
 | Mail doesn't arrive | Check the domain is **active** in Admin → Domains and the mailbox exists. With a token, **Re-check Cloudflare setup** repairs routing. |
 | Admin sign-in fails | Use `admin@<mail domain>`. Passkeys only work on the address you set up on. |

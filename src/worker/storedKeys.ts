@@ -1,3 +1,4 @@
+import { normalizeToken } from "./cloudflare/api";
 import type { CloudflareConnection } from "./cloudflare/connection";
 import { credentialEncryptionAvailable, decryptSecret, encryptSecret, toBase64Url } from "./providers/crypto";
 import { vapidPair, type VapidPair } from "./vapid";
@@ -8,7 +9,8 @@ import { vapidPair, type VapidPair } from "./vapid";
  * still wins and is mirrored into D1, so deleting it later keeps the latest
  * value. The VAPID pair is one row so it can never mismatch, and is generated
  * when neither D1 nor the Worker has one. The Cloudflare connection (v3.12) is
- * one row too: token, account and Worker name together.
+ * one row too: token, account and Worker name together. Without one, the
+ * GitHub Actions deploy's own token is used (v3.22, CLOUDFLARE_DEPLOY_CONNECTION).
  */
 export const EDITABLE_KEYS = [
   "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "CF_EMAIL_SENDING_TOKEN",
@@ -161,19 +163,58 @@ export async function adminKeysResponse(env: Env): Promise<Response> {
     return { name, source, hint: source === "worker" ? keyHint(name, fromWorker) : hints.get(name) ?? "" };
   };
   const workerPair = vapidPair(worker.VAPID_PUBLIC_KEY, worker.VAPID_PRIVATE_KEY);
-  const connection = hints.has("CLOUDFLARE") ? await cloudflareConnection(env) : null;
+  const current = await cloudflareConnectionWithSource(env);
   return Response.json({
     encryption: await credentialEncryptionAvailable(env),
     keys: EDITABLE_KEYS.map(name => status(name, workerValue(worker, name))),
     push: status("VAPID", workerPair?.publicKey ?? ""),
-    cloudflare: connection
-      ? { connected: true, hint: hints.get("CLOUDFLARE") ?? "", accountId: connection.accountId, worker: connection.scriptName }
+    cloudflare: current
+      ? {
+        connected: true,
+        source: current.source,
+        hint: current.source === "stored" ? hints.get("CLOUDFLARE") ?? "" : keyHint("CLOUDFLARE", current.connection),
+        accountId: current.connection.accountId,
+        worker: current.connection.scriptName,
+      }
       : { connected: false },
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
-/** The stored Cloudflare connection, or null (none, or unreadable with the current key). */
+export type CloudflareSource = "stored" | "deploy";
+
+/**
+ * The connection the GitHub Actions deploy hands over (v3.22): its own token,
+ * account and Worker name, as the CLOUDFLARE_DEPLOY_CONNECTION Worker secret
+ * (scripts/wrangler-deploy.mjs). Needs no encryption key.
+ */
+export function deployCloudflareConnection(env: Env): CloudflareConnection | null {
+  const raw = workerEnv(env).CLOUDFLARE_DEPLOY_CONNECTION;
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<CloudflareConnection>;
+    const token = normalizeToken(value?.token);
+    return token && typeof value.accountId === "string" && /^[0-9a-f]{32}$/i.test(value.accountId)
+      && typeof value.scriptName === "string" && value.scriptName ? { token, accountId: value.accountId, scriptName: value.scriptName } : null;
+  } catch {
+    console.error("deploy_connection_unreadable");
+    return null;
+  }
+}
+
+/** The Cloudflare connection in use: one connected in Admin → Keys wins over the deploy's. */
+export async function cloudflareConnectionWithSource(env: Env): Promise<{ connection: CloudflareConnection; source: CloudflareSource } | null> {
+  const stored = await storedCloudflareConnection(env);
+  if (stored) return { connection: stored, source: "stored" };
+  const deployed = deployCloudflareConnection(env);
+  return deployed ? { connection: deployed, source: "deploy" } : null;
+}
+
 export async function cloudflareConnection(env: Env): Promise<CloudflareConnection | null> {
+  return (await cloudflareConnectionWithSource(env))?.connection ?? null;
+}
+
+/** The stored Cloudflare connection, or null (none, or unreadable with the current key). */
+async function storedCloudflareConnection(env: Env): Promise<CloudflareConnection | null> {
   if (!(await credentialEncryptionAvailable(env))) return null;
   const row = await env.DB.prepare("SELECT value FROM instance_keys WHERE name = 'CLOUDFLARE'").first<{ value: string }>()
     .catch(() => null);

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // The production deploy guard accepts main from Workers Builds or GitHub Actions only.
 const guard = env => spawnSync(process.execPath, ["scripts/assert-cloudflare-production.mjs"], {
@@ -155,7 +157,7 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
     globalThis.fetch = realFetch;
   }
   const deploy = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts.deploy;
-  assert.match(deploy, /wrangler deploy && node scripts\/ensure-worker-secrets\.mjs$/, "the key is ensured after every production deploy");
+  assert.match(deploy, /wrangler-deploy\.mjs && node scripts\/ensure-worker-secrets\.mjs$/, "the key is ensured after every production deploy");
   // A deploy that already succeeded is never failed by this step.
   const ensure = env => spawnSync(process.execPath, ["scripts/ensure-worker-secrets.mjs"], { env: { PATH: process.env.PATH, ...env }, encoding: "utf8" });
   const local = ensure({});
@@ -176,5 +178,60 @@ for (const step of ["Type-check and build", "Apply D1 migrations and deploy"]) {
 const install = workflow.slice(workflow.indexOf("Install dependencies"), workflow.indexOf("Generate browser favicon"));
 assert.doesNotMatch(install, /CLOUDFLARE_API_TOKEN/, "the token is not exposed to npm ci");
 assert.doesNotMatch(workflow, /^\s{4}env:/m, "no job-wide secrets");
+
+// v3.22: the GitHub Actions deploy hands its own Cloudflare token to the app as
+// one Worker secret, uploaded with the version (wrangler deploy --secrets-file).
+{
+  const { deployConnectionSecret } = await import("./config-lib.mjs");
+  const token = "t".repeat(40), account = "a".repeat(32);
+  assert.deepEqual(JSON.parse(deployConnectionSecret({ CLOUDFLARE_API_TOKEN: ` ${token} `, CLOUDFLARE_ACCOUNT_ID: account, WORKER_NAME: "mail" }).CLOUDFLARE_DEPLOY_CONNECTION),
+    { token, accountId: account, scriptName: "mail" });
+  for (const bad of [{ CLOUDFLARE_API_TOKEN: "", CLOUDFLARE_ACCOUNT_ID: account, WORKER_NAME: "mail" },
+    { CLOUDFLARE_API_TOKEN: "short", CLOUDFLARE_ACCOUNT_ID: account, WORKER_NAME: "mail" },
+    { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: "not-an-account", WORKER_NAME: "mail" },
+    { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, WORKER_NAME: "" }]) {
+    assert.equal(deployConnectionSecret(bad), null);
+  }
+  assert.match(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts.deploy,
+    /node scripts\/wrangler-deploy\.mjs && node scripts\/ensure-worker-secrets\.mjs$/);
+
+  // Run the wrapper in a copy of the repo with a fake wrangler that records what it got.
+  const root = mkdtempSync(join(tmpdir(), "ltm-deploy-"));
+  try {
+    for (const path of ["config", "scripts/config-lib.mjs", "scripts/wrangler-deploy.mjs", "wrangler.jsonc"]) {
+      cpSync(new URL(`../${path}`, import.meta.url), join(root, path), { recursive: true });
+    }
+    mkdirSync(join(root, "node_modules/wrangler/bin"), { recursive: true });
+    const record = join(root, "record.json");
+    writeFileSync(join(root, "node_modules/wrangler/bin/wrangler.js"), `const { readFileSync, statSync, writeFileSync } = require("node:fs");
+const args = process.argv.slice(2), file = args[args.indexOf("--secrets-file") + 1];
+writeFileSync(${JSON.stringify(record)}, JSON.stringify({ args, secrets: args.includes("--secrets-file") ? JSON.parse(readFileSync(file, "utf8")) : null,
+  mode: args.includes("--secrets-file") ? statSync(file).mode & 0o777 : null, file }));
+process.exit(Number(process.env.FAKE_STATUS || 0));`);
+    const run = env => {
+      const result = spawnSync(process.execPath, [join(root, "scripts/wrangler-deploy.mjs")],
+        { env: { PATH: process.env.PATH, CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account, ...env }, encoding: "utf8" });
+      return { ...result, record: JSON.parse(readFileSync(record, "utf8")) };
+    };
+    const production = run({ GITHUB_ACTIONS: "true", GITHUB_REF: "refs/heads/main", RUNNER_TEMP: root });
+    assert.equal(production.status, 0);
+    assert.equal(production.record.args[0], "deploy");
+    const connection = JSON.parse(production.record.secrets.CLOUDFLARE_DEPLOY_CONNECTION);
+    assert.equal(connection.token, token);
+    assert.equal(connection.accountId, account);
+    assert.ok(connection.scriptName, "the Worker name comes from wrangler.jsonc");
+    assert.equal(production.record.mode, 0o600, "the secrets file is private");
+    assert.throws(() => readFileSync(production.record.file), /ENOENT/, "and deleted after the deploy");
+    assert.doesNotMatch(production.stdout + production.stderr, new RegExp(token), "the token is never printed");
+    assert.match(production.stdout, /CLOUDFLARE_DEPLOY_CONNECTION/);
+
+    const elsewhere = run({ GITHUB_ACTIONS: "true", GITHUB_REF: "refs/heads/v3.22" });
+    assert.deepEqual(elsewhere.record.args, ["deploy"], "only the production deploy hands the token over");
+    assert.equal(run({}).record.secrets, null, "nor does a deploy from a computer");
+    assert.equal(run({ GITHUB_ACTIONS: "true", GITHUB_REF: "refs/heads/main", RUNNER_TEMP: root, FAKE_STATUS: "1" }).status, 1, "a failed deploy fails");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 console.log("PASS: production deploys only from main (Workers Builds or GitHub Actions)");
