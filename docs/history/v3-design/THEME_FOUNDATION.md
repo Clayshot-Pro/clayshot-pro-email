@@ -70,7 +70,7 @@ src/client/styles.css, ui-overrides.css, ...   component rules using tokens only
 
 ## Method
 
-1. **Inventory:** add `scripts/audit-css-colors.mjs`, which lists every literal by file and line and groups identical values. Commit its first report as the starting point.
+1. **Inventory:** add `scripts/audit-css-colors.mjs`, which lists every literal by file and line and groups identical values. Commit its first report as the starting point. (Removed in v3.24; `scripts/test-css-tokens.mjs` enforces the rule in CI.)
 2. **Map:** assign each distinct value to a palette variable, then each use to a semantic token. Near-duplicates (e.g. `#1d1d1f` vs `#1b1b1d`) are merged only when the difference is invisible. Note every merge in the PR.
 3. **Replace file by file** in small commits: `dark.css` → `styles.css` → `ui-overrides.css` → `device-login.css` → `mobile-accounts.css`.
 4. **Guard:** CI fails if a colour literal appears outside `src/client/theme/themes/*.css` (allowlist: `email-html.css`, and `transparent`/`currentColor`).
