@@ -7,7 +7,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import { WRANGLER_FILE, parseJsonc } from "../config/wrangler-file.mjs";
-import { renderWrangler, databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy, isWorkersBuildOnMain } from "./config-lib.mjs";
+import { renderWrangler, databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy, isWorkersBuildOnMain, provisionFirstDeploy, workerExists } from "./config-lib.mjs";
 
 const strict = process.argv.includes("--strict") || isProductionDeploy();
 if (!strict) {
@@ -24,14 +24,17 @@ if (!databaseId && missing.length && isWorkersBuildOnMain()) {
   databaseId = null;
 } else if (!databaseId) {
   // Not in wrangler.jsonc (the Deploy button writes it there) or .env: look it
-  // up with the deploy keys. Never fall back to creating a database here: a
-  // failed lookup must not bind an existing instance to an empty one.
+  // up with the deploy keys.
   if (missing.length) {
-    throw new Error(`Missing required configuration: ${missing.join(", ")}. Set them in .env, as Workers Builds build variables, or as GitHub repository secrets, or put the database_id in wrangler.jsonc.`);
+    throw new Error(`Missing required configuration: ${missing.join(", ")}. In a GitHub fork, add them under Settings → Secrets and variables → Actions → Repository secrets; elsewhere set them in .env or as Workers Builds build variables.`);
   }
-  databaseId = (isProductionDeploy() ? await databaseIdFromDeployedWorker(values) : null)
-    ?? await databaseIdByName(values)
-    ?? "";
+  // A fresh fork's first deploy: no Worker yet, so nothing can be lost by
+  // creating the database and bucket. An existing Worker always resolves its
+  // own database, and a lookup that fails for it stops the deploy.
+  const firstDeploy = isProductionDeploy() && await workerExists(values) === false;
+  databaseId = firstDeploy
+    ? await provisionFirstDeploy(values)
+    : (isProductionDeploy() ? await databaseIdFromDeployedWorker(values) : null) ?? await databaseIdByName(values) ?? "";
   if (!databaseId) {
     throw new Error("Could not resolve the D1 database. Run `npm run setup`, or set D1_DATABASE_ID, and check the API token has D1 and Workers Scripts access.");
   }

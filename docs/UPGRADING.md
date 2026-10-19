@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.15
+
+- Fork deploys are simpler: add the two secrets and run **Deploy production**. The first deploy creates the D1 database and R2 bucket; existing instances are unchanged.
+
 ## v3.14
 
 - Fixes from a security and bug review; nothing to do. Devices signed in to a mailbox are signed out when it is disabled.
