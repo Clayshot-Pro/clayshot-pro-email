@@ -31,6 +31,7 @@ const TESTS = [
   "test-add-inbox-ui",
   "test-admin-login-routing",
   "test-portable-origin",
+  "test-shell-headers",
   "test-unsubscribe-and-senders",
   "test-compose-sender",
   "test-unsubscribe-ui",
