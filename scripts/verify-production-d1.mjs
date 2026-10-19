@@ -7,8 +7,9 @@ const CONFIG_PATH = new URL(`../dist/${distWorkerDir(values.WORKER_NAME)}/wrangl
 
 const config = await readFile(CONFIG_PATH, "utf8");
 
-if (config.includes(PLACEHOLDER_DATABASE_ID)) {
-  throw new Error("Generated Wrangler config still contains the placeholder D1 database ID.");
+const db = JSON.parse(config).d1_databases?.find(binding => binding.binding === "DB");
+if (!db?.database_id || db.database_id === PLACEHOLDER_DATABASE_ID) {
+  throw new Error("The built Wrangler config has no D1 database ID. Production deploys run scripts/config-render.mjs first.");
 }
 
 console.log("Generated Wrangler config contains the resolved production D1 binding.");

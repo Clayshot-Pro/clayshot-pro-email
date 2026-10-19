@@ -6,12 +6,13 @@
 //   5. render wrangler.jsonc, upload secrets, apply remote migrations
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import { databaseIdByName } from "./config-lib.mjs";
+import { WRANGLER_FILE } from "../config/wrangler-file.mjs";
 
 const envFile = new URL("../.env", import.meta.url);
-if (!existsSync(envFile)) throw new Error("No .env file found. Copy .env.example to .env and fill it in first.");
+if (!existsSync(envFile)) throw new Error("No .env file found. Copy config/env.example to .env and fill it in first.");
 
 let { values } = loadConfigValues(envFile);
 const missing = missingRequired(values, ["deploy"]);
@@ -55,6 +56,10 @@ if (bucket.status === 0) console.log(`Created R2 bucket ${values.R2_BUCKET_NAME}
 else if (/already exists|already own/i.test(bucketOutput)) console.log(`R2 bucket ${values.R2_BUCKET_NAME} already exists.`);
 else { console.error(bucketOutput); process.exit(bucket.status ?? 1); }
 
+// Rendering writes this account's database ID into wrangler.jsonc; restore
+// the committed file afterwards so the working tree stays clean.
+const committed = readFileSync(WRANGLER_FILE, "utf8");
+process.on("exit", () => writeFileSync(WRANGLER_FILE, committed, "utf8"));
 run("node", ["scripts/config-render.mjs", "--strict"]);
 run("node", ["scripts/secrets-push.mjs"]);
 run("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--remote"]);

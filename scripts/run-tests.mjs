@@ -33,6 +33,7 @@ const TESTS = [
   "test-cloudflare-api",
   "test-domains",
   "test-migrations",
+  "test-migration-runner",
   "test-transport-selection",
   "test-resend-webhook",
   "test-resend-errors",

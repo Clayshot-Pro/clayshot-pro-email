@@ -427,6 +427,9 @@ export default {
       }
       return secureApiResponse(response);
     }
+    if (request.method === "GET" && (url.pathname === "/manifest.webmanifest" || url.pathname === "/" || url.pathname === "/index.html")) {
+      await bootstrapInstance(env);
+    }
     if (request.method === "GET" && url.pathname === "/manifest.webmanifest") {
       try { return await manifestResponse(env); } catch { return env.ASSETS.fetch(request); }
     }
