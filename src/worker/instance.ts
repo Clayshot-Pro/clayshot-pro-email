@@ -1,5 +1,5 @@
 import { appConfig } from "./appConfig";
-import { primaryDomain } from "./domains";
+import { primaryDomain, signInDomains } from "./domains";
 import { brandNames, instanceSettings } from "./branding";
 import { THEME_BACKGROUNDS } from "./customization";
 
@@ -30,11 +30,13 @@ export async function instanceResponse(env: Env): Promise<Response> {
   const names = brandNames(settings);
   const features = appConfig(env).features;
   const domain = await primaryDomain(env);
-  // Public and unauthenticated: never addresses or secrets.
+  // Public and unauthenticated: never addresses or secrets. Mail domains are
+  // public anyway (MX records); the sign-in form offers them in a list.
   return Response.json({
     brandName: names.name,
     brandShortName: names.shortName,
     primaryDomain: domain ?? "",
+    domains: domain ? await signInDomains(env) : [],
     initialized: Boolean(domain),
     setupAvailable: !domain && features.setup,
     features: { gmail: features.gmail },

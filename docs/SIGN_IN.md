@@ -16,6 +16,8 @@ The app works on whatever HTTPS address serves it (`workers.dev` or a custom dom
 
 Each browser signs in to its own set of accounts. Nothing is shared between devices automatically.
 
+The sign-in form (and **Add inbox → Custom mailbox**) asks for a **username** in one field, with the domain on its right: type `alice` and pick `@example.com` from the list (an instance with one domain shows it without a list). The list holds the instance's own active domains (every fork shows its own; a domain appears once it is active in Admin → Domains), the main domain first, and the form remembers the last one used on that browser. A full address typed or filled in by a password manager is used as it is.
+
 - Signing in gives the browser an HttpOnly, Secure device session for 30 days, renewed for another 30 when the app is opened after a week. D1 keeps the list of accounts that device may open.
 - **Mailboxes:** sign in with the mailbox address and the password the admin chose or generated. Mailbox users never get admin rights.
 - **Gmail:** **Continue with Google** on each device (OAuth with PKCE). Signing a Gmail account out on one device doesn't affect others.
@@ -28,7 +30,7 @@ Each browser signs in to its own set of accounts. Nothing is shared between devi
 
 The administrator signs in with **both** a password and the owner passkey, as `admin@<main mail domain>`, which is also the admin's mailbox. `admin@<app address>` works as an alias with the same password and passkey.
 
-1. In the normal sign-in form, enter the admin address and password.
+1. In the normal sign-in form, type `admin`, pick the main mail domain, and enter the password.
 2. Confirm with the owner passkey within five minutes in the same browser.
 3. The mail app opens with every mailbox. **Admin panel** (sidebar, or Settings on a phone) opens administration; **Back to mail** returns.
 

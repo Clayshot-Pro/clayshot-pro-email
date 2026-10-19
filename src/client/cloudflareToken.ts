@@ -1,32 +1,30 @@
 /**
- * The Cloudflare API token the app uses for setup and domain wiring (v3.12).
- * The link opens Cloudflare's token form with the documented permissions
- * already selected; Cloudflare publishes no template keys for the two email
- * permissions, so those are added by hand.
+ * One Cloudflare API token does everything: GitHub Actions deploys with it
+ * (the fork's CLOUDFLARE_API_TOKEN secret, which each deploy also hands to the
+ * app) and the app uses it for setup and domain wiring. `key` is the name
+ * Cloudflare's token form takes to pre-select a permission; Cloudflare
+ * publishes none for the two email permissions, so those are added by hand.
  */
-const PREFILLED = [
-  { key: "workers_scripts", type: "edit" },
-  { key: "zone", type: "read" },
-  { key: "zone_settings", type: "edit" },
-  { key: "dns", type: "edit" },
-];
+export const CLOUDFLARE_TOKEN_PERMISSIONS = [
+  { scope: "Account", name: "Workers Scripts", access: "Edit", key: "workers_scripts" },
+  { scope: "Account", name: "D1", access: "Edit", key: "d1" },
+  { scope: "Account", name: "Workers R2 Storage", access: "Edit", key: "workers_r2" },
+  { scope: "Account", name: "Account Settings", access: "Read", key: "account_settings" },
+  { scope: "Account", name: "Email Sending", access: "Edit", key: null },
+  { scope: "Zone", name: "Zone", access: "Read", key: "zone" },
+  { scope: "Zone", name: "Zone Settings", access: "Edit", key: "zone_settings" },
+  { scope: "Zone", name: "DNS", access: "Edit", key: "dns" },
+  { scope: "Zone", name: "Email Routing Rules", access: "Edit", key: null },
+] as const;
 
+/** Cloudflare's token form with every permission it can pre-select already selected. */
 export const CLOUDFLARE_TOKEN_URL = `https://dash.cloudflare.com/profile/api-tokens?${new URLSearchParams({
-  permissionGroupKeys: JSON.stringify(PREFILLED),
+  permissionGroupKeys: JSON.stringify(CLOUDFLARE_TOKEN_PERMISSIONS.flatMap(permission =>
+    permission.key ? [{ key: permission.key, type: permission.access.toLowerCase() }] : [])),
   accountId: "*",
   zoneId: "all",
   name: "Mail app",
 })}`;
-
-/** Every permission the token needs, as Cloudflare's token form names them. */
-export const CLOUDFLARE_TOKEN_PERMISSIONS = [
-  { scope: "Account", name: "Workers Scripts", access: "Edit", prefilled: true },
-  { scope: "Account", name: "Email Sending", access: "Edit", prefilled: false },
-  { scope: "Zone", name: "Zone", access: "Read", prefilled: true },
-  { scope: "Zone", name: "Zone Settings", access: "Edit", prefilled: true },
-  { scope: "Zone", name: "DNS", access: "Edit", prefilled: true },
-  { scope: "Zone", name: "Email Routing Rules", access: "Edit", prefilled: false },
-] as const;
 
 type ConnectStep = { id: string; label: string; status: "done" | "skipped" | "failed" | "action"; detail: string };
 export type ConnectReport = {

@@ -137,12 +137,52 @@ export async function run() {
         assert.deepEqual(inbox.json.messages.map(m => m.subject).sort(), ["Plus address", "Quarterly report"]);
       }],
 
+      ["the sign-in form takes a name and offers every active domain", async () => {
+        const visitor = await contextWithPasskey(browser);
+        try {
+          const { page } = visitor;
+          state.page = page;
+          // A second active domain, as an instance serving two would report it.
+          await page.route("**/api/instance", async route => {
+            const response = await route.fetch();
+            const json = await response.json();
+            await route.fulfill({ response, json: { ...json, domains: [DOMAIN, "second.test"] } });
+          });
+          const posted = [];
+          await page.route("**/api/device/login", async route => {
+            posted.push(JSON.parse(route.request().postData()).email);
+            await route.continue();
+          });
+          await page.goto(worker.origin);
+          const picker = page.locator("select.signin-domain");
+          await picker.waitFor({ timeout: 15_000 });
+          assert.deepEqual(await picker.locator("option").allInnerTexts(), [`@${DOMAIN}`, "@second.test"]);
+          assert.equal(await picker.inputValue(), DOMAIN, "the main domain is chosen first");
+          const box = await page.locator(".signin-address-field").boundingBox();
+          const list = await picker.boundingBox();
+          assert.ok(Math.abs(list.x + list.width - (box.x + box.width)) < 2, "the domain list sits at the right end of the one field");
+          await page.fill("#device-email", "Nobody");
+          await picker.selectOption("second.test");
+          await page.fill("#device-password", "wrong-password");
+          await page.locator("button.signin-submit").click();
+          await page.locator(".auth-error").waitFor({ timeout: 15_000 });
+          assert.deepEqual(posted, ["Nobody@second.test"]);
+          // A full address is used as typed, and the picker steps aside.
+          await page.fill("#device-email", `nobody@${DOMAIN}`);
+          assert.equal(await picker.count(), 0);
+        } finally {
+          await visitor.context.close();
+        }
+      }],
+
       ["alice signs in with her mailbox password and reads the message safely", async () => {
         alice = await contextWithPasskey(browser);
         state.page = alice.page;
         const { page } = alice;
         await page.goto(worker.origin);
-        await page.fill("#device-email", `alice@${DOMAIN}`);
+        // One domain: the form shows it after the name, so the name is enough.
+        await page.locator(".signin-domain-fixed").filter({ hasText: `@${DOMAIN}` }).waitFor({ timeout: 15_000 });
+        await page.fill("#device-email", "alice");
         await page.fill("#device-password", state.alicePassword);
         await page.locator("button.signin-submit").click();
         await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
@@ -225,6 +265,23 @@ export async function run() {
         // The proxy is for signed-in readers only.
         const anonymous = await fetch(`${worker.origin}/api/image-proxy?url=${encodeURIComponent("https://images.shop.test/banner.png")}`);
         assert.equal(anonymous.status, 401);
+      }],
+
+      ["Add inbox signs in with a name and the domain too", async () => {
+        const { page } = alice;
+        state.page = page;
+        await page.locator(".desktop-add-account").click();
+        await page.locator(".add-inbox-option").first().click();
+        const modal = page.locator(".settings-backdrop");
+        await modal.locator(".signin-domain-fixed").filter({ hasText: `@${DOMAIN}` }).waitFor({ timeout: 15_000 });
+        // One continuous box: the border belongs to the field, not to the name input.
+        const borders = await modal.locator(".signin-address-field").evaluate(field => ({
+          field: getComputedStyle(field).borderTopWidth,
+          input: getComputedStyle(field.querySelector("input")).borderTopWidth,
+        }));
+        assert.deepEqual(borders, { field: "1px", input: "0px" });
+        await modal.getByRole("button", { name: "Close Add Inbox" }).click();
+        await modal.waitFor({ state: "detached", timeout: 15_000 });
       }],
 
       ["attachments download as attachments with safe headers", async () => {
