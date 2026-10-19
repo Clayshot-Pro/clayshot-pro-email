@@ -1,3 +1,4 @@
+import { jsonError } from "./http";
 import { isValidDomain } from "./appConfig";
 import { saveAdminPassword } from "./adminAuth";
 import { hasCredential } from "./auth";
@@ -9,7 +10,6 @@ import { activateIfReady, domainRow, initializeInstance, isInitialized, primaryD
 import { adminPasswordError } from "./mailboxPasswordPolicy";
 import { issueSetupGrant } from "./setupGrants";
 
-const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 
 /**
  * POST /api/setup — first-run setup, before the owner passkey exists (v3.12):

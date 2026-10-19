@@ -1,8 +1,8 @@
+import { jsonError } from "../http";
 import { adminKeysResponse, removeCloudflareConnection } from "../storedKeys";
 import { normalizeToken } from "./api";
 import { connectCloudflare } from "./connection";
 
-const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 
 /** PUT /api/admin/cloudflare { token } (administrator step-up): connect or replace the token. */
 export async function saveCloudflareToken(request: Request, env: Env): Promise<Response> {

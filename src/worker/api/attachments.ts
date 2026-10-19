@@ -1,3 +1,4 @@
+import { gmailAttachment } from "../providers/gmailProvider";
 import { resolveProvider } from "../providers/registry";
 
 type AttachmentRow = {
@@ -29,6 +30,21 @@ export async function previewAttachment(
       { error: "Account not found or unavailable" },
       { status: 404 },
     );
+  }
+  if (provider.kind === "gmail") {
+    const query = new URL(request.url).searchParams;
+    const messageId = query.get("messageId")?.trim();
+    if (!messageId) return Response.json({ error: "Message id is required" }, { status: 400 });
+    let attachment: Awaited<ReturnType<typeof gmailAttachment>>;
+    try {
+      attachment = await gmailAttachment(env, provider.accountId, messageId, id, query.get("partId"));
+    } catch {
+      return Response.json({ error: "Attachment not found or unavailable" }, { status: 404 });
+    }
+    if (!SAFE_PREVIEW_TYPES.has(attachment.contentType)) {
+      return Response.json({ error: "This file type cannot be previewed safely" }, { status: 415 });
+    }
+    return new Response(attachment.data, { headers: previewHeaders(attachment.contentType, attachment.data.byteLength, attachment.filename) });
   }
   if (provider.kind !== "native") {
     return Response.json(
@@ -62,14 +78,16 @@ export async function previewAttachment(
     );
   }
 
-  return new Response(object.body, {
-    headers: {
-      "Content-Type": attachment.content_type,
-      "Content-Length": String(attachment.size),
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'",
-    },
-  });
+  return new Response(object.body, { headers: previewHeaders(attachment.content_type, attachment.size, attachment.filename) });
+}
+
+function previewHeaders(contentType: string, size: number, filename: string): HeadersInit {
+  return {
+    "Content-Type": contentType,
+    "Content-Length": String(size),
+    "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'",
+  };
 }

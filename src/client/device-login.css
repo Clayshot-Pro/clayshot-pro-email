@@ -79,7 +79,6 @@
   color: var(--text);
 }
 .auth-heading > p:last-child,
-.auth-note,
 .auth-state,
 .auth-card .account-signin-divider {
   color: var(--muted);
@@ -161,11 +160,6 @@
   outline: none;
   box-shadow: 0 0 0 3px var(--ui-focus-ring);
 }
-.auth-warning {
-  border: 1px solid var(--line-strong);
-  background: var(--accent-soft);
-  color: var(--accent-2);
-}
 .auth-error,
 .admin-home .auth-error {
   border: 1px solid var(--ui-error-border);
@@ -174,43 +168,18 @@
 }
 
 /* The administrator page is a full-page inbox surface, not a new theme. */
-.admin-home {
-  min-height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: clamp(16px, 3vw, 42px);
-}
-.admin-home-card {
-  max-width: 1050px;
-  margin: 0 auto;
-  display: grid;
-  gap: 20px;
-}
 .admin-home-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 18px;
-  padding: clamp(16px, 3vw, 24px);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel);
   color: var(--text);
 }
 .admin-home-header h1 {
-  margin: 4px 0 8px;
   color: var(--text);
-  font-size: clamp(1.4rem, 3vw, 2rem);
 }
 .admin-home-header p { margin-bottom: 0; color: var(--muted); }
 .admin-home-header .auth-eyebrow { color: var(--accent-2); }
-.admin-home-header .auth-secondary { width: auto; white-space: nowrap; }
+.admin-home-header .auth-secondary { white-space: nowrap; }
 .admin-home .settings-section {
-  padding: clamp(14px, 3vw, 22px);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
   color: var(--text);
 }
 .admin-home .settings-section h2,
@@ -395,7 +364,6 @@
 }
 .sessions-modal { color: var(--text); }
 .sessions-header span { color: var(--accent-2); }
-.sessions-current { background: var(--accent-soft); color: var(--accent-2); }
 .session-current { background: var(--accent-soft); color: var(--accent-2); }
 .sessions-actions button:not(.sessions-danger):hover:not(:disabled) {
   border-color: var(--ui-focus-border);
@@ -413,10 +381,7 @@ a:focus-visible {
   outline-offset: 2px;
 }
 @media (max-width: 580px) {
-  .auth-shell { padding: 12px; }
   .auth-card { padding: 22px; border-radius: 16px; }
-  .admin-home-header { align-items: stretch; }
-  .admin-home-header .auth-secondary { width: 100%; }
   .admin-home .settings-account .settings-row-actions { width: 100%; }
 }
 

@@ -27,7 +27,7 @@ type AccountRow = {
   last_synced_at: string | null;
 };
 
-export async function ensureNativeAccount(env: Env): Promise<void> {
+async function ensureNativeAccount(env: Env): Promise<void> {
   const primary = await mailboxById(env, LEGACY_MAILBOX_ID);
   if (!primary) return;
   // Legacy provider registry row kept for the v2 mailbox and Gmail

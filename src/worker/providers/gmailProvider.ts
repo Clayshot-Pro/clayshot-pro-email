@@ -1,3 +1,4 @@
+import { fromBase64Url, toBase64, toBase64Url } from "../bytes";
 import { htmlToText, sanitizeEmailHtml } from "../email/html";
 import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { getGoogleAccessToken } from "./googleCredentials";
@@ -35,20 +36,6 @@ type GmailMessage = {
 
 const enc = new TextEncoder();
 
-const bytesToBase64 = (bytes: Uint8Array) => {
-  let out = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(out);
-};
-
-const b64url = (bytes: Uint8Array) => bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-const decodeBytes = (value: string) => {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-};
 const header = (message: GmailMessage, name: string) => message.payload?.headers?.find((entry) => entry.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
 const partHeader = (part: Part, name: string) => part.headers?.find((entry) => entry.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
 const addr = (value: string) => {
@@ -149,7 +136,7 @@ function mime(input: ProviderSendInput, from: string) {
   );
   for (const attachment of input.attachments) {
     const type = /^[\w.+-]+\/[\w.+-]+$/.test(attachment.type) ? attachment.type : "application/octet-stream";
-    const data = bytesToBase64(new Uint8Array(attachment.content)).replace(/.{1,76}/g, "$&\r\n").trimEnd();
+    const data = toBase64(new Uint8Array(attachment.content)).replace(/.{1,76}/g, "$&\r\n").trimEnd();
     lines.push(
       `--${boundary}`,
       `Content-Type: ${type}; name=${quoted(attachment.filename)}`,
@@ -176,7 +163,7 @@ async function partBytes(env: Env, accountId: string, messageId: string, part: P
   try {
     if ((part.body?.size ?? 0) > maxBytes) return null;
     if (part.body?.data) {
-      const bytes = decodeBytes(part.body.data);
+      const bytes = fromBase64Url(part.body.data);
       return bytes.byteLength <= maxBytes ? bytes : null;
     }
     const attachmentId = part.body?.attachmentId;
@@ -187,7 +174,7 @@ async function partBytes(env: Env, accountId: string, messageId: string, part: P
       `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
     )).json<{ data?: string; size?: number }>();
     if ((response.size ?? 0) > maxBytes || !response.data) return null;
-    const bytes = decodeBytes(response.data);
+    const bytes = fromBase64Url(response.data);
     return bytes.byteLength <= maxBytes ? bytes : null;
   } catch {
     return null;
@@ -221,7 +208,7 @@ async function resolveInlineImages(env: Env, accountId: string, messageId: strin
   for (const image of loaded) {
     if (!image || total + image.bytes.byteLength > MAX_INLINE_IMAGE_TOTAL) continue;
     total += image.bytes.byteLength;
-    const dataUrl = `data:${image.mimeType};base64,${bytesToBase64(image.bytes)}`;
+    const dataUrl = `data:${image.mimeType};base64,${toBase64(image.bytes)}`;
     const ids = new Set([image.contentId, encodeURIComponent(image.contentId)]);
     for (const id of ids) next = next.replace(new RegExp(`cid:${regexEscape(id)}`, "gi"), dataUrl);
   }
@@ -260,18 +247,24 @@ const q = (folder: string) => folder === "inbox"
           ? "-in:inbox -in:sent -in:trash -in:spam -in:drafts"
           : "";
 
-export async function gmailFullMessage(env: Env, accountId: string, id: string, _includePhotos = false) {
-  const raw = await (await call(env, accountId, `/messages/${encodeURIComponent(id)}?format=full`)).json<GmailMessage>();
-  const base = item(raw);
-  const body = await messageBody(env, accountId, raw);
-  const attachments = parts(raw.payload)
+/** Attachment parts. Gmail may issue a new attachment id on every read, so each also names its stable partId. */
+function attachmentsOf(message: GmailMessage) {
+  return parts(message.payload)
     .filter((part) => part.filename && part.body?.attachmentId)
     .map((part) => ({
       id: part.body!.attachmentId!,
+      ...(part.partId ? { partId: part.partId } : {}),
       filename: part.filename!,
       contentType: part.mimeType || "application/octet-stream",
       size: Math.max(0, part.body?.size ?? 0),
     }));
+}
+
+export async function gmailFullMessage(env: Env, accountId: string, id: string, _includePhotos = false) {
+  const raw = await (await call(env, accountId, `/messages/${encodeURIComponent(id)}?format=full`)).json<GmailMessage>();
+  const base = item(raw);
+  const body = await messageBody(env, accountId, raw);
+  const attachments = attachmentsOf(raw);
   return {
     ...base,
     ccAddresses: addresses(header(raw, "Cc")),
@@ -307,25 +300,21 @@ export async function gmailThread(env: Env, accountId: string, threadId: string,
       messageId: header(message, "Message-ID") || null,
       unsubscribeUrl: listUnsubscribeUrl(header(message, "List-Unsubscribe")),
       deliveryError: null,
-      attachments: parts(message.payload)
-        .filter((part) => part.filename && part.body?.attachmentId)
-        .map((part) => ({
-          id: part.body!.attachmentId!,
-          filename: part.filename!,
-          contentType: part.mimeType || "application/octet-stream",
-          size: Math.max(0, part.body?.size ?? 0),
-        })),
+      attachments: attachmentsOf(message),
     };
   });
 }
 
-export async function gmailAttachment(env: Env, accountId: string, messageId: string, attachmentId: string) {
+/** One attachment of a Gmail message, found by its partId when given (stable across reads), else by attachment id. */
+export async function gmailAttachment(env: Env, accountId: string, messageId: string, attachmentId: string, partId?: string | null) {
   const message = await (await call(env, accountId, `/messages/${encodeURIComponent(messageId)}?format=full`)).json<GmailMessage>();
-  const part = parts(message.payload).find((entry) => entry.body?.attachmentId === attachmentId && entry.filename);
-  if (!part || !part.filename) throw new Error("Attachment not found");
+  const part = parts(message.payload).find((entry) => entry.filename && entry.body?.attachmentId
+    && (partId ? entry.partId === partId : entry.body.attachmentId === attachmentId));
+  const currentId = part?.body?.attachmentId;
+  if (!part || !part.filename || !currentId) throw new Error("Attachment not found");
   if ((part.body?.size ?? 0) > MAX_ATTACHMENT) throw new Error("Attachment too large");
-  const response = await (await call(env, accountId, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`)).json<{ data?: string; size?: number }>();
-  const data = response.data ? decodeBytes(response.data) : new Uint8Array();
+  const response = await (await call(env, accountId, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(currentId)}`)).json<{ data?: string; size?: number }>();
+  const data = response.data ? fromBase64Url(response.data) : new Uint8Array();
   if (data.byteLength > MAX_ATTACHMENT) throw new Error("Attachment too large");
   return { data, filename: part.filename, contentType: part.mimeType || "application/octet-stream" };
 }
@@ -431,7 +420,7 @@ export function gmailProvider(env: Env, accountId: string, email: string): MailP
       if (input.attachments.reduce((total, attachment) => total + attachment.content.byteLength, 0) > MAX_ATTACHMENT) {
         throw new Error("Attachments too large");
       }
-      const raw = b64url(enc.encode(mime(input, email)));
+      const raw = toBase64Url(enc.encode(mime(input, email)));
       const body: Record<string, string> = { raw };
       if (input.threadId) body.threadId = input.threadId;
       const response = await (await call(env, accountId, "/messages/send", {

@@ -27,7 +27,7 @@ export function parseJsonc(text) {
   return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
 }
 
-export function readWranglerConfig(file = WRANGLER_FILE) {
+function readWranglerConfig(file = WRANGLER_FILE) {
   return existsSync(file) ? parseJsonc(readFileSync(file, "utf8")) : null;
 }
 

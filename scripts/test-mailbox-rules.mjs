@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { aliasTarget, normalizeMailboxAddress as normalize } from "../src/worker/mailboxRules.ts";
-import { suspectedJunk } from "../src/worker/email/junk.ts";
+import { junkVerdict } from "../src/worker/email/junk.ts";
+const suspectedJunk = (subject, sender, text) => junkVerdict({ subject, sender, text }).junk;
 import { adminPasswordError, mailboxPasswordError } from "../src/worker/mailboxPasswordPolicy.ts";
 
 const single = { domains: new Set(["example.com"]), defaultDomain: "example.com", adminAddress: "owner@example.com" };

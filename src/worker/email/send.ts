@@ -1,7 +1,10 @@
+import { releaseMailboxBytes, reserveMailboxBytes } from "../mailboxQuota";
+import type { ProviderAttachment } from "../providers/types";
+import { forwardSubject, replySubject } from "../../client/mailUtils";
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
 import { gmailAttachment, gmailFullMessage } from "../providers/gmailProvider";
-import { textToHtml } from "./textHtml";
+import { messagePreview, textToHtml } from "./textHtml";
 import { fitsCloudflareApi } from "../transports/cloudflareApi";
 import { transportChoice } from "../transports";
 import { SAFE_DELIVERY_CODES, TransportError } from "../transports/types";
@@ -25,11 +28,7 @@ type StoredAttachment = {
   r2_key: string;
 };
 
-type Upload = {
-  filename: string;
-  type: string;
-  content: ArrayBuffer;
-};
+type Upload = ProviderAttachment;
 
 const MAX_ATTACHMENT_BYTES = 4_000_000;
 const MAX_BODY_CHARS = 500_000;
@@ -49,11 +48,6 @@ function splitRecipients(value: FormDataEntryValue | null): string[] {
         .filter(Boolean),
     ),
   ];
-}
-
-
-function preview(value: string): string {
-  return value.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
 function safeDeliveryError(error: unknown): string {
@@ -79,7 +73,7 @@ function userDeliveryError(code: string): string {
   if (code === "E_RECIPIENT_SUPPRESSED") {
     return "Recipient cannot currently receive this email";
   }
-  if (code === "E_SENDER_NOT_VERIFIED" || code === "E_SENDER_DOMAIN_NOT_AVAILABLE") {
+  if (code === "E_SENDER_NOT_VERIFIED") {
     return "This sender domain is not enabled or verified for Cloudflare Email Sending";
   }
   if (code === "E_RECIPIENT_NOT_ALLOWED") {
@@ -92,13 +86,6 @@ function userDeliveryError(code: string): string {
   return "Email delivery failed";
 }
 
-function replySubject(subject: string): string {
-  return /^re:/i.test(subject) ? subject : `Re: ${subject}`;
-}
-
-function forwardSubject(subject: string): string {
-  return /^(fwd|fw):/i.test(subject) ? subject : `Fwd: ${subject}`;
-}
 
 function attachmentKey(messageId: string, attachmentId: string, now: Date): string {
   return [
@@ -184,7 +171,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   const bcc = splitRecipients(form.get("bcc"));
   // Line breaks never reach a header, whatever the transport does with them.
   let subject = String(form.get("subject") ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_SUBJECT_CHARS);
-  const text = String(form.get("text") ?? "").slice(0, MAX_BODY_CHARS);
+  // Browsers submit form text with CRLF line breaks; store and send LF only.
+  const text = String(form.get("text") ?? "").replace(/\r\n?/g, "\n").slice(0, MAX_BODY_CHARS);
   const replyToMessageId = String(form.get("replyToMessageId") ?? "").trim() || null;
   const forwardMessageId = String(form.get("forwardMessageId") ?? "").trim() || null;
   const draftId = String(form.get("draftId") ?? "").trim() || null;
@@ -276,7 +264,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
           return Response.json({ error: "Attachments must total less than 4 MB" }, { status: 400 });
         }
         for (const attachment of target.attachments) {
-          const file = await gmailAttachment(env, provider.accountId, target.id, attachment.id);
+          const file = await gmailAttachment(env, provider.accountId, target.id, attachment.id, attachment.partId);
           inheritedUploads.push({ filename: file.filename, type: file.contentType, content: file.data.slice().buffer });
         }
       } catch {
@@ -309,10 +297,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   }
 
   const allUploads = [...inheritedUploads, ...uploads];
-  if (
-    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0)
-    > MAX_ATTACHMENT_BYTES
-  ) {
+  const attachmentBytes = allUploads.reduce((sum, upload) => sum + upload.content.byteLength, 0);
+  if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
     return Response.json(
       { error: "Attachments must total less than 4 MB" },
       { status: 400 },
@@ -321,7 +307,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   // The Cloudflare Email Sending API caps a message at 5 MiB after base64
   // encoding; reject before reserving quota rather than failing in transport.
   if (nativeTransport === "cloudflare" && !fitsCloudflareApi(
-    allUploads.reduce((total, upload) => total + upload.content.byteLength, 0), text.length + subject.length,
+    attachmentBytes, text.length + subject.length,
   )) {
     return Response.json(
       { error: "Attachments are too large for Cloudflare Email Sending (5 MB per message after encoding, about 3.7 MB of files)" },
@@ -376,12 +362,9 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   // invoked. Quota checks are atomic across concurrent mailboxes/requests.
   const bodyBytes = new TextEncoder().encode(text).byteLength
     + new TextEncoder().encode(textToHtml(text)).byteLength;
-  const attachmentBytes = allUploads.reduce((sum, upload) => sum + upload.content.byteLength, 0);
   const countedBytes = bodyBytes + attachmentBytes;
   if (provider.kind === "native") {
-    const quota = await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=used_bytes+?1,usage_version=usage_version+1 WHERE id=?2 AND status='active' AND used_bytes+?1<=quota_bytes"
-    ).bind(countedBytes, provider.accountId).run();
+    const quota = await reserveMailboxBytes(env, provider.accountId, countedBytes);
     if (!quota.meta.changes) {
       await env.DB.prepare("DELETE FROM outbound_attempts WHERE mailbox_id=?1 AND client_key=?2 AND state='pending'")
         .bind(provider.accountId,clientKey).run();
@@ -436,9 +419,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : uncertain ? "uncertain" : "failed",providerMessageId,deliveryError,transportKind).run();
   }
   if (provider.kind === "native" && status !== "sent" && attachmentBytes > 0) {
-    await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?1),usage_version=usage_version+1 WHERE id=?2"
-    ).bind(attachmentBytes, provider.accountId).run();
+    await releaseMailboxBytes(env, provider.accountId, attachmentBytes);
   }
 
   if (provider.kind !== "native") {
@@ -518,7 +499,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       JSON.stringify(cc),
       JSON.stringify(bcc),
       subject,
-      preview(text),
+      messagePreview(text),
       text,
       textToHtml(text),
       nowIso,
@@ -560,9 +541,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   } catch {
     await Promise.allSettled(attachmentRows.map(row => env.MAIL.delete(row.key)));
     // Attachment bytes of a failed send were already released above.
-    await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?1),usage_version=usage_version+1 WHERE id=?2"
-    ).bind(status === "sent" ? countedBytes : countedBytes - attachmentBytes, provider.accountId).run().catch(() => undefined);
+    await releaseMailboxBytes(env, provider.accountId, status === "sent" ? countedBytes : countedBytes - attachmentBytes).catch(() => undefined);
     // Sending may already have been accepted. Never automatically retry it.
     return Response.json({ error: "Mail transport finished, but storing its local sent record failed. Do not retry until checked." }, { status: 502 });
   }

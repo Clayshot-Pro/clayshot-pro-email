@@ -25,12 +25,6 @@ async function mailbox(env: Env, url: URL): Promise<{ id: string; photo_version:
   return row ?? Response.json({ error: "Mailbox unavailable" }, { status: 404 });
 }
 
-export async function getProfile(env: Env, url: URL): Promise<Response> {
-  const box = await mailbox(env, url);
-  if (box instanceof Response) return box;
-  return Response.json({ hasPhoto: Boolean(box.photo_version), version: box.photo_version }, { headers: noStore });
-}
-
 export async function getProfilePhoto(env: Env, url: URL): Promise<Response> {
   const box = await mailbox(env, url);
   if (box instanceof Response) return box;

@@ -2,11 +2,11 @@
  * Setup status for Admin → Keys (v3.21): what is set up, what is missing and
  * what is optional, so the page can show it at a glance.
  */
-export type KeyState = "ok" | "missing" | "optional";
+type KeyState = "ok" | "missing" | "optional";
 export type KeyCheck = { id: string; label: string; state: KeyState; chip: string; essential: boolean; impact: string };
 
 type Source = "worker" | "stored" | "none";
-export type KeysSnapshot = {
+type KeysSnapshot = {
   encryption: boolean;
   keys: Array<{ name: string; source: Source }>;
   push: { source: Source };

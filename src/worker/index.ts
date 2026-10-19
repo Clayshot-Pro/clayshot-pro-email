@@ -1,3 +1,5 @@
+import { jsonError } from "./http";
+import { sha256Hex } from "./bytes";
 import { primaryProfilePath, protectedAccountPath, requestedMailAccount } from "./accountAccess";
 import { imageProxy } from "./api/imageProxy";
 import { adminProtectedApiPath } from "./adminRoutePolicy";
@@ -15,12 +17,11 @@ import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleN
 import { getAccountAvatar } from "./api/accountAvatar";
 import { getConnectedAccounts } from "./api/accounts";
 import { previewAttachment } from "./api/attachments";
-import { getContactAvatar } from "./api/contactAvatar";
 import { deleteDraft, getDraft, saveDraft } from "./api/drafts";
 import { healthResponse } from "./api/health";
 import { downloadAttachment, getMessage, listMessages, patchMessage } from "./api/mail";
 import { bulkMailAction, permanentlyDeleteMessage } from "./api/mailActions";
-import { deleteProfilePhoto, getProfile, getProfilePhoto, profileMailboxId, saveProfilePhoto } from "./api/profile";
+import { deleteProfilePhoto, getProfilePhoto, profileMailboxId, saveProfilePhoto } from "./api/profile";
 import {
   authenticationOptions,
   authStatus,
@@ -51,7 +52,7 @@ import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { disconnectGoogleIfUnused, googleOAuthCallback, startGoogleOAuth } from "./providers/google";
 import { pushConfig, subscribePush, unsubscribePush } from "./push";
-import { MAX_API_BODY_BYTES, authRateLimitBucket, checkAuthRateLimit, requestTooLarge } from "./security";
+import { MAX_API_BODY_BYTES, authRateLimitBucket, checkAuthRateLimit, limitedRequest } from "./security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_POSTS = new Set([
@@ -66,8 +67,6 @@ const AUTH_POSTS = new Set([
   "/api/accounts/gmail/connect",
 ]);
 
-const jsonError = (message: string, status: number, headers?: HeadersInit) =>
-  Response.json({ error: message }, { status, headers });
 
 const sameOrigin = (request: Request): boolean => {
   try {
@@ -120,8 +119,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   // session checks for this exact path only, authenticated by signature.
   if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
   if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
-  if (!SAFE_METHODS.has(request.method) && requestTooLarge(request, MAX_API_BODY_BYTES)) {
-    return jsonError("Request body too large", 413);
+  if (!SAFE_METHODS.has(request.method)) {
+    const limited = limitedRequest(request, MAX_API_BODY_BYTES);
+    if (!limited) return jsonError("Request body too large", 413);
+    request = limited;
   }
 
   if (
@@ -152,7 +153,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/auth/register/verify" && request.method === "POST") return verifyRegistration(request, env);
   if (url.pathname === "/api/auth/login/options" && request.method === "POST") return authenticationOptions(request, env);
   if (url.pathname === "/api/auth/login/verify" && request.method === "POST") return verifyAuthentication(request, env);
-  if (url.pathname === "/api/auth/logout" && request.method === "POST") return logout(request, env);
   if (url.pathname === "/api/accounts/gmail/callback" && request.method === "GET") return googleOAuthCallback(request, env);
   if (url.pathname === "/api/accounts/gmail/connect" && request.method === "POST") return startGoogleOAuth(request, env);
 
@@ -270,8 +270,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
 
   // Authorization must use the mailbox the handler actually operates on.
   // Previously POST /api/send and /api/drafts could authorize query accountId
-  // but act on a different body accountId. Contact photo reads require the
-  // same per-device account grant as the rest of the Gmail API.
+  // but act on a different body accountId.
   if (protectedAccountPath(url.pathname)) {
     const target = await requestedMailAccount(request, url);
     if (target.error) return jsonError(target.error, 400);
@@ -295,7 +294,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     if (!sessionId) return jsonError("Invalid session id", 400);
     return revokeSession(request, env, sessionId);
   }
-  if (url.pathname === "/api/contact-avatar" && request.method === "GET") return getContactAvatar(request, env);
 
   const accountRoute = url.pathname.match(/^\/api\/accounts\/([^/]+)$/);
   if (accountRoute && request.method === "DELETE") {
@@ -355,7 +353,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/blocked-senders" && request.method === "DELETE") return removeBlockedSender(env, url);
   if (url.pathname === "/api/send" && request.method === "POST") return sendEmail(request, env);
   if (url.pathname === "/api/drafts" && request.method === "POST") return saveDraft(request, env);
-  if (url.pathname === "/api/profile" && request.method === "GET") return getProfile(env, url);
 
   if (url.pathname === "/api/profile/photo") {
     if (request.method === "GET") return getProfilePhoto(env, url);
@@ -419,9 +416,7 @@ export default {
         const token = readOwnerSessionToken(request);
         let actor = "anonymous";
         if (token) {
-          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-          actor = Array.from(new Uint8Array(digest)).slice(0, 8)
-            .map(byte => byte.toString(16).padStart(2, "0")).join("");
+          actor = (await sha256Hex(token)).slice(0, 16);
         }
         const outcome = response.ok ? "success" : response.status === 401 || response.status === 403 ? "denied" : "failure";
         // Paginated operations are one logical action: record completion and

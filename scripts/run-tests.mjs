@@ -10,6 +10,7 @@ const TESTS = [
   "test-unit-core",
   "test-audit-fixes",
   "test-push",
+  "test-gmail",
   "test-email-images",
   "test-stored-keys",
   "test-key-status",
@@ -17,12 +18,14 @@ const TESTS = [
   "test-all-inboxes",
   "test-admin-mailbox",
   "test-blocked-senders",
+  "test-bound-parameters",
   "test-junk",
   "test-profile-photos",
   "test-instance-identity",
   "test-account-access",
   "test-admin-auth-boundary",
   "test-admin-stepup",
+  "test-login-limits",
   "test-mailbox-rules",
   "test-mail-mutation-shields",
   "test-password-crypto",
@@ -30,6 +33,7 @@ const TESTS = [
   "test-add-inbox-ui",
   "test-admin-login-routing",
   "test-portable-origin",
+  "test-shell-headers",
   "test-unsubscribe-and-senders",
   "test-compose-sender",
   "test-unsubscribe-ui",
@@ -52,7 +56,11 @@ const TESTS = [
 let failed = 0;
 for (const name of TESTS) {
   const path = `scripts/${name}.mjs`;
-  if (!existsSync(path)) continue;
+  if (!existsSync(path)) {
+    failed++;
+    console.error(`FAIL: ${name} (missing ${path})`);
+    continue;
+  }
   const result = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", path], { stdio: "inherit" });
   if (result.status !== 0) {
     failed++;

@@ -5,7 +5,24 @@ Back up D1 **and** R2 before big updates. Then:
 - **Fork:** on GitHub, open your fork and choose **Sync fork → Update branch**. The admin panel shows when there is a new version.
 - **Other copies:** merge the new version into `main`, or run `npm run deploy:self`.
 
-Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
+Deploys apply migrations, and the app applies any still pending on its first request. Migrations never remove columns or tables that older versions read, so an older v3 version keeps working on a newer database (some migrations also normalise stored data). What changed in each version: [CHANGELOG.md](./CHANGELOG.md).
+
+## v3.24
+
+- Gmail accounts connected before keep working. New Gmail connections ask only for mail and profile access (no contacts). Nothing else to do.
+- Edge on Windows can now turn on notifications. Deploying from your computer needs Node.js 22.12 or later.
+
+## v3.23
+
+- New-mail alerts show the sender, subject and a preview on three lines. Nothing to do.
+
+## v3.22
+
+- GitHub Actions deploys hand the deploy token to the app; **Admin → Keys** shows **Using the deploy's token**. For automatic domain setup, give the `CLOUDFLARE_API_TOKEN` token **Zone: Read**, **Zone Settings: Edit**, **DNS: Edit**, **Email Routing Rules: Edit** and **Email Sending: Edit** (a token made with the v3.15 steps has only Workers and D1). A token connected in **Admin → Keys** still takes precedence.
+
+## v3.21
+
+- **Admin → Keys** shows a status badge for each key, and a **Setup incomplete** notice appears when an essential key is missing. Nothing to do.
 
 ## v3.20
 
@@ -67,4 +84,4 @@ Deploys apply migrations, and the app applies any still pending on its first req
 
 ## Rollback
 
-Redeploy the previous version from its version branch. Migrations are additive, so older versions keep working on the newer database.
+Redeploy the previous version from its version branch. An older v3 version keeps working on the newer database (see the top of this page).

@@ -17,6 +17,7 @@ export * from "./src/worker/email/textHtml.ts";
 export * from "./src/worker/providers/crypto.ts";
 export { sanitizeEmailHtml } from "./src/worker/email/html.ts";
 export { adminMailboxAddressFor } from "./src/worker/mailboxIds.ts";
+export { GOOGLE_SCOPE, hasRequiredGoogleScopes } from "./src/worker/providers/googleConfig.ts";
 export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE } from "./src/client/appModel.ts";`,
       resolveDir: root, loader: "ts" },
     bundle: true, format: "esm", platform: "neutral", external: ["node:*"], outfile: join(out, "unit.mjs"), logLevel: "error",
@@ -34,9 +35,17 @@ export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE
   assert.equal(m.secretMatches("s3cret", ["s3cret"]), false, "only strings are compared");
   assert.equal(m.secretMatches("s3cret", "S3CRET"), false);
 
+  // Gmail asks only for what it uses: mail and the account photo, never contacts.
+  assert.doesNotMatch(m.GOOGLE_SCOPE, /contacts/);
+  assert.equal(m.hasRequiredGoogleScopes("https://www.googleapis.com/auth/gmail.modify"), true);
+  assert.equal(m.hasRequiredGoogleScopes(`${m.GOOGLE_SCOPE} https://www.googleapis.com/auth/contacts.readonly`), true, "older grants keep working");
+  assert.equal(m.hasRequiredGoogleScopes("https://www.googleapis.com/auth/userinfo.profile"), false);
+
   // Plain text becomes inert HTML.
   assert.equal(m.escapeHtml(`<a href="x" onclick='y'>&</a>`), "&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;&lt;/a&gt;");
   assert.equal(m.textToHtml("line 1\n<b>2</b>"), '<div style="white-space:pre-wrap;font-family:Arial,sans-serif">line 1<br>&lt;b&gt;2&lt;/b&gt;</div>');
+  // Browsers submit form text with CRLF; a "\r" left in a pre-wrap block shows as an extra blank line.
+  assert.equal(m.textToHtml("a\r\nb\rc"), m.textToHtml("a\nb\nc"), "every line break style becomes one <br>");
 
   // Credential encryption: round trip, bound to its name, tamper-evident, key-specific.
   const env = { PROVIDER_CREDENTIAL_KEY: Buffer.alloc(32, 9).toString("base64url") };

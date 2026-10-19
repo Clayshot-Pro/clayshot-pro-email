@@ -8,24 +8,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    bind: (...values) => statement(sql, values),
-    run: async () => { db.prepare(sql).run(...args); return { success: true, meta: {} }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return {
-    prepare: sql => statement(sql),
-    batch: async statements => { db.exec("BEGIN"); try { for (const s of statements) await s.run(); db.exec("COMMIT"); } catch (e) { db.exec("ROLLBACK"); throw e; } return []; },
-  };
-}
 function database() {
-  const db = new DatabaseSync(":memory:");
-  db.exec("PRAGMA foreign_keys = ON");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase({ foreignKeys: true });
   return db;
 }
 const mailboxes = db => db.prepare("SELECT id, email_address FROM native_mailboxes ORDER BY id").all().map(row => `${row.id}=${row.email_address}`);
@@ -84,6 +70,33 @@ async function run(m) {
     assert.deepEqual(mailboxes(db), ["native:admin=admin@example.net", "native:primary=hello@example.net"]);
   }
 
+  // Purging an attachment-heavy mailbox deletes its stored files in R2-sized requests (at most 1,000 keys each).
+  {
+    const db = migratedDatabase();
+    db.exec(`INSERT INTO native_mailboxes (id, email_address, display_name, deleted_at, purge_after)
+      VALUES ('native:gone', 'gone@example.org', 'Gone', datetime('now', '-31 days'), datetime('now', '-1 day'))`);
+    db.exec("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES ('t1', 'native:gone', '2026-10-01T00:00:00Z')");
+    const message = db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_text, raw_r2_key)
+      VALUES (?, 'native:gone', 't1', 'inbound', 'a@example.net', '[]', 'Files', '', '2026-10-01T00:00:00Z', '', ?)`);
+    const attachment = db.prepare("INSERT INTO attachments (id, message_id, filename, r2_key) VALUES (?, ?, 'file.bin', ?)");
+    for (let i = 0; i < 50; i++) {
+      message.run(`m${i}`, `raw/m${i}`);
+      for (let j = 0; j < 30; j++) attachment.run(`a${i}-${j}`, `m${i}`, `att/m${i}/${j}`);
+    }
+    const deletes = [];
+    const env = { DB: d1(db), MAIL: { delete: async keys => {
+      const list = [keys].flat();
+      if (list.length > 1000) throw new Error(`R2 delete accepts at most 1000 keys (${list.length})`);
+      deletes.push(list.length);
+    } } };
+    const first = await m.purgeNativeMailbox(env, "native:gone");
+    assert.equal(first.status, 200);
+    assert.deepEqual(await first.json(), { complete: false, remaining: true, removed: 50 });
+    assert.equal(deletes.reduce((a, b) => a + b, 0), 1550, "every raw message and attachment is deleted");
+    assert.ok(deletes.every(count => count <= 1000));
+    assert.deepEqual(await (await m.purgeNativeMailbox(env, "native:gone")).json(), { complete: true });
+  }
+
   console.log("PASS: admin@ is created at setup and on upgrade, protected, and the former primary mailbox is ordinary");
 }
 
@@ -92,7 +105,7 @@ try {
   const entry = join(out, "entry.ts");
   const src = new URL("../src/worker/", import.meta.url).pathname;
   writeFileSync(entry, `export { ensureDomains, initializeInstance, postmasterMailboxId, primaryDomain } from "${src}domains.ts";
-export { allNativeMailboxes, mailboxForRecipient, scheduleNativeMailboxDeletion, updateNativeMailbox, createNativeMailbox } from "${src}mailboxes.ts";
+export { allNativeMailboxes, mailboxForRecipient, purgeNativeMailbox, scheduleNativeMailboxDeletion, updateNativeMailbox, createNativeMailbox } from "${src}mailboxes.ts";
 export { setMailboxPassword } from "${src}deviceAuth.ts";
 export { resolveProvider } from "${src}providers/registry.ts";`);
   await build({ entryPoints: [entry], bundle: true, format: "esm", platform: "neutral", external: ["node:*"], outfile: join(out, "bundle.mjs"),

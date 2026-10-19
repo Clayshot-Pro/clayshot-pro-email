@@ -1,3 +1,4 @@
+import { toBase64Url } from "./bytes";
 import { aliasTarget, normalizeMailboxAddress } from "./mailboxRules";
 import { credentialForMailbox } from "./deviceAuth";
 import { instanceSettings } from "./branding";
@@ -5,6 +6,7 @@ import { addressRules, postmasterMailboxId } from "./domains";
 import { normalizeHex } from "./customization";
 import { ADMIN_MAILBOX_ID } from "./mailboxIds";
 import { profilePhotoKey } from "./api/profile";
+import { chunked } from "./sql";
 /**
  * Native mailboxes are addresses managed by the single administrator. Each
  * signs in with its own password; admin@ is opened with the owner session.
@@ -79,9 +81,7 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM native_mailboxes").first<{ n: number }>();
   if ((count?.n ?? 0) >= (await instanceSettings(env)).mail.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
   const id = `native:${crypto.randomUUID()}`;
-  const random = crypto.getRandomValues(new Uint8Array(24));
-  const password = btoa(String.fromCharCode(...random))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const password = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const credential = await credentialForMailbox(id,password);
   try {
     // Atomic mailbox plus credential creation; do not expose plaintext except
@@ -170,6 +170,9 @@ export async function restoreNativeMailbox(env: Env, id: string): Promise<Respon
   return Response.json({ mailbox: await mailboxById(env, id) });
 }
 
+/** One R2 delete call accepts at most this many keys (50 messages can have up to 1,550 files). */
+const R2_MAX_DELETE_KEYS = 1000;
+
 // Irreversible cleanup is deliberately paged so an interrupted request can be
 // retried. Storage objects are deleted before DB references; restore must not be
 // offered after the grace period until purge has completed.
@@ -187,7 +190,7 @@ export async function purgeNativeMailbox(env: Env, id: string): Promise<Response
     const files = await env.DB.prepare(`SELECT r2_key FROM attachments WHERE message_id IN (${ids.map(() => "?").join(",")})`)
       .bind(...ids).all<{r2_key:string}>();
     const keys = [...batch.results.map(row => row.raw_r2_key).filter((key):key is string => Boolean(key)),...files.results.map(row => row.r2_key)];
-    if (keys.length) await env.MAIL.delete(keys);
+    for (const slice of chunked(keys, R2_MAX_DELETE_KEYS)) await env.MAIL.delete(slice);
     await env.DB.prepare(`DELETE FROM messages WHERE id IN (${ids.map(() => "?").join(",")}) AND mailbox_id=?`)
       .bind(...ids,id).run();
     return Response.json({ complete: false, remaining: true, removed: ids.length });

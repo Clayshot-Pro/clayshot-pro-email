@@ -1,7 +1,7 @@
 // v3.10 junk filter: spam and phishing land in Junk; ordinary mail does not.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { JUNK_SCORE, junkVerdict, suspectedJunk, trustedResult } from "../src/worker/email/junk.ts";
+import { JUNK_SCORE, junkVerdict, trustedResult } from "../src/worker/email/junk.ts";
 
 const headers = values => ({ get: name => values[name.toLowerCase()] ?? null });
 const verdict = input => junkVerdict({ subject: "", sender: "someone@example.com", text: "", ...input });
@@ -78,9 +78,6 @@ const forged = verdict({ headers: headers({ "authentication-results": "ignored" 
 assert.equal(forged.junk, true, "a forged dkim=pass below the real result does not rescue an SPF failure");
 assert.equal(verdict({ knownSender: true, headers: headers({ "authentication-results": "dmarc=fail" }) }).junk, true);
 assert.equal(verdict(spam.lottery).score >= JUNK_SCORE, true);
-
-// Compatibility wrapper used before v3.10.
-assert.equal(suspectedJunk("Lottery winner!!!", "unknown@contest.test", "Click here to claim"), true);
 
 // Inbound wiring: blocked senders first, then the verdict with headers and contacts.
 const receive = readFileSync(new URL("../src/worker/email/receive.ts", import.meta.url), "utf8");

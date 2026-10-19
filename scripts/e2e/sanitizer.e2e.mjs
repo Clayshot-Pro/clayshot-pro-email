@@ -5,7 +5,12 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { launchBrowser, steps } from "./harness.mjs";
 
+const SAME_ORIGIN = "http://sanitizer.test";
 const PAYLOADS = [
+  // CSS cannot reach the app's own image proxy or API while remote images are hidden.
+  `<div style="background-image:url('${SAME_ORIGIN}/api/image-proxy?url=https%3A%2F%2Ftracker.test%2Fo')">x</div>`,
+  `<style>.t{background:url("${SAME_ORIGIN}/api/image-proxy?url=https%3A%2F%2Ftracker.test%2Fs")}</style><div class=t>x</div>`,
+  `<div style="background:url('${SAME_ORIGIN}/api/messages/m1?accountId=native%3Awork')">x</div>`,
   "<script>top.__x='script'</script>",
   "<img src=x onerror=\"top.__x='onerror'\">",
   "<svg onload=\"top.__x='svg'\"><circle r=1></svg>",
@@ -52,7 +57,7 @@ window.render = html => buildSafeEmailDocument(sanitizeEmailHtml(html));`,
     const origin = "http://sanitizer.test";
     await page.route("**/*", route => {
       const url = route.request().url();
-      if (url.startsWith(`${origin}/`)) {
+      if (url === `${origin}/`) {
         return route.fulfill({ contentType: "text/html", body: `<!doctype html><body><script>${bundle.outputFiles[0].text}</script></body>` });
       }
       if (!url.startsWith("about:") && !url.startsWith("data:")) leaks.push(url);

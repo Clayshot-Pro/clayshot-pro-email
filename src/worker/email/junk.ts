@@ -146,8 +146,3 @@ export function junkVerdict(input: JunkInput): JunkVerdict {
   if (SHORTENER.test(text) || SHORTENER.test(html)) add(1, "Shortened links");
   return { junk: score >= JUNK_SCORE, score, reasons };
 }
-
-/** Content-only check (kept for callers without headers). */
-export function suspectedJunk(subject: string, sender: string, preview: string): boolean {
-  return junkVerdict({ subject, sender, text: preview }).junk;
-}

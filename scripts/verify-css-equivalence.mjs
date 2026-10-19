@@ -23,12 +23,22 @@
 //    Deliberate changes made after v2.08 live in AMENDMENTS (loaded last) and
 //    are left out of the comparison; they are reviewed like any other change.
 //    Stylesheets rewritten wholesale (REDESIGNED) are left out on both sides.
-// 6. Compares the ordered lists of (context, selector, property, value,
+//    Rules for classes no markup renders (UNRENDERED) and custom properties
+//    nothing reads (UNREAD) are left out on both sides.
+// 6. Splits selector lists into single selectors and drops, on both sides,
+//    every declaration that can never apply: one that loses to a later (or an
+//    !important) declaration of the same property for the same selector in the
+//    same at-rule context or in none. A loser in the same rule is kept (a
+//    fallback pair), and so is one whose winner uses a value older browsers may
+//    reject (FALLBACK_VALUE). Stylesheets outside the comparison (component
+//    stylesheets, AMENDMENTS, REDESIGNED) take part only as winners, at their
+//    bundle position, and on both sides alike.
+// 7. Compares the ordered lists of (context, selector, property, value,
 //    !important). Whitespace and hex case are normalised. Any difference is
 //    printed and the script exits 1.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, posix } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const base = process.argv[2] ?? "6c0811a";
@@ -44,7 +54,7 @@ const git = path => execFileSync("git", ["show", `${base}:${path}`], { cwd: ROOT
 function parseCss(text) {
   const src = text.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "));
   const decls = [];
-  let i = 0;
+  let i = 0, rule = 0;
   const readUntil = stops => {
     const start = i; let depth = 0;
     while (i < src.length) {
@@ -57,6 +67,7 @@ function parseCss(text) {
     return src.slice(start, i);
   };
   const parseDecls = (ctx, selector) => {
+    rule++;
     while (i < src.length) {
       while (i < src.length && /[\s;]/.test(src[i])) i++;
       if (src[i] === "}") { i++; return; }
@@ -68,7 +79,7 @@ function parseCss(text) {
         let important = false;
         const imp = value.match(/\s*!\s*important\s*$/i);
         if (imp) { important = true; value = value.slice(0, imp.index).trim(); }
-        decls.push({ ctx: ctx.join(" / "), selector, prop: prop.startsWith("--") ? prop : prop.toLowerCase(), value, important });
+        decls.push({ ctx: ctx.join(" / "), selector, rule, prop: prop.startsWith("--") ? prop : prop.toLowerCase(), value, important });
       }
     }
   };
@@ -117,13 +128,34 @@ function classifyRule(selector) {
   return { root: specs.every(s => s >= 0), specificity: Math.max(...specs) };
 }
 
-function load(files, readFile, originalFiles) {
+// Files in `outside` are not compared; they only override.
+function load(files, readFile, originalFiles, outside = new Set()) {
   const decls = [];
-  for (const file of files) for (const d of parseCss(readFile(file))) {
-    const info = classifyRule(d.selector);
-    decls.push({ ...d, file, ...info, original: originalFiles.has(file) });
+  for (const file of files) for (const d of parseCss(readFile(file))) for (const part of splitSelectors(d.selector)) {
+    const selector = part.replace(/\s*([>+~])\s*/g, " $1 ").replace(/\s+/g, " ");
+    if (outside.has(file)) { decls.push({ ...d, selector, file, outside: true }); continue; }
+    decls.push({ ...d, selector, file, ...classifyRule(selector), original: originalFiles.has(file) });
   }
   return decls;
+}
+
+const FALLBACK_VALUE = /\b\d*\.?\d+(dv|sv|lv)(h|w|i|b|min|max)\b|color-mix\(|okl(ch|ab)\(|\bl(ab|ch)\(|light-dark\(|-(webkit|moz|ms)-|anchor|\bcq(w|h|i|b|min|max)\b/i;
+function effective(decls) {
+  const groups = new Map();
+  decls.forEach((d, i) => { const k = `${d.selector}|${d.prop}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+  const lost = new Set();
+  for (const list of groups.values()) for (const a of list) {
+    const A = decls[a];
+    if (A.outside) continue;
+    for (const b of list) {
+      const B = decls[b];
+      if (b === a || (B.file === A.file && B.rule === A.rule) || (B.ctx !== A.ctx && B.ctx !== "")) continue;
+      if (!(B.important && !A.important) && !(B.important === A.important && b > a)) continue;
+      if (FALLBACK_VALUE.test(B.value) && normalise(B.value) !== normalise(A.value)) continue;
+      lost.add(a); break;
+    }
+  }
+  return decls.filter((d, i) => !d.outside && !lost.has(i));
 }
 
 function buildEnv(decls) {
@@ -163,9 +195,10 @@ function resolve(value, ctx, stack = []) {
 const normalise = v => v.replace(/\s+/g, " ").replace(/\s*([(),\/])\s*/g, "$1").replace(/#[0-9a-f]{3,8}\b/gi, m => m.toLowerCase()).trim();
 
 function comparable(decls) {
-  const ctx = buildEnv(decls);
-  return decls
+  const ctx = buildEnv(decls.filter(d => !d.outside));
+  return effective(decls)
     .filter(d => !d.hook)
+    .filter(d => !UNRENDERED_SELECTOR.test(d.selector) && !UNREAD.has(d.prop))
     .filter(d => !(d.prop.startsWith("--") && !d.original))
     .map(d => ({ where: `${d.file}  ${d.ctx ? d.ctx + " → " : ""}${d.selector}`, key: `${d.ctx}|${d.selector}|${d.prop}`,
       text: `${d.prop}: ${normalise(resolve(d.value, ctx))}${d.important ? " !important" : ""}` }));
@@ -177,10 +210,32 @@ function comparable(decls) {
 const REDESIGNED = new Set(["src/client/email-html.css"]);
 const oldFiles = cssImports(git("src/client/main.tsx")).filter(f => !REDESIGNED.has(f));
 const AMENDMENTS = new Set(["src/client/layout-fixes.css"]);
-const newFiles = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8")).filter(f => !AMENDMENTS.has(f) && !REDESIGNED.has(f));
+const mainImports = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8"));
+const newFiles = mainImports.filter(f => !AMENDMENTS.has(f) && !REDESIGNED.has(f));
 const originals = new Set(oldFiles);
-const oldList = comparable(load(oldFiles, f => git(f), originals));
-const newList = comparable(load(newFiles, f => readFileSync(join(ROOT, f), "utf8"), originals));
+// Classes that no markup renders any more (removed in v3.24): their rules are
+// out of the comparison. Custom properties that nothing reads, likewise.
+const UNRENDERED = ["account-avatar", "account-avatar-photo", "account-card", "account-card-button", "auth-note", "auth-warning",
+  "brand-mark", "mobile-profile-avatar", "mobile-profile-button", "reader-avatar", "sessions-current", "settings-badge",
+  "status-dot", "topbar-logo", "topbar-profile", "topbar-profile-avatar", "unread-dot"];
+const UNRENDERED_SELECTOR = new RegExp(`\\.(${UNRENDERED.join("|")})(?![\\w-])`);
+const UNREAD = new Set(["--accent-strong"]);
+// Stylesheets imported by components come first in the bundle (main.tsx
+// imports App before its stylesheets); they are not compared, only override.
+const componentCss = [];
+for (const dir of ["src/client", "src/client/components"]) for (const name of readdirSync(join(ROOT, dir)).sort()) {
+  if (!/\.tsx?$/.test(name) || (dir === "src/client" && name === "main.tsx")) continue;
+  for (const m of readFileSync(join(ROOT, dir, name), "utf8").matchAll(/^\s*import\s+["'](\.{1,2}\/[^"']+\.css)["'];?\s*$/gm)) {
+    const file = posix.join(dir, m[1]);
+    if (!componentCss.includes(file) && !mainImports.includes(file)) componentCss.push(file);
+  }
+}
+const bundle = [...componentCss, ...mainImports];
+const outside = new Set(bundle.filter(f => !newFiles.includes(f)));
+const readNew = f => readFileSync(join(ROOT, f), "utf8");
+const oldBundle = [...bundle.filter(f => outside.has(f) || originals.has(f)), ...oldFiles.filter(f => !bundle.includes(f))];
+const oldList = comparable(load(oldBundle, f => outside.has(f) ? readNew(f) : git(f), originals, outside));
+const newList = comparable(load(bundle, readNew, originals, outside));
 
 console.log(`base ${base}`);
 console.log(`old import order: ${oldFiles.join(", ")}`);

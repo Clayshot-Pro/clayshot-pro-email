@@ -1,6 +1,6 @@
 /** Profile photo routes; each photo belongs to one mailbox (?accountId=). */
 export const primaryProfilePath = (pathname: string): boolean =>
-  pathname === "/api/profile" || pathname === "/api/profile/photo";
+  pathname === "/api/profile/photo";
 
 /** Resolve the account a protected mail API request ACTUALLY operates on.
  *
@@ -18,7 +18,6 @@ export const protectedAccountPath = (pathname: string): boolean =>
   || pathname.startsWith("/api/drafts/")
   || pathname.startsWith("/api/attachment-previews/")
   || pathname.startsWith("/api/attachments/")
-  || pathname === "/api/contact-avatar"
   || pathname === "/api/blocked-senders";
 
 export async function requestedMailAccount(request: Request, url: URL): Promise<AccountTarget> {

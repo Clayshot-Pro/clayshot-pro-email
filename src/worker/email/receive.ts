@@ -1,3 +1,6 @@
+import { releaseMailboxBytes, reserveMailboxBytes } from "../mailboxQuota";
+import { messagePreview } from "./textHtml";
+import { sha256Hex } from "../bytes";
 import { junkVerdict, senderAuthenticated } from "./junk";
 import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
@@ -26,7 +29,6 @@ async function hasWrittenTo(env: Env, mailboxId: string, address: string): Promi
     AND instr(lower(to_addresses), ?2) > 0 LIMIT 1`).bind(mailboxId, needle).first().catch(() => null);
   return Boolean(row);
 }
-const safePreview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
 // Control characters and path separators become "_"; Unicode direction
 // overrides are dropped so "invoice\u202Efdp.exe" cannot pose as a PDF.
 /** A part's Content-ID without angle brackets, as cid: URLs name it. */
@@ -143,12 +145,8 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   // Delivery retries may reuse the same SMTP envelope/MIME, but two real
   // messages can share a sender-supplied RFC Message-ID. Dedup by MIME+recipient
   // over a short retention window, not by Message-ID.
-  const contentDigest = await crypto.subtle.digest("SHA-256", raw);
-  const contentHex = Array.from(new Uint8Array(contentDigest), b => b.toString(16).padStart(2, "0")).join("");
-  const envelopeDigest = await crypto.subtle.digest(
-    "SHA-256", encoder.encode(`${message.to.trim().toLowerCase()}:${contentHex}`),
-  );
-  const fingerprint = Array.from(new Uint8Array(envelopeDigest), b => b.toString(16).padStart(2, "0")).join("");
+  const contentHex = await sha256Hex(raw);
+  const fingerprint = await sha256Hex(`${message.to.trim().toLowerCase()}:${contentHex}`);
   // Everything that only reads or computes happens before the delivery is
   // claimed, so a slow or failing step can never leave a claim behind.
   const storedMessageId = null; // RFC IDs go to original_message_id (the legacy column is globally unique).
@@ -205,9 +203,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const storageBytes = raw.byteLength + parsedAttachments.reduce((sum, part) => sum + part.bytes.byteLength, 0);
   let quotaReservation;
   try {
-    quotaReservation = await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes = used_bytes + ?1, usage_version = usage_version + 1 WHERE id = ?2 AND status = 'active' AND used_bytes + ?1 <= quota_bytes"
-    ).bind(storageBytes, mailbox.id).run();
+    quotaReservation = await reserveMailboxBytes(env, mailbox.id, storageBytes);
   } catch (error) {
     await releaseClaim().catch(() => undefined);
     throw error;
@@ -229,7 +225,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     }
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO threads (id, subject, latest_message_at, message_count, is_read, mailbox_id) VALUES (?1, ?2, ?3, 0, 0, ?4)").bind(threadId, (parsed.subject || "(no subject)").slice(0, 998), nowIso, mailbox.id),
-      env.DB.prepare(`INSERT INTO messages (id,message_id,original_message_id,mailbox_id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,subject,preview,body_text,body_html,received_at,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,is_junk,html_version) VALUES (?1,?2,?3,?4,?5,'inbound',?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,'received',?19,${HTML_VERSION})`).bind(id, storedMessageId, headerMessageId, mailbox.id, threadId, (sender?.address || message.from).slice(0, 320), sender?.name?.slice(0, 320) || null, JSON.stringify(to.length ? to : [message.to]), JSON.stringify(cc), (parsed.subject || "(no subject)").slice(0, 998), safePreview(bodyText), bodyText, bodyHtml, nowIso, rows.length ? 1 : 0, key, inReplyTo, references, Number(isJunk)),
+      env.DB.prepare(`INSERT INTO messages (id,message_id,original_message_id,mailbox_id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,subject,preview,body_text,body_html,received_at,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,is_junk,html_version) VALUES (?1,?2,?3,?4,?5,'inbound',?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,'received',?19,${HTML_VERSION})`).bind(id, storedMessageId, headerMessageId, mailbox.id, threadId, (sender?.address || message.from).slice(0, 320), sender?.name?.slice(0, 320) || null, JSON.stringify(to.length ? to : [message.to]), JSON.stringify(cc), (parsed.subject || "(no subject)").slice(0, 998), messagePreview(bodyText), bodyText, bodyHtml, nowIso, rows.length ? 1 : 0, key, inReplyTo, references, Number(isJunk)),
       ...rows.map(attachment => env.DB.prepare("INSERT INTO attachments (id,message_id,filename,content_type,size,r2_key,content_id) VALUES (?1,?2,?3,?4,?5,?6,?7)").bind(attachment.id, id, attachment.filename, attachment.mimeType, attachment.size, attachment.key, attachment.contentId)),
       env.DB.prepare("UPDATE threads SET latest_message_at=?2,message_count=message_count+1,is_read=0,subject=CASE WHEN subject='' THEN ?3 ELSE subject END WHERE id=?1 AND mailbox_id=?4").bind(threadId, nowIso, (parsed.subject || "(no subject)").slice(0, 998), mailbox.id),
       ...(learned ? [env.DB.prepare("UPDATE OR IGNORE messages SET message_id=?3 WHERE id=?1 AND mailbox_id=?2 AND message_id IS NULL").bind(learned.id, mailbox.id, learned.messageId)] : []),
@@ -239,8 +235,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     await Promise.allSettled([
       env.MAIL.delete(key),
       ...rows.map(row => env.MAIL.delete(row.key)),
-      env.DB.prepare("UPDATE native_mailboxes SET used_bytes = MAX(0, used_bytes - ?1), usage_version = usage_version + 1 WHERE id = ?2")
-        .bind(storageBytes, mailbox.id).run(),
+      releaseMailboxBytes(env, mailbox.id, storageBytes),
       releaseClaim(),
     ]);
     reject(message, "Message could not be stored");
@@ -253,7 +248,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     fromAddress: sender?.address || message.from,
     fromName: sender?.name || null,
     toAddress: message.to,
-    preview: safePreview(bodyText),
+    preview: messagePreview(bodyText),
   }));
   const forwardTo = (await instanceSettings(env)).mail.forwardTo;
   // Forwarding (Admin → Mail settings) applies to the admin mailbox.

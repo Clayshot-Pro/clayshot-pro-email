@@ -9,26 +9,15 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const b64url = bytes => Buffer.from(bytes).toString("base64url");
 const sha256Hex = async value => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))).toString("hex");
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    sql, args,
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return { prepare: sql => statement(sql), batch: async list => Promise.all(list.map(item => item.run())) };
-}
 
 function database() {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec("INSERT OR IGNORE INTO domains (domain, status, is_primary) VALUES ('example.org', 'active', 1)");
   db.exec("UPDATE domains SET status = 'active' WHERE domain = 'example.org'");
   db.exec("INSERT INTO native_mailboxes (id, email_address, display_name, domain) VALUES ('native:friend', 'friend@example.org', 'Friend', 'example.org')");
@@ -110,6 +99,18 @@ async function run(m) {
       body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
     }), env);
     assert.equal(enable.status, 201);
+
+    // Edge on Windows subscribes through Windows Push Notification Services (any *.notify.windows.com host).
+    const subscribe = endpoint => m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
+      method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` },
+      body: JSON.stringify({ endpoint, keys: { p256dh: k.p256dh, auth: k.auth } }),
+    }), env);
+    assert.equal((await subscribe("https://wns2-sg2p.notify.windows.com/w/?token=BQYAAAB")).status, 201, "an Edge (WNS) endpoint is accepted");
+    for (const endpoint of ["https://notify.windows.com.attacker.test/w/", "https://evilnotify.windows.com/w/", "https://notify.windows.com/w/",
+      "http://wns2-sg2p.notify.windows.com/w/", "https://wns2-sg2p.notify.windows.com:8443/w/", "https://user:pw@wns2-sg2p.notify.windows.com/w/"]) {
+      assert.equal((await subscribe(endpoint)).status, 400, `refused: ${endpoint}`);
+    }
+    db.prepare("DELETE FROM push_subscriptions WHERE endpoint LIKE '%notify.windows.com%'").run();
     const until = db.prepare("SELECT julianday(all_mail_until) - julianday('now') AS d FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().d;
     assert.ok(until > 29.9 && until < 30.1, `all-mail alerts for 30 days (${until})`);
     db.prepare("DELETE FROM auth_sessions WHERE session_id = 'admin-1'").run();
@@ -149,7 +150,7 @@ async function run(m) {
   }
 
   // Signing in again re-binds the phone's existing subscription to the new session.
-  assert.match(source("src/client/App.tsx"), /if \(subscription && Notification\.permission === "granted"\) \{\s+await fetch\("\/api\/push\/subscribe"/,
+  assert.match(source("src/client/usePushNotifications.ts"), /if \(subscription && Notification\.permission === "granted"\) \{\s+await fetch\("\/api\/push\/subscribe"/,
     "the app re-registers an existing subscription on every start");
   assert.match(source("public/sw.js"), /addEventListener\("pushsubscriptionchange"[\s\S]{0,700}\/api\/push\/subscribe/,
     "a subscription the browser replaces is registered again");
@@ -180,6 +181,40 @@ async function run(m) {
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"), true), false, "display-mode standalone");
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Linux; Android 15; Pixel 9)"), false), false);
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), false), false, "a desktop Mac");
+
+  // Clicking an alert brings the open app forward without reloading it (an
+  // open compose would be lost), also when the window is not controlled by the
+  // worker (navigate() rejects then); with no window open it opens the app.
+  {
+    const vm = await import("node:vm");
+    const click = async windows => {
+      const listeners = {};
+      const calls = [];
+      const clients = {
+        matchAll: async () => windows.map(w => ({
+          url: w.url,
+          focus: async () => { calls.push(`focus ${w.url}`); return w; },
+          navigate: async target => {
+            calls.push(`navigate ${w.url} -> ${target}`);
+            if (!w.controlled) throw new TypeError("The client is not controlled by this service worker");
+            return w;
+          },
+        })),
+        openWindow: async url => { calls.push(`open ${url}`); },
+      };
+      const self = { location: { origin: "https://mail.example.org" }, registration: {}, addEventListener: (type, fn) => { listeners[type] = fn; } };
+      vm.runInNewContext(source("public/sw.js"), { self, clients, URL, fetch: async () => ({}) });
+      let done;
+      listeners.notificationclick({ notification: { close: () => calls.push("close"), data: { url: "/" } }, waitUntil: p => { done = p; } });
+      await done;
+      return calls;
+    };
+    assert.deepEqual(await click([{ url: "https://mail.example.org/#admin", controlled: true }]),
+      ["close", "focus https://mail.example.org/#admin"], "an open window is focused, not reloaded");
+    assert.deepEqual(await click([{ url: "https://mail.example.org/", controlled: false }]),
+      ["close", "focus https://mail.example.org/"], "an uncontrolled window is focused too");
+    assert.deepEqual(await click([]), ["close", "open https://mail.example.org/"], "with no window open the app opens");
+  }
 
   console.log("PASS: push alerts (sender, subject, preview) reach live sign-ins and the admin phone for all mail; phones stay registered and signed in while used");
 }

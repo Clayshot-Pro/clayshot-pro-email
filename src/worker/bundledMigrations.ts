@@ -4,7 +4,7 @@ import { applyMigrations, type Migration } from "./migrationRunner";
 // Every file in /migrations, bundled into the Worker at build time.
 const files = import.meta.glob<string>("../../migrations/*.sql", { query: "?raw", import: "default", eager: true });
 
-export const BUNDLED_MIGRATIONS: Migration[] = Object.entries(files)
+const BUNDLED_MIGRATIONS: Migration[] = Object.entries(files)
   .map(([path, sql]) => ({ name: path.slice(path.lastIndexOf("/") + 1), sql }))
   .sort((a, b) => a.name.localeCompare(b.name));
 

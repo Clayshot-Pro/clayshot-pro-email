@@ -31,7 +31,7 @@ const isCloudflareMx = (record: MxRecord) => /\.mx\.cloudflare\.net\.?$/i.test(r
 const message = (error: unknown) => error instanceof Error ? error.message : "unknown error";
 
 /** The zone that holds `domain`: the domain itself or its nearest parent in this account. */
-export async function findZone(api: CloudflareClient, accountId: string, domain: string): Promise<Zone | null> {
+async function findZone(api: CloudflareClient, accountId: string, domain: string): Promise<Zone | null> {
   const labels = domain.split(".");
   for (let i = 0; i <= labels.length - 2; i++) {
     const candidate = labels.slice(i).join(".");

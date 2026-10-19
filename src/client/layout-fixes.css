@@ -165,3 +165,13 @@
 .admin-keys-notice span { flex: 1 1 260px; color: var(--muted); }
 .admin-keys-notice a { color: var(--accent); font-weight: 700; }
 .admin-nav-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--ui-error-text); vertical-align: middle; }
+
+/* Compose, Settings and Add Inbox open above the fixed desktop top bar
+   (z-index 180): on a laptop-height window the modal header reaches under
+   the bar, and its Close and Discard buttons could not be clicked. */
+.compose-overlay {
+  z-index: 200;
+}
+.settings-backdrop {
+  z-index: 210;
+}

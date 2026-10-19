@@ -1,16 +1,15 @@
 import { AddInboxModal, type AddInboxMode } from "./components/AddInboxModal";
+import { adminActionFetch } from "./adminActions";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DETAIL_CACHE_MS,
   EMPTY_COMPOSE,
   FOLDERS,
   ADMIN_ACCOUNT_ID,
-  base64UrlToArrayBuffer,
   belongsInFolder,
   draftSenderKey,
   forwardedBody,
   hasDraftContent,
-  needsHomeScreenInstall,
   notificationControlsDisabled,
   type DetailCacheEntry,
 } from "./appModel";
@@ -30,13 +29,13 @@ import type {
   Folder,
   MessageDetail,
   MessageListItem,
-  NotificationState,
 } from "./mailTypes";
 import { forwardSubject, replySubject } from "./mailUtils";
 import { chunkBulkMessageIds, toggleVisibleSelection } from "./mailBulk";
 import { applyMailMutationShields, mailMutationKey, type MailMutationFlags, type MailMutationShield } from "./mailMutationShields";
 import { useActiveAccountAppearance } from "./appearance";
 import { useAdminView } from "./adminView";
+import { usePushNotifications } from "./usePushNotifications";
 import {
   ALL_INBOXES_ID,
   accountLabel,
@@ -73,6 +72,7 @@ export function App() {
     folder: Folder;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { notificationState, toggleNotifications } = usePushNotifications(setError);
   const [composeOpen, setComposeOpen] = useState(false);
   const [compose, setCompose] = useState<ComposeState>(EMPTY_COMPOSE);
   const [composeAccountId, setComposeAccountId] = useState(ADMIN_ACCOUNT_ID);
@@ -80,8 +80,6 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [draftStatus, setDraftStatus] = useState<"saving" | "saved" | "failed" | null>(null);
-  const [notificationState, setNotificationState] = useState<NotificationState>("checking");
-  const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -153,65 +151,6 @@ export function App() {
     if (settingsOpen) void refreshSessions();
   }, [settingsOpen, refreshSessions]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (needsHomeScreenInstall(navigator, matchMedia("(display-mode: standalone)").matches)) {
-        setNotificationState("install");
-        return;
-      }
-      if (
-        !("serviceWorker" in navigator)
-        || !("PushManager" in window)
-        || !("Notification" in window)
-      ) {
-        setNotificationState("unsupported");
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/push/config", { cache: "no-store" });
-        const config = await response.json() as {
-          configured: boolean;
-          publicKey: string | null;
-        };
-        if (!config.configured || !config.publicKey) {
-          setNotificationState("unconfigured");
-          return;
-        }
-
-        setPushPublicKey(config.publicKey);
-        const registration = await navigator.serviceWorker.register("/sw.js", {
-          scope: "/",
-        });
-        const subscription = await registration.pushManager.getSubscription();
-        // A subscription belongs to the sign-in it was made in. Re-register it on
-        // every start, so a new sign-in (or an expired one) keeps receiving alerts.
-        if (subscription && Notification.permission === "granted") {
-          await fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(subscription.toJSON()),
-          }).catch(() => undefined);
-        }
-        if (!cancelled) {
-          setNotificationState(
-            Notification.permission === "denied"
-              ? "blocked"
-              : subscription
-                ? "on"
-                : "off",
-          );
-        }
-      } catch {
-        if (!cancelled) setNotificationState("unsupported");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const loadMessages = useCallback(
     async (activeFolder = folder, query = search, silent = false) => {
@@ -267,7 +206,9 @@ export function App() {
           setError(caught instanceof Error ? caught.message : "Could not load mail");
         }
       } finally {
-        if (!silent && requestId === listRequest.current) setLoading(false);
+        // The newest load ends "Loading mail…", silent or not: a silent refresh
+        // that superseded a visible load replaces its result.
+        if (requestId === listRequest.current) setLoading(false);
       }
     },
     [folder, search, activeAccountId, accounts],
@@ -427,50 +368,6 @@ export function App() {
     setSearch("");
   };
 
-  const toggleNotifications = async () => {
-    if (
-      !pushPublicKey
-      || notificationControlsDisabled(notificationState)
-    ) {
-      return;
-    }
-
-    setNotificationState("working");
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const existing = await registration.pushManager.getSubscription();
-      if (existing) {
-        await fetch("/api/push/unsubscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: existing.endpoint }),
-        });
-        await existing.unsubscribe();
-        setNotificationState("off");
-        return;
-      }
-
-      if (await Notification.requestPermission() !== "granted") {
-        setNotificationState("off");
-        return;
-      }
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: base64UrlToArrayBuffer(pushPublicKey),
-      });
-      const response = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      if (!response.ok) throw new Error();
-      setNotificationState("on");
-    } catch {
-      setNotificationState("off");
-      setError("Could not update notifications");
-    }
-  };
 
   const removeAccount = async (id: string) => {
     if (!confirm("Sign out this email account on this device? Other devices stay signed in.")) return;
@@ -506,9 +403,7 @@ export function App() {
 
     setSettingsBusy(`session:${sessionId}`);
     try {
-      const response = await fetch(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, {
-        method: "DELETE",
-      });
+      const response = await adminActionFetch(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, "DELETE");
       if (!response.ok) throw new Error();
 
       setSessions((current) => current
@@ -528,7 +423,7 @@ export function App() {
     }
     setSettingsBusy("sessions");
     try {
-      const response = await fetch("/api/auth/sessions/reset", { method: "POST" });
+      const response = await adminActionFetch("/api/auth/sessions/reset", "POST");
       if (!response.ok) throw new Error();
       setSessions((current) => current ? current.filter((session) => session.current) : current);
       setSessionCount(1);
@@ -562,7 +457,12 @@ export function App() {
           )
           ? savedSenderId
           : draft.accountId || accountId;
-        setCompose({
+        // An opened draft is already saved: editing it must not count it again.
+        // It may have been closed earlier in this tab (a failed discard): reopen it.
+        persistedDraftIds.current.add(draft.id);
+        closedDraftIds.current.delete(draft.id);
+        // Saved drafts keep no attachments (the drafts table has none).
+        openComposer({
           to: draft.to,
           cc: draft.cc,
           bcc: draft.bcc,
@@ -571,13 +471,7 @@ export function App() {
           replyToMessageId: draft.replyToMessageId,
           forwardMessageId: draft.forwardMessageId,
           draftId: draft.id,
-        });
-        // An opened draft is already saved: editing it must not count it again.
-        // It may have been closed earlier in this tab (a failed discard): reopen it.
-        persistedDraftIds.current.add(draft.id);
-        closedDraftIds.current.delete(draft.id);
-        setComposeAccountId(draftSenderId);
-        setComposeOpen(true);
+        }, draftSenderId);
       } catch {
         setError("Could not open message");
       }
@@ -589,12 +483,15 @@ export function App() {
     setReaderAccountId(accountId);
     const cached = detailCache.current.get(key);
     const wasUnread = Boolean(listItem && !listItem.isRead);
+    // The badge (and the server's newlyReadCount) counts unread inbox mail only.
+    const countedUnread = Boolean(wasUnread && listItem && listItem.direction === "inbound"
+      && !listItem.isArchived && !listItem.isDeleted && !listItem.isJunk);
 
     setError(null);
     if (wasUnread) {
       setMessages((current) => current.map((message) =>
         message.id === id ? { ...message, isRead: true } : message));
-      setUnreadCount((count) => Math.max(0, count - 1));
+      if (countedUnread) setUnreadCount((count) => Math.max(0, count - 1));
     }
 
     if (cached && Date.now() - cached.savedAt < DETAIL_CACHE_MS) {
@@ -641,15 +538,15 @@ export function App() {
       setMessages((current) => current.map((item) =>
         item.id === id || (wholeThread && threadKey(item) === threadKey(listItem))
           ? { ...item, isRead: true } : item));
-      const furtherRead = data.newlyReadCount - (wasUnread ? 1 : 0);
-      if (furtherRead) setUnreadCount((count) => Math.max(0, count - furtherRead));
+      const furtherRead = data.newlyReadCount - (countedUnread ? 1 : 0);
+      if (furtherRead > 0) setUnreadCount((count) => Math.max(0, count - furtherRead));
     } catch {
       if (requestId !== openRequest.current) return;
       setOpeningMessageId(null);
       if (wasUnread) {
         setMessages((current) => current.map((message) =>
           message.id === id ? { ...message, isRead: false } : message));
-        setUnreadCount((count) => count + 1);
+        if (countedUnread) setUnreadCount((count) => count + 1);
       }
       setError("Could not open message");
     }
@@ -746,15 +643,18 @@ export function App() {
         await loadMessages(folder, search, true);
       }
     } catch {
-      if (mailViewRef.current.accountId !== activeAccountId || mailViewRef.current.folder !== folder) return;
+      // Always drop the shields: the change did not happen, wherever the user is now.
       for (const key of shieldKeys) mutationShields.current.delete(key);
+      if (cached) detailCache.current.set(key, cached);
+      else detailCache.current.delete(key);
+      setError("Could not update message");
+      if (mailViewRef.current.accountId !== activeAccountId || mailViewRef.current.folder !== folder) return;
       setMessages(previousMessages);
       setSelected(previousSelected);
       setThread(previousThread);
       setUnreadCount(previousUnreadCount);
-      if (cached) detailCache.current.set(key, cached);
-      else detailCache.current.delete(key);
-      setError("Could not update message");
+      // This change rejected any list load in flight; fetch the list again.
+      void loadMessages(folder, search, true);
     }
   };
 
@@ -932,22 +832,32 @@ export function App() {
     }
   };
 
-  const startCompose = () => {
-    const draftId = crypto.randomUUID();
-    setCompose({ ...EMPTY_COMPOSE, draftId });
-    const sender = defaultSenderId();
+  // Every way into the composer starts clean: attachments, draft status and a
+  // send error belong to the message they were made for, never the next one.
+  const openComposer = (next: ComposeState, sender: string) => {
+    setCompose(next);
     setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
     setFiles([]);
     setDraftStatus(null);
+    setComposeError(null);
     setComposeOpen(true);
+  };
+
+  const startCompose = () => {
+    const draftId = crypto.randomUUID();
+    const sender = defaultSenderId();
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({ ...EMPTY_COMPOSE, draftId }, sender);
   };
 
   const startReply = () => {
     if (!selected) return;
     const target = thread.at(-1) ?? selected;
     const draftId = crypto.randomUUID();
-    setCompose({
+    // Reply from the account that received the message.
+    const sender = readerAccountId ?? activeAccountId;
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({
       ...EMPTY_COMPOSE,
       to: target.direction === "inbound"
         ? target.fromAddress
@@ -955,28 +865,21 @@ export function App() {
       subject: replySubject(target.subject),
       replyToMessageId: target.id,
       draftId,
-    });
-    // Reply from the account that received the message.
-    const sender = readerAccountId ?? activeAccountId;
-    setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
-    setComposeOpen(true);
+    }, sender);
   };
 
   const startForward = () => {
     if (!selected) return;
     const draftId = crypto.randomUUID();
-    setCompose({
+    const sender = readerAccountId ?? activeAccountId;
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({
       ...EMPTY_COMPOSE,
       subject: forwardSubject(selected.subject),
       text: forwardedBody(selected),
       forwardMessageId: selected.id,
       draftId,
-    });
-    const sender = readerAccountId ?? activeAccountId;
-    setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
-    setComposeOpen(true);
+    }, sender);
   };
 
   const changeComposeAccount = (accountId: string) => {
@@ -1005,10 +908,12 @@ export function App() {
   const discardCompose = async () => {
     if (compose.draftId) {
       localStorage.removeItem(draftSenderKey(compose.draftId));
+      const wasCounted = persistedDraftIds.current.has(compose.draftId);
       await closeDraft(compose.draftId);
-      await fetch(`/api/drafts/${encodeURIComponent(compose.draftId)}?accountId=${encodeURIComponent(composeAccountId)}`, {
+      const deleted = await fetch(`/api/drafts/${encodeURIComponent(compose.draftId)}?accountId=${encodeURIComponent(composeAccountId)}`, {
         method: "DELETE",
-      }).catch(() => undefined);
+      }).then((response) => response.ok, () => false);
+      if (deleted && wasCounted) setDraftCount((count) => Math.max(0, count - 1));
     }
     setComposeOpen(false);
     setCompose(EMPTY_COMPOSE);

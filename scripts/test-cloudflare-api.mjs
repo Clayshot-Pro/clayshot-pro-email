@@ -57,7 +57,7 @@ assert.equal(fitsCloudflareApi(3_950_000, 2_000), false, "under the 4 MB UI cap 
 const huge2 = { ...message, attachments: [{ filename: "a", type: "x", content: new ArrayBuffer(3_950_000) }] };
 await assert.rejects(ok.send(huge2), error => error.code === "E_CONTENT_TOO_LARGE", "fitsCloudflareApi agrees with the transport");
 const send = readFileSync(new URL("../src/worker/email/send.ts", import.meta.url), "utf8");
-assert.ok(send.indexOf("fitsCloudflareApi(") > 0 && send.indexOf("fitsCloudflareApi(") < send.indexOf("UPDATE native_mailboxes SET used_bytes=used_bytes+?1"),
+assert.ok(send.indexOf("fitsCloudflareApi(") > 0 && send.indexOf("fitsCloudflareApi(") < send.indexOf("reserveMailboxBytes(env"),
   "size is checked before quota is reserved");
 
 // The default path is one unrestricted EMAIL binding (no token); the API is optional.

@@ -23,6 +23,14 @@ export function formatFullDate(value: string): string {
   }).format(date);
 }
 
+/** Preview and download links of an attachment. Gmail needs the message (and part) to find it. */
+export function attachmentUrls(accountId: string, messageId: string, attachment: { id: string; partId?: string }) {
+  const query = new URLSearchParams({ accountId, messageId });
+  if (attachment.partId) query.set("partId", attachment.partId);
+  const id = encodeURIComponent(attachment.id);
+  return { preview: `/api/attachment-previews/${id}?${query}`, download: `/api/attachments/${id}?${query}` };
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

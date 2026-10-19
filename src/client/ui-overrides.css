@@ -4,7 +4,6 @@
 .mail-list-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .mobile-notification-button {
@@ -15,16 +14,6 @@
 @media (max-width: 760px) {
   .mobile-notification-button {
     display: grid;
-  }
-
-  .mobile-notification-button.notification-on {
-    border-color: var(--tone-accent-strong-602);
-    background: var(--tone-accent-strong-671);
-    color: var(--tone-text-69);
-  }
-
-  .mobile-notification-button.notification-off {
-    color: var(--tone-accent-288);
   }
 
   .mobile-notification-button:disabled {
@@ -39,8 +28,6 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--tone-accent-173);
-    box-shadow: 0 0 0 2px var(--tone-accent-strong-671);
   }
 }
 
@@ -70,9 +57,8 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .app-shell { background: transparent; grid-template-columns: 220px minmax(0,1fr); }
 .desktop-sidebar { gap: 18px; padding: 18px 14px 14px; border-right-color: var(--line); background: var(--tone-sidebar-949-a96); }
 .brand-row { min-height: 54px; padding: 0 10px; border-bottom: 1px solid var(--tone-text-0-a2p5); }
-.brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--tone-text-on-accent-927); box-shadow: 0 0 24px var(--tone-accent-408-a16); }
 .brand-title { color: var(--tone-text-53-2); font-size: 15px; font-weight: 760; letter-spacing: -.02em; }
-.primary-compose { height: 46px; border: 1px solid var(--tone-accent-380); border-radius: 10px; background: linear-gradient(180deg,var(--tone-accent-361),var(--tone-accent-416)); color: var(--tone-text-on-accent-933); font-size: 13px; font-weight: 760; box-shadow: 0 10px 28px var(--tone-accent-416-a18); }
+.primary-compose { height: 46px; border-radius: 10px; font-size: 13px; }
 .primary-compose:hover { background: linear-gradient(180deg,var(--tone-accent-hover-337),var(--tone-accent-hover-398)); transform: translateY(-1px); }
 .folder-nav { gap: 3px; }
 .nav-label { display: none; }
@@ -88,11 +74,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .notification-icon { background: var(--tone-surface-hover-884); color: var(--tone-text-muted-341); }
 .notification-icon.enabled { background: var(--tone-accent-soft-806); color: var(--tone-accent-333); }
 .notification-copy strong { color: var(--tone-text-muted-186); }
-.account-card { border-top-color: var(--line); }
-.account-avatar { background: var(--tone-surface-hover-855); color: var(--tone-text-muted-159-2); }
-.account-card strong { color: var(--tone-text-127); }
-.account-card span, .account-card > .icon { color: var(--tone-text-subtle-529); }
-.status-dot.online { background: var(--tone-success-420); box-shadow: 0 0 10px var(--tone-success-420-a30); }
 
 .mail-workspace { grid-template-columns: minmax(340px, 390px) minmax(0,1fr); border-top: 1px solid var(--line); }
 .mail-list-pane { border-right-color: var(--line); background: var(--tone-surface-939-a97); }
@@ -113,7 +94,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .mail-filter-tabs button.active { color: var(--tone-accent-333); }
 .mail-filter-tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 999px; background: var(--accent); }
 .mail-list-scroll { padding: 0 9px 16px; }
-.mail-list-scroll::-webkit-scrollbar-thumb,.reader-scroll::-webkit-scrollbar-thumb { background-color: var(--tone-surface-strong-792); }
 .mail-list-state,.mail-list-empty { color: var(--tone-text-subtle-565); }
 .empty-orb { border-color: var(--tone-border-833); background: var(--tone-surface-raised-908-2); color: var(--tone-text-subtle-531); }
 .mail-list-empty strong { color: var(--tone-text-muted-255); }
@@ -147,7 +127,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .reader-scroll { background: linear-gradient(180deg,var(--tone-text-0-a0p8),transparent 18%); }
 .message-heading { width: min(900px,calc(100% - 70px)); padding: 28px 0 20px; border-bottom-color: var(--line); }
 .message-heading-meta { grid-template-columns: 38px minmax(0,1fr) auto; gap: 11px; }
-.reader-avatar { width: 36px; height: 36px; background: var(--tone-surface-strong-837); color: var(--tone-text-muted-169); font-size: 10px; }
 .message-heading-meta strong { color: var(--tone-text-96-2); font-size: 11px; }
 .message-heading-meta span { color: var(--tone-text-subtle-478); font-size: 9px; }
 .message-heading-meta time { color: var(--tone-text-subtle-580); font-size: 8px; }
@@ -168,9 +147,8 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .attachment-card small { color: var(--tone-text-subtle-569); font-size: 8px; }
 .reader-reply-bar { gap: 7px; padding: 11px 20px; border-top-color: var(--line); background: var(--tone-bg-949-a96); }
 .reader-reply-bar button { padding: 8px 12px; }
-.reader-reply-bar .reply-primary { border-color: var(--tone-accent-396); background: linear-gradient(180deg,var(--tone-accent-361),var(--tone-accent-416)); color: var(--tone-text-on-accent-933); font-weight: 750; }
+.reader-reply-bar .reply-primary { border-color: var(--tone-accent-396); }
 .reader-reply-bar .reply-primary:hover { background: linear-gradient(180deg,var(--tone-accent-hover-333),var(--tone-accent-hover-392)); color: var(--tone-text-on-accent-945); }
-.reader-reply-bar .destructive { color: var(--tone-danger-327); }
 .reader-empty { background: transparent; }
 .reader-empty-icon { border-color: var(--tone-border-833); background: var(--tone-surface-916); color: var(--tone-text-subtle-576); }
 .reader-empty-card { color: var(--tone-text-subtle-569); }
@@ -191,18 +169,15 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .compose-footer { border-top-color: var(--line); background: var(--tone-surface-927); }
 .attach-control { border-color: var(--tone-border-strong-804); background: var(--tone-surface-raised-906); color: var(--tone-text-muted-345); }
 .compose-from { color: var(--tone-text-subtle-600); }
-.send-control { background: linear-gradient(180deg,var(--tone-accent-361),var(--tone-accent-416)); color: var(--tone-text-on-accent-933); font-weight: 750; }
-.send-control:hover:not(:disabled) { background: linear-gradient(180deg,var(--tone-accent-hover-333),var(--tone-accent-hover-392)); }
 .toast-error { border-color: var(--tone-danger-border-714); background: var(--tone-danger-soft-878); color: var(--tone-danger-243); }
 
 @media (max-width: 760px) {
   .app-shell { display: block; background: var(--tone-bg-953); }
-  .mail-workspace { display: block; height: 100%; border-top: 0; }
+  .mail-workspace { display: block; border-top: 0; }
   .mail-list-pane { background: var(--tone-bg-945); }
   .mail-list-header { min-height: 78px; padding-top: max(14px,env(safe-area-inset-top)); background: var(--tone-bg-945-a94); }
   .mail-list-header h1 { font-size: 25px; }
   .mail-filter-tabs { margin-bottom: 5px; }
-  .mail-list-search { display: flex; }
   .mail-row { grid-template-columns: 38px minmax(0,1fr); padding: var(--mail-row-padding-mobile); }
   .sender-avatar { width: 36px; height: 36px; }
   .reader-toolbar { min-height: 58px; padding-top: max(10px,env(safe-area-inset-top)); }
@@ -224,18 +199,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
 
 /* ---- phase1.css ---- */
-.brand-mark {
-  display: grid;
-  place-items: center;
-}
-
-.brand-mark .icon {
-  stroke-width: 2;
-}
-
-.account-avatar .icon {
-  margin: auto;
-}
 
 .draft-list-label {
   min-height: 36px;
@@ -284,11 +247,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
 .conversation-message + .conversation-message .message-heading {
   padding-top: 26px;
-}
-
-.conversation-message:not(.conversation-current) .reader-avatar {
-  background: var(--tone-surface-raised-886);
-  color: var(--tone-text-muted-327);
 }
 
 .conversation-current::before {
@@ -366,7 +324,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   }
 
   .reader-reply-bar {
-    gap: 6px;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -408,7 +365,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     right: 14px;
     height: 58px;
     display: grid;
-    grid-template-columns: minmax(165px, 1fr) minmax(410px, 860px) minmax(165px, 1fr);
     align-items: center;
     gap: 20px;
     padding: 0 15px;
@@ -423,24 +379,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
-  }
-
-  .topbar-logo {
-    width: 30px;
-    height: 30px;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    border: 1px solid var(--tone-accent-349);
-    border-radius: 7px;
-    background: linear-gradient(145deg, var(--tone-accent-359), var(--tone-accent-424));
-    color: var(--tone-text-on-accent-918);
-    box-shadow: 0 6px 18px var(--tone-accent-424-a22);
-  }
-
-  .topbar-logo .icon {
-    stroke-width: 2.1;
   }
 
   .topbar-brand strong {
@@ -453,21 +391,15 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
   .topbar-brand-divider {
     width: 1px;
-    height: 26px;
-    margin-left: 2px;
-    background: var(--tone-surface-strong-812-2);
   }
 
   .topbar-context {
     overflow: hidden;
-    color: var(--tone-text-subtle-467);
-    font-size: 10px;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .topbar-search {
-    width: 100%;
     height: 38px;
     display: flex;
     align-items: center;
@@ -570,33 +502,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     background: var(--accent);
   }
 
-  .topbar-profile {
-    min-width: 112px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding-left: 10px;
-    border-left: 1px solid var(--tone-border-829);
-  }
-
-  .topbar-profile-avatar {
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    border: 1px solid var(--tone-border-strong-776);
-    border-radius: 50%;
-    background: linear-gradient(145deg, var(--tone-surface-strong-806-2), var(--tone-surface-raised-886));
-    color: var(--tone-text-88);
-    font-size: 9px;
-    font-weight: 800;
-  }
-
-  .topbar-profile > span:last-child { min-width: 0; display: grid; gap: 1px; }
-  .topbar-profile small { color: var(--tone-text-subtle-582); font-size: 8px; white-space: nowrap; }
-  .topbar-profile strong { color: var(--tone-text-112-2); font-size: 10px; white-space: nowrap; }
-
   .desktop-sidebar {
     height: 100%;
     gap: 14px;
@@ -620,9 +525,7 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   .nav-item-main { font-size: 12px; }
 
   .mail-workspace {
-    height: 100%;
     grid-template-columns: minmax(370px, 430px) minmax(0, 1fr);
-    overflow: hidden;
     border: 1px solid var(--tone-border-847-2);
     border-radius: 13px;
     background: var(--tone-bg-945);
@@ -683,24 +586,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     gap: 9px;
   }
 
-  .topbar-logo {
-    width: 26px;
-    height: 26px;
-    border: 0;
-    border-radius: 5px;
-    background: linear-gradient(180deg, var(--tone-accent-369) 0%, var(--tone-accent-408-2) 100%);
-    color: var(--tone-text-on-accent-920);
-    box-shadow:
-      inset 0 1px 0 var(--tone-highlight-0-a18),
-      0 5px 14px var(--tone-accent-408-a16);
-  }
-
-  .topbar-logo .icon {
-    width: 18px;
-    height: 18px;
-    stroke-width: 2.05;
-  }
-
   .topbar-brand-title {
     margin-left: 1px;
     color: var(--tone-text-45-2);
@@ -729,54 +614,15 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 /* ---- profile-preview.css ---- */
 /* Profile photo + in-app attachment preview */
 
-.topbar-profile {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-
-.topbar-profile:hover .topbar-profile-avatar,
-.topbar-profile:focus-visible .topbar-profile-avatar {
-  box-shadow: 0 0 0 2px var(--tone-accent-408-a28);
-}
-
-.topbar-profile-avatar,
-.mobile-profile-avatar,
-.profile-photo-preview,
-.reader-avatar {
+.profile-photo-preview {
   overflow: hidden;
 }
 
-.topbar-profile-avatar img,
-.mobile-profile-avatar img,
-.profile-photo-preview img,
-.reader-avatar img {
+.profile-photo-preview img {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
-}
-
-.mobile-profile-button {
-  display: none;
-  padding: 0 !important;
-  overflow: hidden;
-}
-
-.mobile-profile-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--tone-surface-strong-837-2);
-  color: var(--tone-accent-278);
-  font-size: 10px;
-  font-weight: 800;
 }
 
 .attachment-card {
@@ -1063,7 +909,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 }
 
 @media (max-width: 760px) {
-  .mobile-profile-button { display: grid; }
 
   .attachment-preview-header {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1294,9 +1139,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 }
 
 @media (max-width: 760px) {
-  .reader-pane {
-    min-height: 0;
-  }
 
   .reader-toolbar {
     display: grid !important;
@@ -1348,7 +1190,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   }
 
   .reader-scroll {
-    min-height: 0;
     padding-bottom: 4px;
   }
 
@@ -1448,25 +1289,13 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
 /* ---- auth.css ---- */
 .auth-shell {
-  min-height: 100dvh;
-  display: grid;
   place-items: center;
-  padding: 24px;
-  background:
-    radial-gradient(circle at 50% -10%, var(--tone-auth-accent-375-a14), transparent 36%),
-    var(--tone-auth-bg-953);
-  color: var(--tone-auth-text-47);
 }
 
 .auth-card {
-  width: min(100%, 420px);
   display: grid;
   gap: 22px;
   padding: 30px;
-  border: 1px solid var(--tone-auth-text-0-a10);
-  border-radius: 24px;
-  background: var(--tone-auth-surface-raised-906-a96);
-  box-shadow: 0 26px 70px var(--tone-shadow-1000-a34);
 }
 
 .auth-logo {
@@ -1484,7 +1313,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .auth-heading h1,
 .auth-heading p,
 .auth-eyebrow,
-.auth-note,
 .auth-error {
   margin: 0;
 }
@@ -1496,14 +1324,11 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 }
 
 .auth-heading > p:last-child,
-.auth-note,
 .auth-state {
-  color: var(--tone-auth-text-47-a65);
   line-height: 1.5;
 }
 
 .auth-eyebrow {
-  color: var(--tone-auth-accent-369);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -1521,73 +1346,28 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 }
 
 .auth-setup input {
-  min-height: 48px;
-  border: 1px solid var(--tone-auth-text-0-a14);
-  border-radius: 12px;
-  padding: 0 14px;
-  background: var(--tone-auth-field-935);
-  color: var(--tone-auth-text-0);
-  font: inherit;
   outline: none;
 }
 
-.auth-setup input:focus {
-  border-color: var(--tone-auth-accent-369-a80);
-  box-shadow: 0 0 0 3px var(--tone-auth-accent-369-a12);
-}
-
 .auth-primary {
-  min-height: 50px;
-  border: 0;
-  border-radius: 13px;
   padding: 0 18px;
-  background: var(--tone-auth-accent-422);
-  color: var(--tone-auth-text-on-accent-933);
   font: inherit;
-  font-weight: 750;
-  cursor: pointer;
 }
 
-.auth-primary:disabled {
-  cursor: wait;
-  opacity: 0.62;
-}
-
-.auth-note {
-  font-size: 0.84rem;
-}
-
-.auth-warning,
 .auth-error {
   border-radius: 12px;
   padding: 12px 14px;
   line-height: 1.45;
 }
 
-.auth-warning {
-  background: var(--tone-auth-warning-369-a10);
-  color: var(--tone-auth-warning-275);
-}
-
-.auth-error {
-  background: var(--tone-auth-danger-375-a11);
-  color: var(--tone-auth-danger-167);
-}
-
-.auth-warning code {
-  font-size: 0.9em;
-}
-
 @media (max-width: 520px) {
   .auth-shell {
     align-items: start;
-    padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
   }
 
   .auth-card {
     margin-top: 10vh;
     padding: 24px;
-    border-radius: 20px;
   }
 }
 
@@ -1606,10 +1386,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 .sessions-header {
   border-bottom-color: var(--tone-border-847);
   background: transparent;
-}
-
-.sessions-header span {
-  color: var(--tone-accent-349-2);
 }
 
 .sessions-header h2 {
@@ -1648,11 +1424,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
 .session-card-heading small {
   color: var(--tone-text-subtle-422);
-}
-
-.session-current {
-  background: var(--tone-accent-strong-737);
-  color: var(--tone-accent-text-224);
 }
 
 .session-details dt {
@@ -1841,9 +1612,7 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
   .app-shell.message-open .reader-reply-bar {
     flex: 0 0 auto;
-    min-height: 60px;
     background: var(--tone-v208-reader-bar);
-    padding-bottom: 10px;
     position: relative;
     z-index: 5;
     visibility: visible;

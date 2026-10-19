@@ -1,3 +1,4 @@
+import { randomBase64Url, sha256Hex, toBase64Url } from "../bytes";
 import { appOrigin } from "../config";
 import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, clearOAuthCookie } from "../deviceAuth";
 import { decryptSecret, encryptSecret } from "./crypto";
@@ -31,26 +32,6 @@ type OAuthStateRow = {
   device_nonce_hash: string | null;
 };
 
-function toBase64Url(bytes: Uint8Array): string {
-  let value = "";
-  for (const byte of bytes) value += String.fromCharCode(byte);
-  return btoa(value)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return Array.from(
-    new Uint8Array(digest),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-function randomBase64Url(byteLength = 32): string {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
-}
 
 async function pkceChallenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(verifier));
@@ -89,7 +70,6 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
   const state = randomBase64Url();
   const verifier = randomBase64Url(48);
   const stateHash = await sha256Hex(state);
-  const expiresAt = new Date(Date.now() + OAUTH_STATE_TTL_SECONDS * 1000).toISOString();
 
   await env.DB.prepare("DELETE FROM oauth_states WHERE expires_at <= CURRENT_TIMESTAMP").run();
   await env.DB.prepare(`
@@ -99,12 +79,13 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
       pkce_verifier_encrypted,
       expires_at, device_nonce_hash
     )
-    VALUES (?1, 'gmail', ?2, ?3, ?4)
+    VALUES (?1, 'gmail', ?2, datetime('now', ?3), ?4)
   `)
     .bind(
       stateHash,
       await encryptSecret(env, { verifier, origin: appOrigin(request) }, `oauth:${stateHash}`),
-      expiresAt,
+      // SQLite's own format, so the CURRENT_TIMESTAMP comparisons below are exact.
+      `+${OAUTH_STATE_TTL_SECONDS} seconds`,
       await tokenHash(nonce),
     )
     .run();
@@ -305,7 +286,7 @@ export async function disconnectGoogleIfUnused(accountId: string, env: Env): Pro
   if (!inUse) await disconnectGoogle(accountId, env);
 }
 
-export async function disconnectGoogle(accountId: string, env: Env): Promise<Response> {
+async function disconnectGoogle(accountId: string, env: Env): Promise<Response> {
   if (!accountId.startsWith("gmail:")) {
     return Response.json({ error: "Gmail account not found" }, { status: 404 });
   }

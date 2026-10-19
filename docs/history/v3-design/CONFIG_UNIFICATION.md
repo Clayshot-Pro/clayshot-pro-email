@@ -1,8 +1,8 @@
 # v3.00 — Config unification
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Implemented on `v3.00`, then **superseded in v3.05**: the Worker has no instance vars at all. The origin and admin sign-in come from the request URL; the primary mailbox, domains, branding and mail settings live in D1; `.env` holds only secrets and deploy keys. The var tables below describe the v3.00 design. See [implementation status](./V3_IMPLEMENTATION_STATUS.md).
+**Document status:** Implemented on `v3.00`, then **superseded in v3.05**: the Worker has no instance vars at all. The origin and admin sign-in come from the request URL; the primary mailbox, domains, branding and mail settings live in D1; `.env` holds only secrets and deploy keys. The var tables below describe the v3.00 design. See [changelog](../../CHANGELOG.md).
 
 ## Problem
 

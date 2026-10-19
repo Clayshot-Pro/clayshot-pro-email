@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 import { eventEffect, shouldReplaceStatus, suppressionTargets, verifySvix } from "../src/worker/webhooks/resendEvents.ts";
 
 const keyBytes = Buffer.from("resend-webhook-test-key-32-bytes!");
@@ -54,8 +59,44 @@ assert.equal((router.match(/\/api\/webhooks\//g) ?? []).length, 1, "no other web
 const handler = readFileSync(new URL("../src/worker/webhooks/resend.ts", import.meta.url), "utf8");
 assert.match(handler, /INSERT OR IGNORE INTO webhook_receipts/, "replayed events are deduplicated");
 assert.ok(handler.indexOf("verifySvix(") < handler.indexOf("INSERT OR IGNORE INTO webhook_receipts"), "verify before any write");
+assert.ok(handler.indexOf("verifySvix(") < handler.indexOf("env.DB"), "verify before any database access");
 assert.ok(handler.indexOf("checkAuthRateLimit(") > handler.indexOf("verifySvix("),
   "verified events are never throttled; only failed verifications are rate limited");
 assert.match(handler, /authRateLimitBucket\(request, "webhook:resend:invalid"\)/, "the limit is per source IP, not global");
+
+// An event is recorded as processed only together with its effects: when storing them
+// fails, Resend's retry is processed again instead of being dropped as a duplicate.
+{
+  const out = mkdtempSync(join(tmpdir(), "ltm-resend-"));
+  try {
+    const entry = join(out, "entry.ts");
+    writeFileSync(entry, `export { resendWebhook } from "${new URL("../src/worker/webhooks/resend.ts", import.meta.url).pathname}";`);
+    await build({ entryPoints: [entry], bundle: true, format: "esm", platform: "neutral", external: ["node:*", "cloudflare:*"],
+      outfile: join(out, "bundle.mjs"), logLevel: "error", mainFields: ["module", "main"], conditions: ["worker", "browser", "import"] });
+    const { resendWebhook } = await import(pathToFileURL(join(out, "bundle.mjs")).href);
+    const db = migratedDatabase();
+    const real = d1(db);
+    let failNextBatch = true;
+    const flaky = { ...real, batch: async list => {
+      if (failNextBatch) { failNextBatch = false; throw new Error("D1_ERROR: network connection lost"); }
+      return real.batch(list);
+    } };
+    const env = { DB: flaky, RESEND_WEBHOOK_SECRET: secret };
+    const bounce = JSON.stringify({ type: "email.bounced", data: { email_id: "re_1", to: ["gone@partner.test"], bounce: { type: "Permanent" } } });
+    const deliver = () => {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      return resendWebhook(new Request("https://mail.example.org/api/webhooks/resend", { method: "POST", body: bounce,
+        headers: { "svix-id": "msg_bounce", "svix-timestamp": timestamp, "svix-signature": sign("msg_bounce", timestamp, bounce) } }), env);
+    };
+    await assert.rejects(deliver(), /network/, "the first delivery fails (Resend gets a 500)");
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM webhook_receipts").get().n, 0, "a failed event is not recorded as processed");
+    const retry = await deliver();
+    assert.deepEqual(await retry.json(), { ok: true }, "the retry is processed, not dropped as a duplicate");
+    assert.deepEqual(db.prepare("SELECT address, reason FROM suppressed_recipients").all().map(row => ({ ...row })), [{ address: "gone@partner.test", reason: "hard_bounce" }]);
+    assert.deepEqual(await (await deliver()).json(), { ok: true, duplicate: true }, "a replay after success is a duplicate");
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+}
 
 console.log("PASS: Resend webhook signatures, replay handling, event mapping and suppression targets");

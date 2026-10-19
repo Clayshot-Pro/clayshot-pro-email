@@ -5,11 +5,11 @@ import { useEffect, useState } from "react";
  * image proxy; "ask" keeps them hidden until "Show images" in the reader.
  * A per-device choice, like the other reading preferences.
  */
-export type RemoteImagesMode = "show" | "ask";
+type RemoteImagesMode = "show" | "ask";
 const KEY = "ltm.remoteImages";
 const EVENT = "ltm-remote-images";
 
-export function remoteImagesMode(): RemoteImagesMode {
+function remoteImagesMode(): RemoteImagesMode {
   try {
     return localStorage.getItem(KEY) === "ask" ? "ask" : "show";
   } catch {

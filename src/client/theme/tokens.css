@@ -335,7 +335,6 @@
   --tone-surface-0-a72: color-mix(in srgb, var(--color-surface) 72%, transparent);
   --tone-surface-0-a92: color-mix(in srgb, var(--color-surface) 92%, transparent);
   --tone-surface-0-a94: color-mix(in srgb, var(--color-surface) 94%, transparent);
-  --tone-surface-0-a98: color-mix(in srgb, var(--color-surface) 98%, transparent);
   --tone-surface-916: var(--color-surface);
   --tone-surface-920: var(--color-surface);
   --tone-surface-924: var(--color-surface);
