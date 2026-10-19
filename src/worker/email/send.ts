@@ -1,3 +1,4 @@
+import { releaseMailboxBytes, reserveMailboxBytes } from "../mailboxQuota";
 import type { ProviderAttachment } from "../providers/types";
 import { forwardSubject, replySubject } from "../../client/mailUtils";
 import { checkAuthRateLimit } from "../security";
@@ -362,9 +363,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     + new TextEncoder().encode(textToHtml(text)).byteLength;
   const countedBytes = bodyBytes + attachmentBytes;
   if (provider.kind === "native") {
-    const quota = await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=used_bytes+?1,usage_version=usage_version+1 WHERE id=?2 AND status='active' AND used_bytes+?1<=quota_bytes"
-    ).bind(countedBytes, provider.accountId).run();
+    const quota = await reserveMailboxBytes(env, provider.accountId, countedBytes);
     if (!quota.meta.changes) {
       await env.DB.prepare("DELETE FROM outbound_attempts WHERE mailbox_id=?1 AND client_key=?2 AND state='pending'")
         .bind(provider.accountId,clientKey).run();
@@ -419,9 +418,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     ).bind(provider.accountId,clientKey,status === "sent" ? "accepted" : uncertain ? "uncertain" : "failed",providerMessageId,deliveryError,transportKind).run();
   }
   if (provider.kind === "native" && status !== "sent" && attachmentBytes > 0) {
-    await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?1),usage_version=usage_version+1 WHERE id=?2"
-    ).bind(attachmentBytes, provider.accountId).run();
+    await releaseMailboxBytes(env, provider.accountId, attachmentBytes);
   }
 
   if (provider.kind !== "native") {
@@ -543,9 +540,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   } catch {
     await Promise.allSettled(attachmentRows.map(row => env.MAIL.delete(row.key)));
     // Attachment bytes of a failed send were already released above.
-    await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?1),usage_version=usage_version+1 WHERE id=?2"
-    ).bind(status === "sent" ? countedBytes : countedBytes - attachmentBytes, provider.accountId).run().catch(() => undefined);
+    await releaseMailboxBytes(env, provider.accountId, status === "sent" ? countedBytes : countedBytes - attachmentBytes).catch(() => undefined);
     // Sending may already have been accepted. Never automatically retry it.
     return Response.json({ error: "Mail transport finished, but storing its local sent record failed. Do not retry until checked." }, { status: 502 });
   }

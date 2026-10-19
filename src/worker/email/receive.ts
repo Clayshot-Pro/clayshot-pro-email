@@ -1,3 +1,4 @@
+import { releaseMailboxBytes, reserveMailboxBytes } from "../mailboxQuota";
 import { messagePreview } from "./textHtml";
 import { sha256Hex } from "../bytes";
 import { junkVerdict, senderAuthenticated } from "./junk";
@@ -202,9 +203,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const storageBytes = raw.byteLength + parsedAttachments.reduce((sum, part) => sum + part.bytes.byteLength, 0);
   let quotaReservation;
   try {
-    quotaReservation = await env.DB.prepare(
-      "UPDATE native_mailboxes SET used_bytes = used_bytes + ?1, usage_version = usage_version + 1 WHERE id = ?2 AND status = 'active' AND used_bytes + ?1 <= quota_bytes"
-    ).bind(storageBytes, mailbox.id).run();
+    quotaReservation = await reserveMailboxBytes(env, mailbox.id, storageBytes);
   } catch (error) {
     await releaseClaim().catch(() => undefined);
     throw error;
@@ -236,8 +235,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     await Promise.allSettled([
       env.MAIL.delete(key),
       ...rows.map(row => env.MAIL.delete(row.key)),
-      env.DB.prepare("UPDATE native_mailboxes SET used_bytes = MAX(0, used_bytes - ?1), usage_version = usage_version + 1 WHERE id = ?2")
-        .bind(storageBytes, mailbox.id).run(),
+      releaseMailboxBytes(env, mailbox.id, storageBytes),
       releaseClaim(),
     ]);
     reject(message, "Message could not be stored");
