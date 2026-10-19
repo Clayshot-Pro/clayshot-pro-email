@@ -1,6 +1,6 @@
 # v3.00 roadmap — self-hostable, multi-domain, customizable
 
-**Status:** Implemented on branches `v3.00`–`v3.06` and deployed from `main`. v3.05 moved all instance settings into D1, sends through the Worker's Email Sending binding and adds per-domain themes; v3.06 manages integration keys in Admin → Keys. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). **To install or administer the app, follow the [README](../../README.md).**
+> **Design record.** The v3 plan as written before implementation. Everything here shipped in v3.00–v3.04 and has since evolved (instance settings in D1, keys in Admin → Keys, one-page setup with a Cloudflare token). Current behaviour: [README](../../README.md) and [implementation status](./V3_IMPLEMENTATION_STATUS.md).
 
 **Starting checkpoint:** `main` at v2.07 (`13c0421`). **Development line:** `v3.00` and following `v3.0x` version branches. **Production:** `main`, deployed by GitHub Actions (`.github/workflows/deploy.yml`).
 

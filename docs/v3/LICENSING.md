@@ -1,6 +1,6 @@
 # Licensing change for v3
 
-> **Design document.** Written before implementation; where it differs from the code, the code and the [README](../../README.md) win. Since v3.05 instance settings live in D1 (not `.env` vars), and since v3.06 integration keys are managed in Admin → Keys. Setup steps are in the [README](../../README.md).
+> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
 
 **Document status:** Option B applied to [`LICENSE`](../../LICENSE) on `v3.05`: free self-hosting for personal and internal organizational use (including commercial), credit required, no redistribution, no hosting for others (paid or free), no paid services. **This is not legal advice.**
 

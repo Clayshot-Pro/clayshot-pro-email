@@ -1,5 +1,7 @@
 # Security and repository optimization audit — v2.07
 
+> **Historical.** A code review of v2.07. Later versions changed the setup and added features; see [SECURITY.md](../SECURITY.md) for reporting issues.
+
 Date: 2026-10-14
 Scope: code-level review of the GitHub repository at the v2.06 production baseline, plus hardening changes in v2.07. This is **not** an independent penetration test, authenticated live-device assessment, Cloudflare configuration audit, or guarantee against all vulnerabilities.
 

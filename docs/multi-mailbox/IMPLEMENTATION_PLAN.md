@@ -1,6 +1,6 @@
 # Implementation plan and acceptance checklist
 
-> **Historical (v2).** Kept as a record of the v2 planning. Settings it mentions such as `PRIMARY_ADDRESS`, `MULTI_SENDER_APPROVED`, `MAILBOX_PURGE_ENABLED`, `FORWARD_TO`, `EMAIL_DYNAMIC` and Workers Builds-only deploys no longer exist in v3. To install, deploy or administer the app, follow the [README](../../README.md).
+> **Historical (v2).** A record of the v2 work; settings and steps it names may no longer exist. Current setup: [README](../../README.md).
 
 **Document status:** Planned; no phases have been implemented by this documentation-only change.
 
