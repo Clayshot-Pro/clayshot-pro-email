@@ -52,7 +52,7 @@ import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
 import { disconnectGoogleIfUnused, googleOAuthCallback, startGoogleOAuth } from "./providers/google";
 import { pushConfig, subscribePush, unsubscribePush } from "./push";
-import { MAX_API_BODY_BYTES, authRateLimitBucket, checkAuthRateLimit, requestTooLarge } from "./security";
+import { MAX_API_BODY_BYTES, authRateLimitBucket, checkAuthRateLimit, limitedRequest } from "./security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_POSTS = new Set([
@@ -119,8 +119,10 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   // session checks for this exact path only, authenticated by signature.
   if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
   if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
-  if (!SAFE_METHODS.has(request.method) && requestTooLarge(request, MAX_API_BODY_BYTES)) {
-    return jsonError("Request body too large", 413);
+  if (!SAFE_METHODS.has(request.method)) {
+    const limited = limitedRequest(request, MAX_API_BODY_BYTES);
+    if (!limited) return jsonError("Request body too large", 413);
+    request = limited;
   }
 
   if (

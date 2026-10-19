@@ -1,5 +1,5 @@
 import { appConfig } from "../appConfig";
-import { authRateLimitBucket, checkAuthRateLimit } from "../security";
+import { authRateLimitBucket, checkAuthRateLimit, limitedRequest } from "../security";
 import { rfcMessageId } from "../transports/types";
 import { eventEffect, shouldReplaceStatus, suppressionTargets, verifySvix, type ResendEvent } from "./resendEvents";
 
@@ -10,10 +10,8 @@ const reply = (body: Record<string, unknown>, status = 200) => Response.json(bod
 export async function resendWebhook(request: Request, env: Env): Promise<Response> {
   const secret = env.RESEND_WEBHOOK_SECRET?.trim();
   if (!secret || !appConfig(env).features.resendWebhook) return reply({ error: "Unauthorized" }, 401);
-  const length = Number(request.headers.get("Content-Length") ?? 0);
-  if (Number.isFinite(length) && length > MAX_BODY_BYTES) return reply({ error: "Payload too large" }, 413);
-  const body = await request.text();
-  if (body.length > MAX_BODY_BYTES) return reply({ error: "Payload too large" }, 413);
+  const body = await limitedRequest(request, MAX_BODY_BYTES)?.text().catch(() => null);
+  if (body == null) return reply({ error: "Payload too large" }, 413);
 
   const headers = {
     id: request.headers.get("svix-id"),

@@ -55,13 +55,21 @@ async function run(m) {
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM auth_rate_limits").get().n, 0, "a successful sign-in clears the count");
   }
 
-  // Request bodies: streamed bodies without a length are refused.
+  // Request bodies: never read past the limit, whatever the headers say.
   const body = (headers, payload = "{}") => new Request("https://mail.example.org/api/x", { method: "POST", headers, body: payload });
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "10" }), 100), false);
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "101" }), 100), true);
-  assert.equal(m.requestTooLarge(body({ "Content-Length": "abc" }), 100), true);
-  assert.equal(m.requestTooLarge(body({ "Transfer-Encoding": "chunked" }), 100), true);
-  assert.equal(m.requestTooLarge(new Request("https://mail.example.org/api/x", { method: "POST" }), 100), false);
+  const fits = body({ "Content-Length": "10" });
+  assert.equal(m.limitedRequest(fits, 100), fits);
+  assert.equal(m.limitedRequest(body({ "Content-Length": "101" }), 100), null);
+  assert.equal(m.limitedRequest(body({ "Content-Length": "abc" }), 100), null);
+  assert.equal(m.limitedRequest(body({ "Transfer-Encoding": "chunked" }), 100), null);
+  const empty = new Request("https://mail.example.org/api/x", { method: "POST" });
+  assert.equal(m.limitedRequest(empty, 100), empty);
+  const stream = text => new Request("https://mail.example.org/api/x", {
+    method: "POST", duplex: "half",
+    body: new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(text)); controller.close(); } }),
+  });
+  assert.equal(await m.limitedRequest(stream("x".repeat(100)), 100).text(), "x".repeat(100), "a body with no length is read up to the limit");
+  await assert.rejects(m.limitedRequest(stream("x".repeat(101)), 100).text(), "and no further");
 
   // Linear-time HTML handling: crafted input finishes quickly (quadratic code took minutes).
   const MB = 1024 * 1024;
