@@ -16,9 +16,11 @@ You need a Cloudflare account with your mail domain on Cloudflare DNS, and a dev
 
 ### 1. Fork and deploy
 
-1. **Fork** this repository on GitHub (keep the name and the `main` branch).
-2. In Cloudflare: **Workers & Pages → Create → Import a repository**, pick your fork, then set **Build command** `npm run build` and **Deploy command** `npm run deploy`. Deploy. The database and storage are created on the first deploy; no keys needed.
-3. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address.
+1. **Fork** this repository on GitHub (keep the name and the `main` branch), then open the fork's **Actions** tab and enable workflows.
+2. In Cloudflare, create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, and an API token from the *Edit Cloudflare Workers* template plus **D1: Edit**.
+3. In the fork: **Settings → Secrets and variables → Actions**, add the secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. If your Worker, database or bucket has another name, add it as the variable `WORKER_NAME`, `D1_DATABASE_NAME` or `R2_BUCKET_NAME` instead of editing `wrangler.jsonc`.
+4. **Actions → Deploy production → Run workflow.** After that, every push to `main` deploys.
+5. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address.
 
 Keep your fork unmodified: every setting lives in the app, and an unmodified fork updates cleanly.
 
@@ -26,8 +28,6 @@ Keep your fork unmodified: every setting lives in the app, and an unmodified for
 <summary>Other ways to deploy</summary>
 
 **Deploy button** (a private copy that does not receive updates): [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LiamTheMo/LTM-Email-Service). Then make the GitHub copy private (**Settings → Danger Zone → Change visibility**).
-
-**GitHub Actions** instead of Cloudflare's builds: in your fork, enable Actions, set the repository variable `DEPLOY_WITH_ACTIONS` to `true`, create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, and add the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* token template plus **D1: Edit**). Every push to `main` deploys. If your Worker, database or bucket has another name, set it in the repository variables `WORKER_NAME`, `D1_DATABASE_NAME` or `R2_BUCKET_NAME` instead of editing `wrangler.jsonc`.
 
 **From your computer** (Node.js 22+):
 
@@ -88,8 +88,8 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 | Cloudflare token, Google OAuth, Resend, Email Sending API token | **Admin → Keys** (encrypted) |
 | `PROVIDER_CREDENTIAL_KEY` | Worker secret, created at setup. **Keep a copy:** losing it makes stored keys and Gmail connections unreadable (mail is unaffected) |
 | Push notification keys | Automatic |
-| Deploy token and account ID | Not needed for a fork deployed by Cloudflare; GitHub secrets or `.env` otherwise |
-| Worker, database and bucket names | `wrangler.jsonc`; other names go in `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME` (build or repository variables, or `.env`) |
+| Deploy token and account ID | GitHub repository secrets (`.env` when deploying from your computer) |
+| Worker, database and bucket names | `wrangler.jsonc`; other names go in the repository variables `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME` (or `.env`) |
 
 ## Features
 
@@ -106,7 +106,7 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 
 ## Updates
 
-The admin panel shows when a new version is out. To update, open your fork on GitHub and choose **Sync fork → Update branch**. Cloudflare redeploys, and the app updates its database on the first request. Back up D1 and R2 before big updates. Version notes: [docs/UPGRADING.md](./docs/UPGRADING.md).
+The admin panel shows when a new version is out. To update, open your fork on GitHub and choose **Sync fork → Update branch**. GitHub Actions redeploys, and the app updates its database on the first request. Back up D1 and R2 before big updates. Version notes: [docs/UPGRADING.md](./docs/UPGRADING.md).
 
 ## Troubleshooting
 
@@ -121,7 +121,7 @@ The admin panel shows when a new version is out. To update, open your fork on Gi
 | A key in Admin → Keys can't be edited | A Worker secret with the same name wins. Delete the Worker secret; the value stays stored. |
 | `redirect_uri_mismatch` from Google | Add the exact callback URI to the OAuth client. |
 | Deploy says `Missing required configuration` | Add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` as GitHub secrets or in `.env`. |
-| Workers Builds: "build token … deleted or rolled" | Pick a new token under Worker → **Settings → Build**, or deploy with GitHub Actions. |
+| Each push deploys twice, or Workers Builds reports a deleted build token | Disconnect Git under the Worker's **Settings → Build**; GitHub Actions deploys. |
 
 ## Development
 

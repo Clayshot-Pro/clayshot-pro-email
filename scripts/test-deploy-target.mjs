@@ -20,8 +20,8 @@ const triggers = workflow.slice(workflow.indexOf("\non:"), workflow.indexOf("\np
 assert.match(triggers, /push:\n\s+branches:\n\s+- main\n/, "deploys on push to main");
 assert.doesNotMatch(triggers, /pull_request|schedule|workflow_run/, "no other automatic triggers");
 assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/, "manual runs are limited to main");
-assert.match(workflow, /github\.repository == 'LiamTheMo\/LTM-Email-Service' \|\| vars\.DEPLOY_WITH_ACTIONS == 'true'/,
-  "forks deploy with Workers Builds unless they opt in to this workflow");
+assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'\n/, "every repository, forks included, deploys main");
+assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no opt-in or repository check");
 
 // A fork built by Workers Builds has no deploy keys: the render leaves the
 // database ID out (Wrangler links it by name); elsewhere a missing ID is an error.
