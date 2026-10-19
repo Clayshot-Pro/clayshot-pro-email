@@ -70,7 +70,6 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
   const state = randomBase64Url();
   const verifier = randomBase64Url(48);
   const stateHash = await sha256Hex(state);
-  const expiresAt = new Date(Date.now() + OAUTH_STATE_TTL_SECONDS * 1000).toISOString();
 
   await env.DB.prepare("DELETE FROM oauth_states WHERE expires_at <= CURRENT_TIMESTAMP").run();
   await env.DB.prepare(`
@@ -80,12 +79,13 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
       pkce_verifier_encrypted,
       expires_at, device_nonce_hash
     )
-    VALUES (?1, 'gmail', ?2, ?3, ?4)
+    VALUES (?1, 'gmail', ?2, datetime('now', ?3), ?4)
   `)
     .bind(
       stateHash,
       await encryptSecret(env, { verifier, origin: appOrigin(request) }, `oauth:${stateHash}`),
-      expiresAt,
+      // SQLite's own format, so the CURRENT_TIMESTAMP comparisons below are exact.
+      `+${OAUTH_STATE_TTL_SECONDS} seconds`,
       await tokenHash(nonce),
     )
     .run();
