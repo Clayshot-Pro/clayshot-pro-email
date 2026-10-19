@@ -1,4 +1,4 @@
-import type { OutboundMessage, OutboundTransport, TransportResult } from "./types";
+import { rfcMessageId, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types";
 
 /** Only threading headers, and never a value with a line break or NUL (header injection). */
 const ALLOWED_HEADERS = new Set(["in-reply-to", "references"]);
@@ -38,6 +38,6 @@ export class CloudflareBindingTransport implements OutboundTransport {
         disposition: "attachment" as const,
       })),
     });
-    return { providerMessageId: result.messageId };
+    return { providerMessageId: result.messageId, messageIdHeader: rfcMessageId(result.messageId) };
   }
 }

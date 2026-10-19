@@ -119,16 +119,18 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 ## v3.14: tests and review fixes
 
-- **Tests:** `npm run test:e2e` runs the real Worker locally (`wrangler dev`) with Chromium and a virtual passkey: setup, mailbox creation, inbound mail, safe reading of hostile HTML, attachments, access control, junk and blocking, sending, conversations, redelivery, drafts, All inboxes, sign-out and disabling a mailbox. A second suite renders 27 XSS payloads in the reader frame. CI runs both (`e2e` job). `scripts/test-unit-core.mjs` and `scripts/test-audit-fixes.mjs` add unit and regression tests.
-- **Sign-in:** rate limits group IPv6 clients by /64 and also limit each mailbox (30 attempts per 15 minutes); disabling or deleting a mailbox signs out its devices at once; the first passkey is registered atomically; bodies without a length are refused.
+- **Tests:** `npm run test:e2e` runs the real Worker locally (`wrangler dev`) with Chromium and a virtual passkey: setup, mailbox creation, inbound mail, safe reading of hostile HTML, attachments, access control, junk and blocking, sending, conversations, redelivery, drafts, All inboxes, sign-out, disabling a mailbox, and draft saves racing a discard or send. A second suite renders 27 XSS payloads in the reader frame. CI runs both (`e2e` job). `scripts/test-unit-core.mjs` and `scripts/test-audit-fixes.mjs` add unit and regression tests.
+- **Sign-in:** rate limits group IPv6 clients by /64 and also limit each mailbox (30 failed attempts per 15 minutes; a success clears them); disabling or deleting a mailbox signs out its devices at once; the first passkey is registered atomically; bodies without a length are refused.
 - **Receiving:** HTML handling is linear-time (crafted mail can no longer stall the Worker); a failed store releases its delivery claim so Email Routing's retry is kept; attachment names lose bidi controls; HTML is capped at 2 MB.
-- **Junk:** only the receiving server's (topmost, preferably Cloudflare's) authentication result counts, so a forged `dkim=pass` or `List-Id` no longer rescues failing mail, and a contact skips content checks only when authenticated.
-- **Sending:** a failed send can be retried with the same message; Gmail replies join their thread and Gmail forwards keep attachments; subjects lose line breaks; stricter address check; only reply headers reach the Cloudflare binding; up to 200 drafts per mailbox.
-- **Mail list:** archive, junk and delete apply to the whole conversation (reader and bulk); opening a conversation updates the unread count by every message it reads; sending from another account switches to it cleanly.
+- **Junk:** only the receiving server's result counts (the topmost Cloudflare `Authentication-Results` or `ARC-Authentication-Results`, else the topmost), so a forged `dkim=pass` no longer rescues failing mail; `List-Id` excuses a DMARC failure only with `arc=pass`; a contact skips content checks only with DMARC or aligned DKIM.
+- **Sending:** a failed send can be retried with the same message; Gmail replies join their thread and Gmail forwards keep attachments; subjects lose line breaks; stricter address check; only reply headers reach the Cloudflare binding.
+- **Message-IDs:** sent mail stores its real RFC Message-ID, never a provider's own ID, so replies thread. The Cloudflare binding reports it; for Resend it is read back after sending and from webhooks; the Cloudflare REST API cannot report or set one, so it is learned from the first reply (same recipient, same subject, sent in the last 30 days).
+- **Drafts:** saves run one at a time in order; discarding, sending or changing the sender waits for a save in flight, so a slow autosave never brings a draft back; the server refuses to recreate a sent draft or reuse another mailbox's draft id; Gmail drafts are deleted when sent; up to 200 drafts per mailbox.
+- **Mail list:** in the reader, archive, junk and delete apply to the whole conversation (archive and junk leave your own replies in Sent); bulk actions apply to the selected messages; opening a conversation updates the unread count by every message it reads; sending from another account switches to it cleanly.
 - **Domains:** a subdomain gets its own Email Routing MX records even when the zone already has routing; a catch-all that already forwards elsewhere is only replaced after confirmation.
 - **Migrations:** the in-app runner keeps `CASE … END` inside triggers together.
-- **Requires manual validation:** Gmail reply and forward with an attachment, and the junk verdict on real Cloudflare-delivered mail.
-- **Open decisions:** mailbox password minimum (4 now; 12+ recommended), a Google sign-in allowlist, a Message-ID on mail sent through the API/Resend transports, and threading by `References` without a subject check.
+- **Requires manual validation:** Gmail reply and forward with an attachment, the junk verdict on real Cloudflare-delivered mail, and the Message-ID of mail sent through Resend.
+- **Kept by decision:** mailbox passwords stay 4–32 characters; Google sign-in stays open to any Google account.
 
 ## Production rollout (LTM instance)
 

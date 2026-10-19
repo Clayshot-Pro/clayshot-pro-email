@@ -1,6 +1,6 @@
 import { resolveProvider } from "../providers/registry";
 import { permanentlyDeleteNativeTrashBatch } from "./nativeBulkTrash";
-import type { ProviderMutation, ThreadMutation } from "../providers/types";
+import type { ProviderMutation } from "../providers/types";
 
 const MAX_BULK_MESSAGES = 50;
 const ACTIONS = {
@@ -130,12 +130,8 @@ export async function bulkMailAction(request: Request, env: Env, ctx: ExecutionC
           throw new Error(body.error || "Unable to permanently delete");
         }
       } else {
-        // The list shows one row per conversation: moving a row moves all of it.
-        const mutation = ACTIONS[action as keyof typeof ACTIONS];
-        const moves = "isDeleted" in mutation || "isArchived" in mutation || "isJunk" in mutation;
-        const updated = moves
-          ? await provider.patchThread(id, mutation as ThreadMutation)
-          : await provider.patchMessage(id, mutation);
+        // Selection mode lists single messages: act on exactly those.
+        const updated = await provider.patchMessage(id, ACTIONS[action as keyof typeof ACTIONS]);
         if (!updated) throw new Error("Message not found");
       }
       successes.push(id);

@@ -47,7 +47,7 @@ const domainOf = (address: string | null | undefined) => {
   const at = value.lastIndexOf("@");
   return at >= 0 ? value.slice(at + 1).replace(/>$/, "") : "";
 };
-/** example.co.uk and mail.example.co.uk share "example.co.uk"; good enough to compare origins. */
+/** Last two labels: a rough origin for content signals only (never for authentication). */
 const baseDomain = (domain: string) => domain.split(".").slice(-2).join(".");
 
 function upstreamFlag(headers: HeaderSource): boolean {
@@ -62,27 +62,31 @@ const isCloudflare = (value: string) => /(?:^|\.)cloudflare\.(?:net|com)$/.test(
 /**
  * The authentication result written by the server that received the mail.
  * Receiving servers add theirs above everything the sender wrote, so a
- * forged result can never sit above the real one. Prefer the topmost
- * Cloudflare result (plain, then ARC); otherwise the topmost result.
+ * forged result can never sit above the real one. Take the topmost
+ * Cloudflare-labelled result, plain or ARC, by position; otherwise the
+ * topmost plain result.
  */
 export function trustedResult(headers: Array<{ key: string; value: string }>): string {
-  const plain = headers.filter(header => header.key.toLowerCase() === "authentication-results").map(header => header.value);
-  const arc = headers.filter(header => header.key.toLowerCase() === "arc-authentication-results").map(header => header.value);
-  return plain.find(isCloudflare) ?? arc.find(isCloudflare) ?? plain[0] ?? "";
+  const results = headers.filter(header => /^(?:arc-)?authentication-results$/i.test(header.key));
+  return results.find(header => isCloudflare(header.value))?.value
+    ?? results.find(header => header.key.toLowerCase() === "authentication-results")?.value ?? "";
 }
 
-/** DKIM passed for the sender's own domain (or DMARC passed). */
+/** DMARC passed, or DKIM passed for the sender's domain, a parent or a subdomain of it (relaxed alignment). */
 function authenticatedSender(results: string, senderDomain: string): boolean {
   if (/\bdmarc=pass\b/i.test(results)) return true;
-  const base = baseDomain(senderDomain);
-  return Boolean(base) && [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
-    .some(match => baseDomain(match[1].toLowerCase()) === base);
+  return Boolean(senderDomain) && [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
+    .some(match => {
+      const signer = match[1].toLowerCase().replace(/\.$/, "");
+      return signer.includes(".") && (senderDomain === signer || senderDomain.endsWith(`.${signer}`) || signer.endsWith(`.${senderDomain}`));
+    });
 }
 
 function authenticationFailure(headers: HeaderSource, results: string): string | null {
-  // Mailing lists and forwarders legitimately break SPF/DMARC alignment, but a
-  // List-Id header alone (anyone can add one) only counts with a DKIM pass.
-  if (headers.get("list-id") && /\bdkim=pass\b/i.test(results)) return null;
+  // Mailing lists and forwarders legitimately break SPF/DMARC alignment. A
+  // List-Id header is easy to add, so it only counts when the receiving
+  // server validated the list's ARC chain.
+  if (headers.get("list-id") && /\barc=pass\b/i.test(results)) return null;
   if (/\bdmarc=fail\b/i.test(results)) return "DMARC failed";
   if (/\bspf=fail\b/i.test(results) && !/\bdkim=pass\b/i.test(results)) return "SPF failed without a valid DKIM signature";
   return null;

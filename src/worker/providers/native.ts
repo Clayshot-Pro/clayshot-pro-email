@@ -126,8 +126,10 @@ export class NativeMailProvider implements MailProvider {
     const [key, value] = Object.entries(mutation)[0] ?? [];
     const column = key === "isDeleted" ? "is_deleted" : key === "isArchived" ? "is_archived" : key === "isJunk" ? "is_junk" : null;
     if (!column || typeof value !== "boolean") return false;
+    // Archive and Junk move received mail; your own replies stay in Sent.
+    const scope = column === "is_deleted" ? "" : " AND direction='inbound'";
     const result = await this.env.DB.prepare(
-      `UPDATE messages SET ${column}=?1 WHERE mailbox_id=?2 AND thread_id=?3`
+      `UPDATE messages SET ${column}=?1 WHERE mailbox_id=?2 AND thread_id=?3${scope}`
     ).bind(value ? 1 : 0, this.accountId, message.thread_id).run();
     return Boolean(result.meta.changes);
   }
@@ -149,7 +151,7 @@ export class NativeMailProvider implements MailProvider {
       attachments: input.attachments,
       idempotencyKey: input.idempotencyKey,
     });
-    return { providerMessageId: result.providerMessageId, transport: transport.kind };
+    return { providerMessageId: result.providerMessageId, messageIdHeader: result.messageIdHeader ?? null, transport: transport.kind };
   }
 }
 

@@ -27,6 +27,9 @@ export async function checkAuthRateLimit(env: Env, bucket: string, windowSeconds
 export function clientNetwork(request: Request): string {
   const ip = (request.headers.get("CF-Connecting-IP") ?? "unknown").trim().toLowerCase();
   if (!ip.includes(":")) return ip;
+  // IPv4-mapped IPv6 (::ffff:192.0.2.1) is that IPv4 client.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(ip);
+  if (mapped) return mapped[1];
   const [head, tail = ""] = ip.split("::");
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
@@ -38,10 +41,29 @@ export function authRateLimitBucket(request: Request, route: string): string {
   return `${route}:${clientNetwork(request)}`;
 }
 
-/** Attempts on one account from anywhere, so spreading guesses over many addresses doesn't help. */
+/**
+ * Failed sign-ins on one account from anywhere, so spreading guesses over
+ * many addresses doesn't help. Only failures count and a success clears them,
+ * so the account's owner signing in never uses up the allowance.
+ */
 export const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
 export const ACCOUNT_LOGIN_MAX_ATTEMPTS = 30;
 export const accountRateLimitBucket = (route: string, address: string) => `${route}:account:${address.trim().toLowerCase()}`;
+
+export async function accountLoginBlocked(env: Env, bucket: string): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT attempts FROM auth_rate_limits
+    WHERE bucket = ?1 AND window_started_at > datetime('now', ?2)`)
+    .bind(await sha256Hex(bucket), `-${ACCOUNT_LOGIN_WINDOW_SECONDS} seconds`).first<{ attempts: number }>();
+  return (row?.attempts ?? 0) >= ACCOUNT_LOGIN_MAX_ATTEMPTS;
+}
+
+export async function recordAccountLoginFailure(env: Env, bucket: string): Promise<void> {
+  await checkAuthRateLimit(env, bucket, ACCOUNT_LOGIN_WINDOW_SECONDS, ACCOUNT_LOGIN_MAX_ATTEMPTS);
+}
+
+export async function clearAccountLoginFailures(env: Env, bucket: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM auth_rate_limits WHERE bucket = ?1").bind(await sha256Hex(bucket)).run();
+}
 
 export const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
 

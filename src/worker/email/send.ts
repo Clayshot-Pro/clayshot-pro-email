@@ -37,7 +37,7 @@ const MAX_SUBJECT_CHARS = 500;
 const MAX_RECIPIENTS = 50;
 // A bare address only (no display name, brackets, quotes or trailing dot), so
 // suppression checks always compare the address the transport will use.
-export const EMAIL_PATTERN = /^[^\s@<>"'(),;:\\]+@[^\s@<>"'(),;:\\]+\.[^\s@<>"'(),;:\\.]+$/;
+export const EMAIL_PATTERN = /^[^\s@<>"(),;:\\]+@[^\s@<>"'(),;:\\]+\.[^\s@<>"'(),;:\\.]+$/;
 
 function splitRecipients(value: FormDataEntryValue | null): string[] {
   if (typeof value !== "string") return [];
@@ -329,6 +329,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     );
   }
   if (!subject) subject = "(no subject)";
+  // Derived reply/forward subjects come from stored mail: no line breaks either.
+  subject = subject.replace(/[\r\n]+/g, " ").trim().slice(0, MAX_SUBJECT_CHARS);
 
   const id = crypto.randomUUID();
   const clientKey = String(form.get("sendKey") ?? draftId ?? "").trim();
@@ -397,6 +399,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   let status = "sent";
   let deliveryError: string | null = null;
   let providerMessageId: string | null = null;
+  let messageIdHeader: string | null = null;
   let transportKind: string | null = null;
   let uncertain = false;
   try {
@@ -412,6 +415,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       idempotencyKey: provider.kind === "native" ? `${provider.accountId}:${clientKey}` : undefined,
     });
     providerMessageId = result.providerMessageId;
+    messageIdHeader = result.messageIdHeader ?? null;
     transportKind = result.transport ?? null;
   } catch (error) {
     status = "failed";
@@ -436,6 +440,10 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   }
 
   if (provider.kind !== "native") {
+    // Drafts of connected accounts live in D1 too: a sent draft is gone.
+    if (status === "sent" && draftId) {
+      await env.DB.prepare("DELETE FROM drafts WHERE id = ?1 AND mailbox_id = ?2").bind(draftId, provider.accountId).run();
+    }
     return status === "sent"
       ? Response.json(
           { ok: true, providerMessageId, accountId: provider.accountId },
@@ -500,7 +508,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       )
     `).bind(
       id,
-      providerMessageId,
+      // The RFC Message-ID, never a provider's own id: replies are matched on it.
+      messageIdHeader,
       threadId,
       provider.address,
       JSON.stringify(to),

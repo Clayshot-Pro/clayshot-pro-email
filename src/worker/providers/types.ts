@@ -60,6 +60,8 @@ export type ProviderSendInput = {
 
 export type ProviderSendResult = {
   providerMessageId: string | null;
+  /** RFC Message-ID of the sent mail, when the transport reports it. */
+  messageIdHeader?: string | null;
   transport?: "cloudflare" | "resend";
 };
 

@@ -239,6 +239,57 @@ export async function run() {
         assert.ok(!to.includes("a".repeat(400)), "an address over 320 characters is not kept");
       }],
 
+      ["a slow autosave never brings back a discarded or sent draft", async () => {
+        const { page } = alice;
+        state.page = page;
+        const aliceApi = api(alice.context, worker.origin);
+        const drafts = async () => (await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=drafts`)).json.messages
+          .map(m => m.subject);
+        // Every draft save takes 1.5 s, so one is still in flight when the draft is discarded or sent.
+        const slow = async route => {
+          if (route.request().method() === "POST") await new Promise(resolve => setTimeout(resolve, 1500));
+          await route.continue();
+        };
+        await page.route("**/api/drafts", slow);
+        try {
+          const compose = async (subject, to = "") => {
+            await page.getByRole("button", { name: "New message" }).first().click();
+            if (to) await page.fill(".compose-modal input[placeholder='name@example.com']", to);
+            await page.fill(".compose-modal input[placeholder='What’s this about?']", subject);
+            await page.fill(".compose-modal textarea[aria-label='Message']", `${subject} body`);
+            await page.waitForRequest(request => request.url().endsWith("/api/drafts") && request.method() === "POST", { timeout: 5_000 });
+          };
+          await compose("Slow discard");
+          await page.locator(".compose-discard").click();
+          await page.locator(".compose-modal").waitFor({ state: "detached", timeout: 10_000 });
+          await compose("Slow send", "bob@partner.test");
+          await page.locator(".compose-modal button[type=submit]").click();
+          await page.waitForFunction(() => !document.querySelector(".compose-modal") || document.querySelector(".compose-send-error"), null, { timeout: 20_000 });
+          await page.waitForTimeout(2500);
+          const left = await drafts();
+          assert.ok(!left.includes("Slow discard"), "a discarded draft stays deleted");
+          if (!state.sendError) assert.ok(!left.includes("Slow send"), "a sent draft stays deleted");
+        } finally {
+          await page.unroute("**/api/drafts", slow);
+        }
+        // The server also refuses to recreate a draft that was sent.
+        const sentDraft = await aliceApi("/api/drafts", { method: "POST", body: { accountId: state.aliceId, id: "sent-draft-1", subject: "x", to: "bob@partner.test" } });
+        assert.equal(sentDraft.status, 200);
+        const form = new FormData();
+        for (const [key, value] of Object.entries({ accountId: state.aliceId, draftId: "sent-draft-1", to: "bob@partner.test", subject: "Sent draft", text: "x" })) form.set(key, value);
+        const sent = await page.evaluate(async entries => {
+          const body = new FormData();
+          for (const [key, value] of entries) body.set(key, value);
+          const response = await fetch("/api/send", { method: "POST", body });
+          return response.status;
+        }, [...form.entries()]);
+        if (sent === 201) {
+          const late = await aliceApi("/api/drafts", { method: "POST", body: { accountId: state.aliceId, id: "sent-draft-1", subject: "late" } });
+          assert.equal(late.status, 409, "a late save of a sent draft is refused");
+          assert.ok(!(await drafts()).includes("late"));
+        }
+      }],
+
       ["the administrator opens on All inboxes, with every mailbox's mail", async () => {
         // A new tab: the open mailbox is remembered per tab, a fresh start opens All inboxes.
         const page = await admin.context.newPage();

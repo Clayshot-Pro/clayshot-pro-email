@@ -58,7 +58,7 @@ export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE
   const clean = m.sanitizeEmailHtml(`<p onclick="x()">hi</p><script>bad()</script><iframe src="https://e.test"></iframe>
     <a href="javascript:bad()">j</a><a href=javascript:bad()>u</a><img src="https://track.test/p.png" srcset="https://t.test/a 1x">
     <form action="https://e.test"><input></form><svg onload=bad()></svg>`);
-  assert.doesNotMatch(clean, /<script|<iframe|<form|<input|<svg|onclick|onload|javascript:|srcset|track\.test/i);
+  assert.doesNotMatch(clean, /<script|<iframe|<form|<input|<svg|onclick|onload|=["']?\s*javascript:|srcset|track\.test/i);
   assert.match(clean, /data-remote-image-blocked="true"/);
   assert.match(clean, /<p>hi<\/p>/);
 

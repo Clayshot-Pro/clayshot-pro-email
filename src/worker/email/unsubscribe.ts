@@ -41,16 +41,17 @@ function validatedCandidate(candidate: string): string | null {
 export function messageUnsubscribeUrl(bodyHtml: string | null | undefined, bodyText: string | null | undefined): string | null {
   if (bodyHtml) {
     const html = bodyHtml.slice(0, 512 * 1024);
-    const lower = html.toLowerCase();
     // One forward pass: each anchor's closing tag is found by a search that
     // never revisits text, so link-heavy or unclosed HTML stays linear.
     const anchors = /<a\b([^<>]{0,4096})>/gi;
+    const closing = /<\/a\s*>/gi; // not </abbr> or </address>
     let close = -1;
     for (const match of html.matchAll(anchors)) {
       const start = match.index + match[0].length;
       if (close !== Infinity && close < start) {
-        const found = lower.indexOf("</a", start);
-        close = found < 0 ? Infinity : found;
+        closing.lastIndex = start;
+        const found = closing.exec(html);
+        close = found ? found.index : Infinity;
       }
       if (close === Infinity || close - start > 4096) continue;
       const label = html.slice(start, close).replace(/<[^<>]{0,4096}>/g, " ").replace(/&nbsp;/gi, " ");

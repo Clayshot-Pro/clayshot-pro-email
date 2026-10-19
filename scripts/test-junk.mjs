@@ -38,8 +38,10 @@ assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudfla
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=none" }) }).junk, true);
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=pass header.d=x.com" }) }).junk, false,
   "forwarded mail with a valid DKIM signature is fine");
-assert.equal(verdict({ headers: headers({ "authentication-results": "dkim=pass header.d=lists.example.org; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, false,
-  "mailing lists (re-signed by the list) break DMARC alignment legitimately");
+assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudflare.net; arc=pass; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, false,
+  "mailing lists with a validated ARC chain break DMARC alignment legitimately");
+assert.equal(verdict({ headers: headers({ "authentication-results": "dkim=pass header.d=attacker.test; dmarc=fail", "list-id": "<x.attacker.test>" }) }).junk, true,
+  "the attacker's own DKIM signature plus a List-Id does not excuse a DMARC failure");
 assert.equal(verdict({ headers: headers({ "authentication-results": "dmarc=fail", "list-id": "<forged>" }) }).junk, true,
   "a List-Id header alone does not excuse a DMARC failure");
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=pass; dkim=pass; dmarc=pass" }) }).junk, false);
@@ -50,9 +52,15 @@ assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSende
 assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true }).junk, true,
   "a forged From of a contact without authentication is still scored");
 assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true,
-  headers: headers({ "authentication-results": "dkim=pass header.d=mail.example.com" }) }).junk, false, "aligned DKIM counts");
+  headers: headers({ "authentication-results": "dkim=pass header.d=example.com" }) }).junk, false, "aligned DKIM counts");
+assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true,
+  headers: headers({ "authentication-results": "dkim=pass header.d=mail.example.com" }) }).junk, false, "a subdomain signature is aligned");
 assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true,
   headers: headers({ "authentication-results": "dkim=pass header.d=attacker.test" }) }).junk, true, "unaligned DKIM does not");
+assert.equal(verdict({ ...spam.lottery, sender: "friend@bank.co.uk", knownSender: true,
+  headers: headers({ "authentication-results": "dkim=pass header.d=attacker.co.uk" }) }).junk, true, "a sibling under a public suffix is not aligned");
+assert.equal(verdict({ ...spam.lottery, sender: "friend@mail.example.com", knownSender: true,
+  headers: headers({ "authentication-results": "dkim=pass header.d=example.com" }) }).junk, false, "a parent-domain signature is aligned");
 
 // Only the receiving server's result is trusted; forged results sit below it.
 const ar = (value, key = "authentication-results") => ({ key, value });
@@ -60,6 +68,8 @@ assert.equal(trustedResult([ar("mx.cloudflare.net; spf=fail; dkim=none"), ar("ev
 assert.equal(trustedResult([ar("relay.example; dkim=pass"), ar("i=1; mx.cloudflare.net; dkim=fail", "arc-authentication-results")]),
   "i=1; mx.cloudflare.net; dkim=fail", "the Cloudflare ARC result wins over an unlabelled one");
 assert.equal(trustedResult([ar("first.example; dmarc=fail"), ar("second.example; dmarc=pass")]), "first.example; dmarc=fail", "otherwise the topmost");
+assert.equal(trustedResult([ar("i=1; mx.cloudflare.net; dmarc=fail", "arc-authentication-results"), ar("mx.cloudflare.net; dmarc=pass")]),
+  "i=1; mx.cloudflare.net; dmarc=fail", "a forged plain Cloudflare result below the real ARC one loses");
 assert.equal(trustedResult([]), "");
 const forged = verdict({ headers: headers({ "authentication-results": "ignored" }),
   authenticationHeaders: [ar("mx.cloudflare.net; spf=fail smtp.mailfrom=x.com; dkim=none"), ar("mx.cloudflare.net; dkim=pass")] });

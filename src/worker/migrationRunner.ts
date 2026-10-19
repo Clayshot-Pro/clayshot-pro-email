@@ -36,7 +36,7 @@ export function splitStatements(sql: string): string[] {
   let current = "";
   let index = 0;
   let depth = 0; // BEGIN/CASE … END nesting inside a trigger body
-  const wordPattern = /[A-Za-z_]+/y;
+  const wordPattern = /[A-Za-z_][A-Za-z0-9_]*/y;
   const word = (at: number) => {
     wordPattern.lastIndex = at;
     return wordPattern.exec(sql)?.[0]?.toUpperCase() ?? "";

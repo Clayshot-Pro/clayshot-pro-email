@@ -34,6 +34,8 @@ const caseTrigger = splitStatements("CREATE TRIGGER t AFTER INSERT ON a BEGIN UP
 assert.equal(caseTrigger.length, 2);
 assert.match(caseTrigger[0], /DELETE FROM a; END$/);
 assert.equal(splitStatements("SELECT CASE WHEN 1 THEN 2 END; SELECT 5").length, 2, "CASE outside a trigger is a plain expression");
+assert.equal(splitStatements("CREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET end1 = case2; DELETE FROM a; END; SELECT 6").length, 2,
+  "identifiers like end1 or case2 are not keywords");
 for (const migration of MIGRATIONS) assert.ok(splitStatements(migration.sql).length > 0, `${migration.name} has statements`);
 
 // A fresh database ends up exactly as applying the files directly would leave it.

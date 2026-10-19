@@ -47,7 +47,7 @@ export function shouldReplaceStatus(current: string | null, next: DeliveryStatus
 
 export type ResendEvent = {
   type?: unknown;
-  data?: { email_id?: unknown; to?: unknown; bounce?: { type?: unknown } | null } | null;
+  data?: { email_id?: unknown; message_id?: unknown; to?: unknown; bounce?: { type?: unknown } | null } | null;
 };
 
 export function eventEffect(event: ResendEvent): EventEffect | null {

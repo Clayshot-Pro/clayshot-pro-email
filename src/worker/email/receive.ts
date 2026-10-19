@@ -57,12 +57,35 @@ function referenceCandidates(inReplyTo: string | null, references: string | null
   return [...new Set([inReplyTo, ...refs].filter((value): value is string => Boolean(value)))].reverse().slice(0, 30);
 }
 
-async function resolveThreadId(env: Env, mailboxId: string, inReplyTo: string | null, references: string | null): Promise<string> {
+/** Subject without reply/forward prefixes, for matching a reply to what it answers. */
+export const baseSubject = (subject: string | null | undefined) =>
+  (subject ?? "").trim().replace(/^(?:\s*(?:re|fwd?|aw|sv|wg)\s*(?:\[\d{1,3}\])?\s*:)+/i, "").trim().toLowerCase();
+
+type ThreadMatch = { threadId: string; learned: { id: string; messageId: string } | null };
+
+export async function resolveThreadId(env: Env, mailboxId: string, inReplyTo: string | null, references: string | null,
+  sender: string, subject: string): Promise<ThreadMatch> {
   for (const candidate of referenceCandidates(inReplyTo, references)) {
     const match = await env.DB.prepare("SELECT thread_id FROM messages WHERE mailbox_id = ?1 AND (original_message_id = ?2 OR message_id = ?2) LIMIT 1").bind(mailboxId, candidate).first<{ thread_id: string }>();
-    if (match) return match.thread_id;
+    if (match) return { threadId: match.thread_id, learned: null };
   }
-  return crypto.randomUUID();
+  // Some transports (the Cloudflare REST API) do not report the Message-ID
+  // they gave a sent message. A reply to it names that ID in In-Reply-To:
+  // match it to the recent sent message to this sender with the same subject
+  // whose ID is unknown, and remember the ID for the rest of the conversation.
+  const answered = /^<[^\s<>@]{1,450}@[^\s<>@]{1,450}>$/.test(inReplyTo ?? "") ? inReplyTo! : null;
+  const base = baseSubject(subject);
+  if (answered && base && sender) {
+    const sent = await env.DB.prepare(`SELECT id, thread_id, subject FROM messages
+      WHERE mailbox_id = ?1 AND direction = 'outbound' AND message_id IS NULL AND delivery_status IN ('sent', 'delivered', 'delayed')
+        AND sent_at >= ?2 AND EXISTS (SELECT 1 FROM json_each(messages.to_addresses) WHERE LOWER(json_each.value) = ?3)
+      ORDER BY sent_at DESC LIMIT 20`)
+      .bind(mailboxId, new Date(Date.now() - 30 * 86_400_000).toISOString(), sender.trim().toLowerCase())
+      .all<{ id: string; thread_id: string; subject: string }>();
+    const match = sent.results.find(row => baseSubject(row.subject) === base);
+    if (match) return { threadId: match.thread_id, learned: { id: match.id, messageId: answered } };
+  }
+  return { threadId: crypto.randomUUID(), learned: null };
 }
 
 function reject(message: ForwardableEmailMessage, reason: string): void {
@@ -144,7 +167,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
       knownSender: await hasWrittenTo(env, mailbox.id, fromAddress),
     }).junk);
   const bodyHtml = html ? truncateUtf8(sanitizeEmailHtml(html), MAX_STORED_TEXT) || null : null;
-  const threadId = await resolveThreadId(env, mailbox.id, inReplyTo, references);
+  const { threadId, learned } = await resolveThreadId(env, mailbox.id, inReplyTo, references, fromAddress, parsed.subject ?? "");
 
   const claim = await env.DB.prepare(
     "INSERT OR IGNORE INTO inbound_receipts(mailbox_id,fingerprint,state) VALUES (?1,?2,'pending')"
@@ -200,6 +223,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
       env.DB.prepare(`INSERT INTO messages (id,message_id,original_message_id,mailbox_id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,subject,preview,body_text,body_html,received_at,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,is_junk) VALUES (?1,?2,?3,?4,?5,'inbound',?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,'received',?19)`).bind(id, storedMessageId, headerMessageId, mailbox.id, threadId, (sender?.address || message.from).slice(0, 320), sender?.name?.slice(0, 320) || null, JSON.stringify(to.length ? to : [message.to]), JSON.stringify(cc), (parsed.subject || "(no subject)").slice(0, 998), safePreview(bodyText), bodyText, bodyHtml, nowIso, rows.length ? 1 : 0, key, inReplyTo, references, Number(isJunk)),
       ...rows.map(attachment => env.DB.prepare("INSERT INTO attachments (id,message_id,filename,content_type,size,r2_key) VALUES (?1,?2,?3,?4,?5,?6)").bind(attachment.id, id, attachment.filename, attachment.mimeType, attachment.size, attachment.key)),
       env.DB.prepare("UPDATE threads SET latest_message_at=?2,message_count=message_count+1,is_read=0,subject=CASE WHEN subject='' THEN ?3 ELSE subject END WHERE id=?1 AND mailbox_id=?4").bind(threadId, nowIso, (parsed.subject || "(no subject)").slice(0, 998), mailbox.id),
+      ...(learned ? [env.DB.prepare("UPDATE messages SET message_id=?3 WHERE id=?1 AND mailbox_id=?2 AND message_id IS NULL").bind(learned.id, mailbox.id, learned.messageId)] : []),
       env.DB.prepare("UPDATE inbound_receipts SET state='accepted',message_id=?3 WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'").bind(mailbox.id,fingerprint,id),
     ]);
   } catch {

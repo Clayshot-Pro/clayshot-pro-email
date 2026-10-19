@@ -341,34 +341,54 @@ export function App() {
     if (selectedId) switchAccount(selectedId);
   }, [accountsLoaded, accounts, activeAccountId]);
 
-  const persistDraft = useCallback(async (current: ComposeState) => {
-    if (!current.draftId || !hasDraftContent(current)) return;
-    setDraftStatus("saving");
-    try {
-      const response = await fetch("/api/drafts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: current.draftId,
-          accountId: composeAccountId,
+  // Draft saves run one at a time, in order, so a slow earlier save never
+  // overwrites newer text. A draft that was sent, discarded or moved to
+  // another account is closed: queued saves for it are dropped, and its
+  // deletion waits for the save in flight (which would otherwise recreate it).
+  const draftSaves = useRef<Promise<void>>(Promise.resolve());
+  const closedDraftIds = useRef(new Set<string>());
+  const closeDraft = (id: string) => {
+    closedDraftIds.current.add(id);
+    persistedDraftIds.current.delete(id);
+    return draftSaves.current;
+  };
+
+  const persistDraft = useCallback((current: ComposeState) => {
+    if (!current.draftId || !hasDraftContent(current)) return draftSaves.current;
+    const accountId = composeAccountId;
+    const save = async () => {
+      if (closedDraftIds.current.has(current.draftId)) return;
+      setDraftStatus("saving");
+      try {
+        const response = await fetch("/api/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15_000),
+          body: JSON.stringify({
+            id: current.draftId,
+            accountId,
           to: current.to,
           cc: current.cc,
           bcc: current.bcc,
-          subject: current.subject,
-          text: current.text,
-          replyToMessageId: current.replyToMessageId,
-          forwardMessageId: current.forwardMessageId,
-        }),
-      });
-      if (!response.ok) throw new Error();
+            subject: current.subject,
+            text: current.text,
+            replyToMessageId: current.replyToMessageId,
+            forwardMessageId: current.forwardMessageId,
+          }),
+        });
+        if (!response.ok) throw new Error();
+        if (closedDraftIds.current.has(current.draftId)) return;
 
-      const known = persistedDraftIds.current.has(current.draftId);
-      persistedDraftIds.current.add(current.draftId);
-      if (!known) setDraftCount((count) => count + 1);
-      setDraftStatus("saved");
-    } catch {
-      setDraftStatus(null);
-    }
+        const known = persistedDraftIds.current.has(current.draftId);
+        persistedDraftIds.current.add(current.draftId);
+        if (!known) setDraftCount((count) => count + 1);
+        setDraftStatus("saved");
+      } catch {
+        setDraftStatus(null);
+      }
+    };
+    draftSaves.current = draftSaves.current.then(save, save);
+    return draftSaves.current;
   }, [composeAccountId]);
 
   useEffect(() => {
@@ -537,6 +557,8 @@ export function App() {
           forwardMessageId: draft.forwardMessageId,
           draftId: draft.id,
         });
+        // An opened draft is already saved: editing it must not count it again.
+        persistedDraftIds.current.add(draft.id);
         setComposeAccountId(draftSenderId);
         setComposeOpen(true);
       } catch {
@@ -596,10 +618,11 @@ export function App() {
       setSelected(message);
       setThread(nextThread);
       setOpeningMessageId(null);
-      // Opening reads the whole conversation; the optimistic -1 above
-      // already covered the opened item.
+      // Opening reads the whole native conversation (Gmail only the opened
+      // message); the optimistic -1 above already covered the opened item.
+      const wholeThread = listItem && !accountId.startsWith("gmail:");
       setMessages((current) => current.map((item) =>
-        item.id === id || (listItem && threadKey(item) === threadKey(listItem))
+        item.id === id || (wholeThread && threadKey(item) === threadKey(listItem))
           ? { ...item, isRead: true } : item));
       const furtherRead = data.newlyReadCount - (wasUnread ? 1 : 0);
       if (furtherRead) setUnreadCount((count) => Math.max(0, count - furtherRead));
@@ -631,8 +654,11 @@ export function App() {
     // resurface an older message of the conversation after the next refresh).
     const conversationMutation = Object.keys(patch).length === 1 &&
       ["isDeleted", "isArchived", "isJunk"].some((key) => typeof patch[key] === "boolean");
+    // Archive and Junk leave your own replies in Sent; delete takes everything.
+    const inThread = (message: { threadId: string; direction: string }) => message.threadId === target.threadId
+      && (typeof patch.isDeleted === "boolean" || message.direction === "inbound");
     const matchesTarget = (message: MessageListItem) => (message.accountId ?? activeAccountId) === accountId
-      && (conversationMutation ? message.threadId === target.threadId : message.id === target.id);
+      && (conversationMutation ? inThread(message) || message.id === target.id : message.id === target.id);
     const shieldKey = mailMutationKey(accountId,
       conversationMutation ? target.threadId : target.id,
       conversationMutation ? "thread" : "message");
@@ -653,7 +679,7 @@ export function App() {
       .filter((message) =>
         !matchesTarget(message) || belongsInFolder(folder, message)));
     setThread((current) => current.map((message) =>
-      conversationMutation || message.id === target.id
+      (conversationMutation && inThread(message)) || message.id === target.id
         ? { ...message, ...patch } as MessageDetail
         : message));
 
@@ -940,10 +966,9 @@ export function App() {
     localStorage.setItem(draftSenderKey(nextId), accountId);
     if (oldId) {
       localStorage.removeItem(draftSenderKey(oldId));
-      persistedDraftIds.current.delete(oldId);
-      void fetch(`/api/drafts/${encodeURIComponent(oldId)}?accountId=${encodeURIComponent(previousAccountId)}`, {
+      void closeDraft(oldId).then(() => fetch(`/api/drafts/${encodeURIComponent(oldId)}?accountId=${encodeURIComponent(previousAccountId)}`, {
         method: "DELETE",
-      }).catch(() => undefined);
+      })).catch(() => undefined);
     }
   };
 
@@ -955,6 +980,7 @@ export function App() {
   const discardCompose = async () => {
     if (compose.draftId) {
       localStorage.removeItem(draftSenderKey(compose.draftId));
+      await closeDraft(compose.draftId);
       await fetch(`/api/drafts/${encodeURIComponent(compose.draftId)}?accountId=${encodeURIComponent(composeAccountId)}`, {
         method: "DELETE",
       }).catch(() => undefined);
@@ -971,6 +997,8 @@ export function App() {
     setComposeError(null);
     setSending(true);
     try {
+      // The send deletes the draft: let an autosave in flight land first.
+      await draftSaves.current;
       const form = new FormData();
       form.set("accountId", composeAccountId);
       for (const key of [
@@ -995,6 +1023,7 @@ export function App() {
 
       if (compose.draftId) {
         localStorage.removeItem(draftSenderKey(compose.draftId));
+        void closeDraft(compose.draftId);
       }
       setComposeOpen(false);
       setComposeError(null);

@@ -4,7 +4,7 @@ import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
 import { adminLoginAddress, adminMailboxAddress, isAdministratorEmail } from "./config";
 import { ADMIN_MAILBOX_ID } from "./mailboxIds";
-import { ACCOUNT_LOGIN_MAX_ATTEMPTS, ACCOUNT_LOGIN_WINDOW_SECONDS, accountRateLimitBucket, checkAuthRateLimit, authRateLimitBucket } from "./security";
+import { accountLoginBlocked, accountRateLimitBucket, authRateLimitBucket, checkAuthRateLimit, clearAccountLoginFailures, recordAccountLoginFailure } from "./security";
 
 import { addressRules, primaryDomain } from "./domains";
 import { beginAdminLogin } from "./adminAuth";
@@ -153,12 +153,17 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
     }), env);
   }
+  const accountBucket = accountRateLimitBucket("native-login", email);
   if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))
-    || !(await checkAuthRateLimit(env, accountRateLimitBucket("native-login", email), ACCOUNT_LOGIN_WINDOW_SECONDS, ACCOUNT_LOGIN_MAX_ATTEMPTS))) {
+    || await accountLoginBlocked(env, accountBucket)) {
     return jsonError("Too many attempts. Try again later.", 429);
   }
   const mailboxId = await checkNativePassword(env,email,password);
-  if (!mailboxId) return jsonError("Invalid credentials", 401);
+  if (!mailboxId) {
+    await recordAccountLoginFailure(env, accountBucket);
+    return jsonError("Invalid credentials", 401);
+  }
+  await clearAccountLoginFailures(env, accountBucket);
   const setCookie = await establishDeviceGrant(request, env, mailboxId, "native");
   const headers = new Headers({ "Cache-Control": "no-store" });
   if (setCookie) headers.append("Set-Cookie",setCookie);

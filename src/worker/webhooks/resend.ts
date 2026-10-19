@@ -1,5 +1,6 @@
 import { appConfig } from "../appConfig";
 import { authRateLimitBucket, checkAuthRateLimit } from "../security";
+import { rfcMessageId } from "../transports/types";
 import { eventEffect, shouldReplaceStatus, suppressionTargets, verifySvix, type ResendEvent } from "./resendEvents";
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -35,11 +36,18 @@ export async function resendWebhook(request: Request, env: Env): Promise<Respons
   try { event = JSON.parse(body) as ResendEvent; } catch { return reply({ ok: true, ignored: "malformed" }); }
   const effect = eventEffect(event);
   const emailId = typeof event.data?.email_id === "string" ? event.data.email_id.slice(0, 200) : "";
-  if (!effect || !emailId) return reply({ ok: true, ignored: "event" });
+  if (!emailId) return reply({ ok: true, ignored: "event" });
 
   const attempt = await env.DB.prepare(
     "SELECT mailbox_id, message_id FROM outbound_attempts WHERE transport = 'resend' AND provider_message_id = ?1 LIMIT 1",
   ).bind(emailId).first<{ mailbox_id: string; message_id: string | null }>();
+  // Every email.* event carries the RFC Message-ID; record it if sending could not.
+  const messageIdHeader = rfcMessageId(event.data?.message_id);
+  if (attempt?.message_id && messageIdHeader) {
+    await env.DB.prepare("UPDATE messages SET message_id = ?3 WHERE id = ?1 AND mailbox_id = ?2 AND message_id IS NULL")
+      .bind(attempt.message_id, attempt.mailbox_id, messageIdHeader).run();
+  }
+  if (!effect) return reply({ ok: true, ignored: "event" });
   if (attempt) {
     const now = new Date().toISOString();
     const message = attempt.message_id

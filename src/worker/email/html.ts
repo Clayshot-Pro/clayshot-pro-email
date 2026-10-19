@@ -1,16 +1,20 @@
 const BLOCKED_CONTAINERS = ["script", "iframe", "object", "embed", "form", "svg", "math", "video", "audio", "template"];
-// Every repetition is length-bounded so crafted input (thousands of unclosed
-// tags or quotes) costs linear time, never quadratic.
-const VALUE = `(?:"[^"]{0,16384}"|'[^']{0,16384}'|[^\\s>]{1,16384})`;
+// Crafted input (thousands of unclosed tags or quotes, long whitespace runs)
+// must cost linear time: every pattern is anchored by a literal name and has
+// no two adjacent unbounded runs that could trade characters while backtracking.
+// Attributes may be separated by whitespace or "/" (`<img src=x/onerror=...>`).
+const SEP = `[\\s/]`;
+const VALUE = `(?:"[^"]*"|'[^']*'|[^\\s>]+)`;
 const BLOCKED_TAGS = /<\/?(?:script|iframe|object|embed|form|input|button|textarea|select|option|meta|base|link|svg|math|video|audio|source|track|template)\b[^>]{0,8192}>?/gi;
-const EVENT_ATTRIBUTES = new RegExp(`\\s{1,16}on[a-z0-9_-]{1,64}\\s{0,16}=\\s{0,16}${VALUE}`, "gi");
-const DANGEROUS_ATTRIBUTES = new RegExp(`\\s{1,16}(?:srcdoc|formaction|action|ping)\\s{0,16}=\\s{0,16}${VALUE}`, "gi");
-const DANGEROUS_QUOTED_URL = /\s{1,16}(href|src|xlink:href)\s{0,16}=\s{0,16}(["'])\s{0,16}(?:javascript|vbscript|file|data:text\/html)[^"']{0,16384}\2/gi;
-const DANGEROUS_UNQUOTED_URL = /\s{1,16}(href|src|xlink:href)\s{0,16}=\s{0,16}(?:javascript|vbscript|file|data:text\/html):[^\s>]{0,16384}/gi;
-// Each <img …> tag is matched once (matches never overlap), then its src is checked inside it.
-const IMAGE_TAG = /<img\b[^>]{0,8192}>?/gi;
-const REMOTE_SRC = /\s{1,16}src\s{0,16}=\s{0,16}(?:(["'])\s{0,16}https?:\/\/[^"']{0,16384}\1|https?:\/\/[^\s>]{0,16384})/gi;
-const IMAGE_SRCSET = new RegExp(`\\s{1,16}srcset\\s{0,16}=\\s{0,16}${VALUE}`, "gi");
+const EVENT_ATTRIBUTES = new RegExp(`${SEP}on[a-z0-9_-]{1,64}\\s*=\\s*${VALUE}`, "gi");
+const DANGEROUS_ATTRIBUTES = new RegExp(`${SEP}(?:srcdoc|formaction|action|ping)\\s*=\\s*${VALUE}`, "gi");
+// Neutralize the scheme itself, whatever the quoting or length of the URL:
+// `href="javascript:..."` becomes `href="blocked:javascript:..."`.
+const DANGEROUS_URL = new RegExp(`(${SEP}(?:href|src|xlink:href)\\s*=\\s*(?:["']\\s*)?)(?=javascript|vbscript|file|data:text\\/html)`, "gi");
+// Each <img …> tag is matched once (matches never overlap), then its remote src is removed inside it.
+const IMAGE_TAG = /<img\b[^>]*>?/gi;
+const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=["']?\\s*https?:)${VALUE}`, "gi");
+const IMAGE_SRCSET = new RegExp(`${SEP}srcset\\s*=\\s*${VALUE}`, "gi");
 /** HTML beyond this is not processed; the stored copy is capped at 2 MB anyway. */
 export const MAX_SANITIZE_CHARS = 2 * 1024 * 1024;
 
@@ -54,9 +58,8 @@ export function sanitizeEmailHtml(html: string): string {
     .replace(BLOCKED_TAGS, "")
     .replace(EVENT_ATTRIBUTES, "")
     .replace(DANGEROUS_ATTRIBUTES, "")
-    .replace(DANGEROUS_QUOTED_URL, " $1=\"#\"")
-    .replace(DANGEROUS_UNQUOTED_URL, " $1=\"#\"")
-    .replace(IMAGE_TAG, tag => tag.replace(REMOTE_SRC, " data-remote-image-blocked=\"true\""))
+    .replace(DANGEROUS_URL, "$1blocked:")
+    .replace(IMAGE_TAG, tag => tag.replace(REMOTE_SRC, "$1data-remote-image-blocked=\"true\""))
     .replace(IMAGE_SRCSET, "")
     .trim();
 }
