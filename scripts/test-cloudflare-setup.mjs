@@ -167,7 +167,7 @@ async function run(m) {
     assert.equal(await m.validSetupGrant(e, "x".repeat(43)), false);
     assert.equal((await m.domainRow(e, "example.org")).status, "active");
     const keys = await (await m.adminKeysResponse(withKey)).json();
-    assert.deepEqual(keys.cloudflare, { connected: true, hint: `…${TOKEN.slice(-4)}`, accountId: ACCOUNT, worker: "ltm-email-service" });
+    assert.deepEqual(keys.cloudflare, { connected: true, source: "stored", hint: `…${TOKEN.slice(-4)}`, accountId: ACCOUNT, worker: "ltm-email-service" });
     assert.ok(!JSON.stringify(keys).includes(TOKEN), "Admin → Keys never shows the token");
 
     // Repeating setup (passkey not created yet) keeps the domain; once a passkey exists it is closed.

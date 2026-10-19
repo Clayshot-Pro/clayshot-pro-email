@@ -56,4 +56,6 @@ interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   PROVIDER_CREDENTIAL_KEY?: string;
+  // The GitHub Actions deploy's Cloudflare connection (v3.22): JSON { token, accountId, scriptName }.
+  CLOUDFLARE_DEPLOY_CONNECTION?: string;
 }
