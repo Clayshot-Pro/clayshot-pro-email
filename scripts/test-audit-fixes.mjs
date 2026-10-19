@@ -244,6 +244,30 @@ async function run(m) {
     assert.deepEqual(db.prepare("SELECT id FROM messages WHERE is_read = 1 AND direction = 'inbound' ORDER BY id").all().map(row => row.id), ["m1", "m2"]);
   }
   {
+    // Search terms are literal text: "_" and "%" are not LIKE wildcards, in mail and in drafts.
+    const db = database();
+    const insert = db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, body_text)
+      VALUES (?, 'native:work', ?, 'inbound', 'a@example.net', '[]', ?, '', '2026-10-01T00:00:00Z', 'x')`);
+    for (const [id, subject] of [["s1", "Lunch"], ["s2", "50% off today"], ["s3", "snake_case names"], ["s4", "C:\\path"]]) {
+      db.prepare("INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES (?, 'native:work', '2026-10-01T00:00:00Z')").run(`t-${id}`);
+      insert.run(id, `t-${id}`, subject);
+    }
+    const draft = db.prepare("INSERT INTO drafts (id, mailbox_id, subject, body_text, to_addresses) VALUES (?, 'native:work', ?, '', '[]')");
+    for (const [id, subject] of [["d1", "Plan"], ["d2", "Save 50% now"], ["d3", "under_score"]]) draft.run(id, subject);
+    const env = { DB: d1(db) };
+    const found = async (q, folder = "inbox") => {
+      const response = await m.listMessages(new Request(`https://mail.example.org/api/messages?accountId=native:work&folder=${folder}&q=${encodeURIComponent(q)}`), env);
+      return (await response.json()).messages.map(message => message.subject).sort();
+    };
+    assert.deepEqual(await found("_"), ["snake_case names"], "_ matches an underscore only");
+    assert.deepEqual(await found("%"), ["50% off today"], "% matches a percent sign only");
+    assert.deepEqual(await found("50%"), ["50% off today"]);
+    assert.deepEqual(await found("\\"), ["C:\\path"], "a backslash is literal too");
+    assert.deepEqual(await found("lunch"), ["Lunch"]);
+    assert.deepEqual(await found("_", "drafts"), ["under_score"], "drafts search the same way");
+    assert.deepEqual(await found("%", "drafts"), ["Save 50% now"]);
+  }
+  {
     // A conversation of more than 100 messages (CI alerts all referencing one root) shows
     // its newest 100, always including the opened message, within D1's 100 bound parameters.
     const db = database();
@@ -300,7 +324,7 @@ try {
     `export { safeFilename } from "${file("email/receive.ts")}";`,
     `export { nativeProvider } from "${file("providers/native.ts")}";`,
     `export { bulkMailAction } from "${file("api/mailActions.ts")}";`,
-    `export { getMessage } from "${file("api/mail.ts")}";`,
+    `export { getMessage, listMessages } from "${file("api/mail.ts")}";`,
     `export { saveDraft } from "${file("api/drafts.ts")}";`,
     `export { rfcMessageId } from "${file("transports/types.ts")}";`,
     `export { ResendTransport } from "${file("transports/resend.ts")}";`,

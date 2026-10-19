@@ -2,6 +2,7 @@ import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutati
 import { transportChoice, transportFor } from "../transports";
 import { TransportError } from "../transports/types";
 import { textToHtml } from "../email/textHtml";
+import { likeContains } from "../sql";
 
 export type NativeMessageRow = {
   id: string;
@@ -74,8 +75,8 @@ class NativeMailProvider implements MailProvider {
     const bindings: Array<string | number> = [this.accountId];
     where = `mailbox_id = ? AND (${where})`;
     if (options.search) {
-      where += " AND (LOWER(subject) LIKE ? OR LOWER(from_address) LIKE ? OR LOWER(COALESCE(from_name, '')) LIKE ? OR LOWER(preview) LIKE ?)";
-      const term = `%${options.search.toLowerCase().slice(0, 200)}%`;
+      where += " AND (LOWER(subject) LIKE ? ESCAPE '\\' OR LOWER(from_address) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(from_name, '')) LIKE ? ESCAPE '\\' OR LOWER(preview) LIKE ? ESCAPE '\\')";
+      const term = likeContains(options.search.toLowerCase().slice(0, 200));
       bindings.push(term, term, term, term);
     }
     bindings.push(Math.max(1, Math.min(100, Math.floor(options.limit))));
