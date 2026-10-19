@@ -212,4 +212,4 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 ## v3.25: username and domain sign-in
 
-- The sign-in form takes a username and the domain from a list of the instance's active domains (main domain first; one domain is shown without a list). The last domain used is remembered on that browser, and a full address still works. `GET /api/instance` lists the active domains for it.
+- The sign-in form and Add inbox take a username, with the domain picked from a list on the right of the same field of the instance's active domains (main domain first; one domain is shown without a list). The last domain used is remembered on that browser, and a full address still works. `GET /api/instance` lists the active domains for it.
