@@ -1,6 +1,6 @@
 # v3.00 roadmap — self-hostable, multi-domain, customizable
 
-> **Design record.** The v3 plan as written before implementation. Everything here shipped in v3.00–v3.04 and has since evolved (instance settings in D1, keys in Admin → Keys, one-page setup with a Cloudflare token). Current behaviour: [README](../../README.md) and [implementation status](./V3_IMPLEMENTATION_STATUS.md).
+> **Design record.** The v3 plan as written before implementation. Everything here shipped in v3.00–v3.04 and has since evolved (instance settings in D1, keys in Admin → Keys, one-page setup with a Cloudflare token). Current behaviour: [README](../../../README.md) and [changelog](../../CHANGELOG.md).
 
 **Starting checkpoint:** `main` at v2.07 (`13c0421`). **Development line:** `v3.00` and following `v3.0x` version branches. **Production:** `main`, deployed by GitHub Actions (`.github/workflows/deploy.yml`).
 
@@ -20,7 +20,7 @@
 | 2 | Admin model across domains | **Global:** one administrator account manages every domain and mailbox. | [MULTI_DOMAIN.md](./MULTI_DOMAIN.md#administrator-model) |
 | 3 | Should Resend replace Cloudflare sending by default? | **No.** Cloudflare stays the default; Resend is opt-in per domain. | [OUTBOUND_TRANSPORTS.md](./OUTBOUND_TRANSPORTS.md) |
 | 4 | Who controls themes/branding? | **Administrator lock:** the admin sets branding and decides which appearance options users may change. | [CUSTOMIZATION.md](./CUSTOMIZATION.md#administrator-lock) |
-| 5 | Secrets and `.env` | `.env` is the source of truth; secret values are still **uploaded as Worker secrets** by a script, never written into `wrangler.jsonc` or the bundle. | [CONFIG_UNIFICATION.md](./CONFIG_UNIFICATION.md#why-secrets-stay-worker-secrets) |
+| 5 | Secrets and `.env` | `.env` is the source of truth; secret values are still **uploaded as Worker secrets** by a script, never written into `wrangler.jsonc` or the bundle. | [CONFIG_UNIFICATION.md](./CONFIG_UNIFICATION.md#3-why-secrets-stay-worker-secrets) |
 
 ## Phases
 
@@ -34,7 +34,6 @@
 
 Supporting documents:
 
-- [Self-hosting summary](./SELF_HOSTING.md) — the current model in brief; the steps are in the README.
 - [Licensing change](./LICENSING.md) — options and a draft of the new terms.
 
 ### Sequencing

@@ -67,4 +67,4 @@ run("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--remote"]);
 console.log(`
 Setup complete. Next:
   npm run deploy:self
-Then follow docs/v3/SELF_HOSTING.md: custom domain, Email Routing catch-all, first sign-in.`);
+Then open the Worker URL (add a custom domain first if wanted) and complete first-run setup; see README -> First-run setup.`);

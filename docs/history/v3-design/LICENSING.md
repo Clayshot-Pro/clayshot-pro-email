@@ -1,8 +1,8 @@
 # Licensing change for v3
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Option B applied to [`LICENSE`](../../LICENSE) on `v3.05`: free self-hosting for personal and internal organizational use (including commercial), credit required, no redistribution, no hosting for others (paid or free), no paid services. **This is not legal advice.**
+**Document status:** Option B applied to [`LICENSE`](../../../LICENSE) on `v3.05`: free self-hosting for personal and internal organizational use (including commercial), credit required, no redistribution, no hosting for others (paid or free), no paid services. **This is not legal advice.**
 
 ## Decision
 
@@ -42,7 +42,7 @@ Product impact (tracked in [CUSTOMIZATION.md](./CUSTOMIZATION.md#attribution-cre
 
 ### Open questions for the owner
 
-1. **GitHub forks:** GitHub's Terms of Service let users fork public repositories on GitHub. The licence can't override that, but it can say forks are only for receiving updates and must not be used to publish modifications. Recommend that self-hosters clone into a private repo instead (as [SELF_HOSTING.md](./SELF_HOSTING.md) does).
+1. **GitHub forks:** GitHub's Terms of Service let users fork public repositories on GitHub. The licence can't override that, but it can say forks are only for receiving updates and must not be used to publish modifications. (Applied later: section 1A of the LICENSE allows an unmodified public fork used only to run and update your own instance, and the README recommends that setup.)
 2. **Contributions:** if you ever accept pull requests, add a short clause that contributions are licensed to you under terms that let you keep the project's licence.
 
 ## Option A — standard licence: PolyForm Internal Use 1.0.0

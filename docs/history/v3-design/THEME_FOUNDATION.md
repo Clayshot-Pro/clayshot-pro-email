@@ -1,8 +1,8 @@
 # v3.03 — Theme foundation (CSS tokenization)
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Implemented on `v3.03` (rules kept in place rather than moved, proven equivalent by a static check). See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Independent of v3.01–v3.02; can be developed in parallel. Required by [v3.04 customization](./CUSTOMIZATION.md).
+**Document status:** Implemented on `v3.03` (rules kept in place rather than moved, proven equivalent by a static check). See [changelog](../../CHANGELOG.md). Independent of v3.01–v3.02; can be developed in parallel. Required by [v3.04 customization](./CUSTOMIZATION.md).
 
 ## Goal
 

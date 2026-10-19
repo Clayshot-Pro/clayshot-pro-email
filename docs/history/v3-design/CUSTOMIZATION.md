@@ -1,8 +1,8 @@
 # v3.04 — Branding, themes and icons
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Implemented on `v3.04` (icon sets shipped as outline, bold outline and duotone; logos uploaded as PNG). **v3.05:** `BRANDING_SOURCE` is gone (branding is D1-only), and the admin can set a theme per domain that mailboxes on it use. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.00](./CONFIG_UNIFICATION.md) (config + `/api/instance`) and [v3.03](./THEME_FOUNDATION.md) (tokens).
+**Document status:** Implemented on `v3.04` (icon sets shipped as outline, bold outline and duotone; logos uploaded as PNG). **v3.05:** `BRANDING_SOURCE` is gone (branding is D1-only), and the admin can set a theme per domain that mailboxes on it use. See [changelog](../../CHANGELOG.md). Depends on [v3.00](./CONFIG_UNIFICATION.md) (config + `/api/instance`) and [v3.03](./THEME_FOUNDATION.md) (tokens).
 
 ## Scope
 

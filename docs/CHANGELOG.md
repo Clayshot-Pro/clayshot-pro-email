@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.20 are released; production (`main`) runs v3.20, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.20 are released; production (`main`) runs v3.20, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../README.md); upgrade notes: [UPGRADING.md](./UPGRADING.md).
 
 ## Branches
 

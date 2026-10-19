@@ -150,12 +150,12 @@ migrations/            D1 migrations (applied by deploys and by the app)
 wrangler.jsonc         Worker config, also the Deploy button's source (no account IDs)
 config/                Deploy key schema; env.example is generated from it
 scripts/               Setup, deploy guards and tests
-docs/                  Upgrade notes, design records, security notes
+docs/                  Sign-in, changelog, upgrade notes; docs/history/ holds design records
 ```
 
 </details>
 
-More: [updates](./docs/UPGRADING.md) · [hostnames and passkeys](./docs/DEPLOYMENT_DOMAINS.md) · [admin sign-in](./docs/multi-mailbox/ADMIN_MFA.md) · [v3 status](./docs/v3/V3_IMPLEMENTATION_STATUS.md) · [security](./SECURITY.md)
+More: [updates](./docs/UPGRADING.md) · [sign-in, addresses and passkeys](./docs/SIGN_IN.md) · [changelog](./docs/CHANGELOG.md) · [security](./SECURITY.md)
 
 ## License
 

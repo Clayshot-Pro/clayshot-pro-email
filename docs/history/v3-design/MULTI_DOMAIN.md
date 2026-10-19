@@ -1,8 +1,8 @@
 # v3.01 — Multi-domain mailboxes
 
-> **Design record.** Written before implementation; the code, the [README](../../README.md) and the [implementation status](./V3_IMPLEMENTATION_STATUS.md) describe current behaviour.
+> **Design record.** Written before implementation; the code, the [README](../../../README.md) and the [changelog](../../CHANGELOG.md) describe current behaviour.
 
-**Document status:** Implemented on `v3.01`. **v3.05:** `MAIL_DOMAINS` and `ADMIN_ADDRESS` are gone; the primary domain comes from first-run setup (or the existing primary mailbox on upgrade), and the admin signs in as `admin@<app hostname>`. Domains also carry a theme. See [implementation status](./V3_IMPLEMENTATION_STATUS.md). Depends on [v3.00 config unification](./CONFIG_UNIFICATION.md).
+**Document status:** Implemented on `v3.01`. **v3.05:** `MAIL_DOMAINS` and `ADMIN_ADDRESS` are gone; the primary domain comes from first-run setup (or the existing primary mailbox on upgrade), and the admin signs in as `admin@<app hostname>`. Domains also carry a theme. See [changelog](../../CHANGELOG.md). Depends on [v3.00 config unification](./CONFIG_UNIFICATION.md).
 
 ## Goal
 
