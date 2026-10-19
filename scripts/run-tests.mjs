@@ -7,6 +7,7 @@ const TESTS = [
   "test-config-render",
   "test-deploy-target",
   "test-version",
+  "test-unit-core",
   "test-stored-keys",
   "test-cloudflare-setup",
   "test-all-inboxes",
