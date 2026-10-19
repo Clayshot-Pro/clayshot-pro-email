@@ -44,6 +44,14 @@ export async function run() {
         await page.goto(`${worker.origin}/#admin`);
         await page.reload();
         await page.waitForSelector("#new-mailbox-address");
+        // Keys status: the encryption key is set, so push keys exist and nothing essential is missing.
+        await page.locator("#admin-keys .key-summary-ok").waitFor({ timeout: 20_000 });
+        assert.equal(await page.locator(".admin-keys-notice").count(), 0, "no setup warning when the keys are set up");
+        const chip = label => page.locator("#admin-keys .key-row", { hasText: label }).locator(".key-chip");
+        assert.match(await chip("Encryption key").innerText(), /set up/i);
+        assert.match(await chip("Push notification keys").innerText(), /set up/i);
+        assert.match(await chip("Resend API key").innerText(), /not set/i);
+        assert.equal(await page.locator("#admin-keys .key-chip-missing").count(), 0);
         await page.fill("#new-mailbox-address", "alice");
         await page.fill("#new-mailbox-name", "Alice");
         await page.getByRole("button", { name: "Create mailbox" }).click();

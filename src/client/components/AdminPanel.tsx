@@ -5,6 +5,7 @@ import { SuppressionManager } from "./SuppressionManager";
 import { BrandingManager } from "./BrandingManager";
 import { MailSettingsManager } from "./MailSettingsManager";
 import { KeysManager } from "./KeysManager";
+import type { KeyCheck } from "../keyStatus";
 import { PoweredBy } from "./PoweredBy";
 import { AdminSecurityLog } from "./AdminSecurityLog";
 import { adminActionFetch } from "../adminActions";
@@ -25,6 +26,7 @@ export function AdminPanel() {
   const [busy, setBusy] = useState(false);
   const [domainVersion, setDomainVersion] = useState(0);
   const [appVersion, setAppVersion] = useState<AppVersion | null>(null);
+  const [missingKeys, setMissingKeys] = useState<KeyCheck[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/version", { cache: "no-store" })
@@ -183,12 +185,24 @@ export function AdminPanel() {
           </section>
         )}
 
+        {configured && missingKeys.length > 0 && (
+          <section className="admin-keys-notice" role="alert" aria-label="Setup incomplete">
+            <strong>Setup incomplete</strong>
+            <span>{missingKeys.map(item => `${item.label}: ${item.impact}`).join(" ")}</span>
+            <a href="#admin-keys">Fix in Keys</a>
+          </section>
+        )}
+
         <nav className="admin-home-nav" aria-label="Administrator sections">
           {configured && <a href="#admin-domains">Domains</a>}
           {configured && <a href="#admin-mailboxes">Mailboxes</a>}
           {configured && <a href="#admin-mail-settings">Mail</a>}
           {configured && <a href="#admin-suppressions">Deliverability</a>}
-          {configured && <a href="#admin-keys">Keys</a>}
+          {configured && (
+            <a href="#admin-keys" className={missingKeys.length ? "admin-nav-attention" : undefined}>
+              Keys{missingKeys.length > 0 && <span className="admin-nav-dot" aria-label={`${missingKeys.length} missing`} />}
+            </a>
+          )}
           {configured && <a href="#admin-branding">Branding</a>}
           <a href="#admin-security">Security</a>
           <a href="#admin-audit">Activity</a>
@@ -199,7 +213,7 @@ export function AdminPanel() {
         {configured && <MailboxManager key={domainVersion} onChanged={() => undefined} />}
         {configured && <MailSettingsManager />}
         {configured && <SuppressionManager />}
-        {configured && <KeysManager />}
+        {configured && <KeysManager onStatus={setMissingKeys} />}
         {configured && <BrandingManager />}
         {configured === true && passwordSection}
         {configured === true && <AdminSecurityLog />}

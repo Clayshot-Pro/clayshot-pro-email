@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import "../admin-domains.css";
 import type { EditableKey, KeySource } from "../../worker/storedKeys";
 import { adminActionFetch } from "../adminActions";
 import { CloudflareTokenHelp } from "./CloudflareSetup";
+import { keyChecklist, keySummary, type KeyCheck } from "../keyStatus";
 
 type KeyStatus = { name: string; source: KeySource; hint: string };
 type CloudflareStatus = { connected: boolean; hint?: string; accountId?: string; worker?: string };
@@ -21,8 +23,20 @@ const SOURCE: Record<KeySource, string> = {
   none: "Not set",
 };
 
+/** The row title with its status chip. */
+function KeyTitle({ item }: { item: KeyCheck }) {
+  return (
+    <div className="key-row-title">
+      <strong>{item.label}</strong>
+      <span className={`key-chip key-chip-${item.state}`}>
+        <span aria-hidden="true">{item.state === "ok" ? "✓" : item.state === "missing" ? "!" : "–"}</span> {item.chip}
+      </span>
+    </div>
+  );
+}
+
 /** Integration keys stored encrypted in D1. Values are write-only. */
-export function KeysManager() {
+export function KeysManager({ onStatus }: { onStatus?: (missing: KeyCheck[]) => void }) {
   const [data, setData] = useState<KeysResponse | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -35,6 +49,11 @@ export function KeysManager() {
     setData(body);
   }, []);
   useEffect(() => { load().catch(error => setNotice(error instanceof Error ? error.message : "Could not load")); }, [load]);
+  const checks = data ? keyChecklist(data) : [];
+  const byId = new Map(checks.map(item => [item.id, item]));
+  const summary = keySummary(checks);
+  const missingIds = summary.missing.map(item => item.id).join(",");
+  useEffect(() => { if (data) onStatus?.(summary.missing); }, [data, missingIds]);
 
   async function mutate(name: string, method: "PUT" | "DELETE", success: string) {
     setBusy(true); setNotice(null);
@@ -100,13 +119,13 @@ export function KeysManager() {
       </div>
       {!data ? <p className="admin-inline-state" role="status">{notice ?? "Loading keys…"}</p> : (
         <>
-          {!data.encryption && (
-            <p className="admin-inline-state" role="alert">
-              Stored keys and push notifications need the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. The GitHub Actions
-              deploy creates it (run <strong>Deploy production</strong> again), and so does connecting Cloudflare below. Keep a copy:
-              changing it makes stored keys unreadable.
-            </p>
-          )}
+          <div className={`key-summary key-summary-${summary.tone}`} role={summary.tone === "missing" ? "alert" : "status"}>
+            <span className="key-summary-icon" aria-hidden="true">{summary.tone === "ok" ? "✓" : "!"}</span>
+            <div>
+              <strong>{summary.title}</strong>
+              {summary.missing.map(item => <small key={item.id}>{item.label}: {item.impact}</small>)}
+            </div>
+          </div>
           {generatedKey && (
             <div className="setup-key" role="status">
               <label htmlFor="generated-key">New encryption key</label>
@@ -115,9 +134,15 @@ export function KeysManager() {
             </div>
           )}
           <ul className="admin-dns-report">
-            {data.encryption && (
-              <li>
-                <strong>Encryption key</strong>
+            <li className={`key-row key-${byId.get("encryption")!.state}`}>
+              <KeyTitle item={byId.get("encryption")!} />
+              {!data.encryption ? (
+                <small>
+                  Stored keys and push notifications need the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. The GitHub Actions
+                  deploy creates it (run <strong>Deploy production</strong> again), and so does connecting Cloudflare below. Keep a copy:
+                  changing it makes stored keys unreadable.
+                </small>
+              ) : (<>
                 <small>Set as the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. Keep a copy in your password manager: without it, stored keys cannot be recovered.</small>
                 {backupKey ? (
                   <div className="setup-key" role="status">
@@ -130,10 +155,18 @@ export function KeysManager() {
                     <button type="button" className="auth-secondary" disabled={busy} onClick={() => void showEncryptionKey()}>Back up encryption key</button>
                   </div>
                 )}
-              </li>
-            )}
-            <li>
-              <strong>Cloudflare</strong>
+              </>)}
+            </li>
+            <li className={`key-row key-${byId.get("push")!.state}`}>
+              <KeyTitle item={byId.get("push")!} />
+              <small>
+                {data.push.source === "none"
+                  ? byId.get("push")!.impact
+                  : `${data.push.source === "worker" ? SOURCE.worker : "Created and stored automatically"} · ${data.push.hint}`}
+              </small>
+            </li>
+            <li className={`key-row key-${byId.get("cloudflare")!.state}`}>
+              <KeyTitle item={byId.get("cloudflare")!} />
               <small>
                 {data.cloudflare?.connected
                   ? `Connected · token ${data.cloudflare.hint ?? ""} · Worker ${data.cloudflare.worker ?? ""}. Used to set up mail domains.`
@@ -163,8 +196,8 @@ export function KeysManager() {
               const meta = LABELS[name];
               const editable = data.encryption && key.source !== "worker";
               return (
-                <li key={name}>
-                  <strong>{meta.label}</strong>
+                <li key={name} className={`key-row key-${byId.get(name)!.state}`}>
+                  <KeyTitle item={byId.get(name)!} />
                   <small>{SOURCE[key.source]}{key.hint ? ` · ${key.hint}` : ""} · {meta.help}</small>
                   {key.source === "worker" && <small>Delete it under Worker → Settings → Variables &amp; Secrets to manage it here; its value is kept.</small>}
                   {editable && (
@@ -189,14 +222,6 @@ export function KeysManager() {
                 </li>
               );
             })}
-            <li>
-              <strong>Push notification keys</strong>
-              <small>
-                {data.push.source === "none"
-                  ? "Created automatically once encryption is available."
-                  : `${data.push.source === "worker" ? SOURCE.worker : "Created and stored automatically"} · ${data.push.hint}`}
-              </small>
-            </li>
           </ul>
           {notice && <p className="admin-inline-state" role="status">{notice}</p>}
         </>
