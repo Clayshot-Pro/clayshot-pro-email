@@ -81,3 +81,56 @@
 .branding-logo .auth-secondary { width: auto; min-width: 0; flex: 0 0 auto; padding-inline: 14px; }
 .branding-logo label.auth-secondary { display: inline-flex; align-items: center; cursor: pointer; }
 .admin-domain-add .auth-secondary { width: auto; flex: 0 0 auto; padding-inline: 16px; }
+
+/* v3.21: Keys setup status. Green set up, red missing, grey optional. */
+.key-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.key-summary > div { display: grid; gap: 3px; min-width: 0; }
+.key-summary strong { font-size: 13px; }
+.key-summary small { color: var(--muted); overflow-wrap: anywhere; }
+.key-summary-icon {
+  flex: 0 0 22px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--ui-cta-ink);
+  font-weight: 800;
+}
+.key-summary-ok { border-color: color-mix(in srgb, var(--color-success) 55%, transparent); background: color-mix(in srgb, var(--color-success) 9%, transparent); }
+.key-summary-ok .key-summary-icon { background: var(--color-success); }
+.key-summary-missing { border-color: var(--ui-error-border); background: var(--ui-error-bg); }
+.key-summary-missing strong { color: var(--ui-error-text); }
+.key-summary-missing .key-summary-icon { background: var(--ui-error-text); }
+.admin-dns-report li.key-row { border-left-width: 4px; }
+.admin-dns-report li.key-ok { border-left-color: var(--color-success); }
+.admin-dns-report li.key-missing { border-color: var(--ui-error-border); border-left-color: var(--ui-error-text); background: color-mix(in srgb, var(--ui-error-bg) 55%, transparent); }
+.admin-dns-report li.key-optional { border-left-color: var(--line-strong, var(--line)); }
+.key-row-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.key-row-title strong { min-width: 0; overflow-wrap: anywhere; }
+.key-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.key-chip-ok { border-color: color-mix(in srgb, var(--color-success) 55%, transparent); background: color-mix(in srgb, var(--color-success) 14%, transparent); color: var(--color-success); }
+.key-chip-missing { border-color: var(--ui-error-border); background: var(--ui-error-bg); color: var(--ui-error-text); }
+.key-chip-optional { border-color: var(--line); color: var(--muted); }
