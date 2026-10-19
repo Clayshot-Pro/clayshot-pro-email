@@ -15,7 +15,6 @@ import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleN
 import { getAccountAvatar } from "./api/accountAvatar";
 import { getConnectedAccounts } from "./api/accounts";
 import { previewAttachment } from "./api/attachments";
-import { getContactAvatar } from "./api/contactAvatar";
 import { deleteDraft, getDraft, saveDraft } from "./api/drafts";
 import { healthResponse } from "./api/health";
 import { downloadAttachment, getMessage, listMessages, patchMessage } from "./api/mail";
@@ -152,7 +151,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/auth/register/verify" && request.method === "POST") return verifyRegistration(request, env);
   if (url.pathname === "/api/auth/login/options" && request.method === "POST") return authenticationOptions(request, env);
   if (url.pathname === "/api/auth/login/verify" && request.method === "POST") return verifyAuthentication(request, env);
-  if (url.pathname === "/api/auth/logout" && request.method === "POST") return logout(request, env);
   if (url.pathname === "/api/accounts/gmail/callback" && request.method === "GET") return googleOAuthCallback(request, env);
   if (url.pathname === "/api/accounts/gmail/connect" && request.method === "POST") return startGoogleOAuth(request, env);
 
@@ -270,8 +268,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
 
   // Authorization must use the mailbox the handler actually operates on.
   // Previously POST /api/send and /api/drafts could authorize query accountId
-  // but act on a different body accountId. Contact photo reads require the
-  // same per-device account grant as the rest of the Gmail API.
+  // but act on a different body accountId.
   if (protectedAccountPath(url.pathname)) {
     const target = await requestedMailAccount(request, url);
     if (target.error) return jsonError(target.error, 400);
@@ -295,7 +292,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     if (!sessionId) return jsonError("Invalid session id", 400);
     return revokeSession(request, env, sessionId);
   }
-  if (url.pathname === "/api/contact-avatar" && request.method === "GET") return getContactAvatar(request, env);
 
   const accountRoute = url.pathname.match(/^\/api\/accounts\/([^/]+)$/);
   if (accountRoute && request.method === "DELETE") {

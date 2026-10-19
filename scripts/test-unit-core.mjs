@@ -17,6 +17,7 @@ export * from "./src/worker/email/textHtml.ts";
 export * from "./src/worker/providers/crypto.ts";
 export { sanitizeEmailHtml } from "./src/worker/email/html.ts";
 export { adminMailboxAddressFor } from "./src/worker/mailboxIds.ts";
+export { GOOGLE_SCOPE, hasRequiredGoogleScopes } from "./src/worker/providers/googleConfig.ts";
 export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE } from "./src/client/appModel.ts";`,
       resolveDir: root, loader: "ts" },
     bundle: true, format: "esm", platform: "neutral", external: ["node:*"], outfile: join(out, "unit.mjs"), logLevel: "error",
@@ -33,6 +34,12 @@ export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE
   assert.equal(m.secretMatches("s3cret", "s3cret"), true);
   assert.equal(m.secretMatches("s3cret", ["s3cret"]), false, "only strings are compared");
   assert.equal(m.secretMatches("s3cret", "S3CRET"), false);
+
+  // Gmail asks only for what it uses: mail and the account photo, never contacts.
+  assert.doesNotMatch(m.GOOGLE_SCOPE, /contacts/);
+  assert.equal(m.hasRequiredGoogleScopes("https://www.googleapis.com/auth/gmail.modify"), true);
+  assert.equal(m.hasRequiredGoogleScopes(`${m.GOOGLE_SCOPE} https://www.googleapis.com/auth/contacts.readonly`), true, "older grants keep working");
+  assert.equal(m.hasRequiredGoogleScopes("https://www.googleapis.com/auth/userinfo.profile"), false);
 
   // Plain text becomes inert HTML.
   assert.equal(m.escapeHtml(`<a href="x" onclick='y'>&</a>`), "&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;&lt;/a&gt;");

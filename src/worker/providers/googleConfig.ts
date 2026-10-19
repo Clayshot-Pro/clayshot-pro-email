@@ -2,8 +2,7 @@ export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 const GOOGLE_PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
-const GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
-export const GOOGLE_SCOPE = [GMAIL_SCOPE, GOOGLE_PROFILE_SCOPE, GOOGLE_CONTACTS_SCOPE].join(" ");
+export const GOOGLE_SCOPE = [GMAIL_SCOPE, GOOGLE_PROFILE_SCOPE].join(" ");
 
 type ConfiguredGoogleEnv = Env & {
   GOOGLE_CLIENT_ID: string;
@@ -30,5 +29,5 @@ function hasGoogleScope(scope: string, required: string): boolean {
 }
 
 export function hasRequiredGoogleScopes(scope: string): boolean {
-  return hasGoogleScope(scope, GMAIL_SCOPE) && hasGoogleScope(scope, GOOGLE_CONTACTS_SCOPE);
+  return hasGoogleScope(scope, GMAIL_SCOPE);
 }

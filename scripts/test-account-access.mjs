@@ -35,7 +35,6 @@ for(const input of [sent(allowed,allowed),draft(allowed,allowed)]) {
 }
 const read=new URL("/api/messages/one?accountId="+encodeURIComponent(allowed),destination);
 assert.deepEqual(await requestedMailAccount(new Request(read),read),{accountId:allowed});
-assert.equal(protectedAccountPath("/api/contact-avatar"),true,"Gmail contacts must be account-gated");
 assert.equal(protectedAccountPath("/api/messages/bulk"),true,
   "bulk actions must pass through per-device account authorization");
 assert.equal(protectedAccountPath("/api/messages/one"),true,

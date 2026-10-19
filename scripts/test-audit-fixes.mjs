@@ -267,8 +267,6 @@ async function run(m) {
   assert.match(send, /existing\.state === "accepted"\) \{[\s\S]{0,200}DELETE FROM drafts/, "a retried, already accepted send removes its draft");
   // Drafts are bounded per mailbox.
   assert.match(source("worker/api/drafts.ts"), /MAX_DRAFTS_PER_MAILBOX = 200/);
-  // Contact photos never send the Google token to a redirect target.
-  assert.match(source("worker/api/contactAvatar.ts"), /redirect: "manual"/);
 
   console.log("PASS: review fixes (rate limits, body limits, linear HTML, outbound checks, Message-IDs, drafts, conversation actions, unread counts)");
 }
