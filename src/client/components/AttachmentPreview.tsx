@@ -1,9 +1,12 @@
 import { useEffect } from "react";
-import { formatBytes } from "../mailUtils";
+import { attachmentUrls, formatBytes } from "../mailUtils";
 import { Icon } from "./Icon";
 
 type Attachment = {
   id: string;
+  partId?: string;
+  /** The message the attachment belongs to. */
+  messageId: string;
   filename: string;
   contentType: string;
   size: number;
@@ -36,8 +39,7 @@ export function AttachmentPreview({ attachment, accountId, onClose }: Attachment
 
   if (!attachment) return null;
 
-  const previewUrl = `/api/attachment-previews/${encodeURIComponent(attachment.id)}?accountId=${encodeURIComponent(accountId)}`;
-  const downloadUrl = `/api/attachments/${encodeURIComponent(attachment.id)}?accountId=${encodeURIComponent(accountId)}`;
+  const { preview: previewUrl, download: downloadUrl } = attachmentUrls(accountId, attachment.messageId, attachment);
   const image = canPreviewImage(attachment.contentType);
   const pdf = attachment.contentType === "application/pdf";
 

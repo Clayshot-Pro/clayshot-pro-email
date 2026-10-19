@@ -4,7 +4,7 @@ import { buildSafeEmailDocument, remoteImageCount } from "../emailHtml";
 import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 import { applyNativeColors, classifyEmail, emailBaseStyles, fitEmailWidth, parseColor, type EmailMode, type EmailTheme } from "../emailTheme";
 import type { MessageDetail } from "../mailTypes";
-import { formatBytes, formatFullDate, senderLabel } from "../mailUtils";
+import { attachmentUrls, formatBytes, formatFullDate, senderLabel } from "../mailUtils";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { Icon } from "./Icon";
 import { SenderAvatar } from "./SenderAvatar";
@@ -127,7 +127,7 @@ function RichEmailBody({ html, remoteImages }: { html: string; remoteImages: boo
 }
 
 export function MessageReader({ message, thread, folderLabel, loading = false, accountId, onBack, onReply, onForward, onPatch, canPermanentlyDelete, onPermanentDelete, onBlockSender }: MessageReaderProps) {
-  const [previewAttachment, setPreviewAttachment] = useState<MessageDetail["attachments"][number] | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<(MessageDetail["attachments"][number] & { messageId: string }) | null>(null);
   const [unsubscribeOpen, setUnsubscribeOpen] = useState(false);
   const imagesMode = useRemoteImagesMode();
   // "Show images" for one message when remote images are set to ask first.
@@ -252,14 +252,14 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
                 </div>
                 <div className="attachment-grid">
                   {item.attachments.map((attachment) => {
-                    const previewHref = `/api/attachment-previews/${encodeURIComponent(attachment.id)}?accountId=${encodeURIComponent(accountId)}`;
+                    const previewHref = attachmentUrls(accountId, item.id, attachment).preview;
                     const isImage = ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(attachment.contentType);
                     return (
                       <button
                         key={attachment.id}
                         className={`attachment-card ${isImage ? "image-attachment" : ""}`}
                         type="button"
-                        onClick={() => setPreviewAttachment(attachment)}
+                        onClick={() => setPreviewAttachment({ ...attachment, messageId: item.id })}
                       >
                         {isImage ? <img src={previewHref} alt="" loading="lazy"/> : <span className="attachment-card-icon"><Icon name="paperclip" size={17}/></span>}
                         <span className="attachment-card-copy"><strong>{attachment.filename}</strong><small>{formatBytes(attachment.size)}</small></span>

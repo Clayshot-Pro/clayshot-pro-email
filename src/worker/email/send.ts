@@ -263,7 +263,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
           return Response.json({ error: "Attachments must total less than 4 MB" }, { status: 400 });
         }
         for (const attachment of target.attachments) {
-          const file = await gmailAttachment(env, provider.accountId, target.id, attachment.id);
+          const file = await gmailAttachment(env, provider.accountId, target.id, attachment.id, attachment.partId);
           inheritedUploads.push({ filename: file.filename, type: file.contentType, content: file.data.slice().buffer });
         }
       } catch {

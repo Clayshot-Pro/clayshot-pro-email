@@ -323,10 +323,11 @@ export async function downloadAttachment(request: Request, id: string, env: Env)
   if (!provider) return Response.json({ error: "Account not found or unavailable" }, { status: 404 });
 
   if (provider.kind === "gmail") {
-    const messageId = new URL(request.url).searchParams.get("messageId")?.trim();
+    const query = new URL(request.url).searchParams;
+    const messageId = query.get("messageId")?.trim();
     if (!messageId) return Response.json({ error: "Message id is required" }, { status: 400 });
     try {
-      const attachment = await gmailAttachment(env, provider.accountId, messageId, id);
+      const attachment = await gmailAttachment(env, provider.accountId, messageId, id, query.get("partId"));
       const inline = INLINE_DOWNLOAD_TYPES.has(attachment.contentType);
       return new Response(attachment.data, {
         headers: {
