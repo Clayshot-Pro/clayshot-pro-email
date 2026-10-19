@@ -15,6 +15,7 @@ const TESTS = [
   "test-stored-keys",
   "test-key-status",
   "test-cloudflare-setup",
+  "test-cloudflare-token",
   "test-all-inboxes",
   "test-admin-mailbox",
   "test-blocked-senders",

@@ -17,8 +17,12 @@ You need a Cloudflare account with your mail domain on Cloudflare DNS, and a dev
 ### 1. Fork and deploy
 
 1. **Fork** this repository on GitHub (keep the name and the `main` branch), then open the fork's **Actions** tab and enable workflows.
-2. In Cloudflare, create an API token from the *Edit Cloudflare Workers* template and add **D1: Edit**. So the app can set up your mail domains with the same token, also add **Zone: Read**, **Zone Settings: Edit**, **DNS: Edit**, **Email Routing Rules: Edit** and **Email Sending: Edit**. Copy your **Account ID** (Workers & Pages → Account details).
-3. In the fork: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Forks do not copy secrets, so this is always needed.
+2. Create **one Cloudflare API token**. It deploys the app and lets the app set up your mail domains, so you never need a second one. [Open the token form with the permissions selected](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_r2%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone_settings%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=*&zoneId=all&name=Mail+app), then add the two Cloudflare can't pre-select (**Email Sending: Edit** and **Email Routing Rules: Edit**) and create it. The full list:
+   - Account: **Workers Scripts: Edit**, **D1: Edit**, **Workers R2 Storage: Edit**, **Account Settings: Read**, **Email Sending: Edit**
+   - Zone (all zones, or your mail domains): **Zone: Read**, **Zone Settings: Edit**, **DNS: Edit**, **Email Routing Rules: Edit**
+
+   Copy your **Account ID** too (Workers & Pages → Account details).
+3. In the fork: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_ACCOUNT_ID` and the token as `CLOUDFLARE_API_TOKEN`. Forks do not copy secrets, so this is always needed.
 4. **Actions → Deploy production → Run workflow.** The first run creates the D1 database, the R2 bucket and the encryption key (`PROVIDER_CREDENTIAL_KEY`), and hands the deploy token to the app, so **Admin → Keys** shows Cloudflare as connected; the run summary shows the app's address. After that, every push to `main` deploys.
 5. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address ([details](./docs/SIGN_IN.md#app-address-and-passkeys)).
 
@@ -42,8 +46,8 @@ npm run setup && npm run deploy:self
 ```text
 Deploy LTM Email Service (https://github.com/LiamTheMo/LTM-Email-Service) to my
 Cloudflare account from my fork of it. Ask me for my Cloudflare account ID and a
-deploy API token (Workers Scripts, D1 and Workers R2 Storage: Edit; Account
-Settings: Read) through a secret input; never print, commit or pass them as
+Cloudflare API token (the one-token permission list in the README) through a
+secret input; never print, commit or pass them as
 arguments. Run npm ci, copy config/env.example to .env, add both values, then run
 npm run setup and npm run deploy:self -- --yes. Give me the URL; I will finish
 setup in the browser.
@@ -57,7 +61,7 @@ Open the app and fill in one page:
 
 1. **Mail domain**, for example `example.com`. This creates `admin@example.com`, your mailbox and admin sign-in.
 2. **Admin password** (4–32 characters).
-3. **Cloudflare API token**, to prove you own this Cloudflare account. Paste the token you added as `CLOUDFLARE_API_TOKEN`, or use **Create a Cloudflare token**, add **Email Sending: Edit** and **Email Routing Rules: Edit**, then create and paste the token.
+3. **Cloudflare API token**, to prove you own this Cloudflare account: paste the same token you saved as `CLOUDFLARE_API_TOKEN`. The app stores it encrypted in D1 and uses it for your domains.
 
 **Continue** sets up mail routing, sending and DMARC for your domain. Then tap **Create administrator passkey** and you're in.
 
@@ -74,7 +78,7 @@ After that, sign in as `admin@<your domain>` with your password and passkey ([ho
 
 To finish setup without pasting a token, set an `AUTH_SETUP_TOKEN` Worker secret and choose **Use the setup secret instead**.
 
-On a GitHub Actions deploy the app still has the deploy token: if it has the domain permissions from step 1.2, **Admin → Domains** wires your domains (**Add domain**, or **Set up in Cloudflare** / **Re-check Cloudflare setup** on one already listed). With no Cloudflare token at all (a Deploy button or computer deploy, and none connected in **Admin → Keys**), set up each domain in Cloudflare yourself:
+On a GitHub Actions deploy the app still has the deploy token: if it has the permissions from step 1.2, **Admin → Domains** wires your domains (**Add domain**, or **Set up in Cloudflare** / **Re-check Cloudflare setup** on one already listed). With no Cloudflare token at all (a Deploy button or computer deploy, and none connected in **Admin → Keys**), set up each domain in Cloudflare yourself:
 
 1. Turn on **Email Routing**, and set the **catch-all** rule to **Send to a Worker** → this Worker.
 2. Onboard the domain for **Email Sending**.

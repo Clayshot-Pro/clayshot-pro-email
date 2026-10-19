@@ -9,7 +9,8 @@ Deploys apply migrations, and the app applies any still pending on its first req
 
 ## v3.25
 
-- Sign-in asks for a username and a domain. Saved passwords with the full address keep working. Nothing to do.
+- Sign-in asks for a username and a domain. Saved passwords with the full address keep working.
+- One Cloudflare token does everything. If your `CLOUDFLARE_API_TOKEN` was made for deploys only, add **Email Sending: Edit**, **Zone: Read**, **Zone Settings: Edit**, **DNS: Edit** and **Email Routing Rules: Edit** to it in Cloudflare (README, step 1.2) so the app can set up domains with it; nothing else to do.
 
 ## v3.24
 
