@@ -1,7 +1,7 @@
 {
   "name": "ltm-email-service",
   "private": true,
-  "version": "3.16.0",
+  "version": "3.17.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/config-render.mjs && vite dev",
