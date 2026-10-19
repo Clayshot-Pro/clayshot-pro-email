@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. Migrations never remove columns or tables that older versions read, so an older v3 version keeps working on a newer database (some migrations also normalise stored data). What changed in each version: [CHANGELOG.md](./CHANGELOG.md).
 
+## v3.25
+
+- Sign-in asks for a username and a domain. Saved passwords with the full address keep working. Nothing to do.
+
 ## v3.24
 
 - Gmail accounts connected before keep working. New Gmail connections ask only for mail and profile access (no contacts). Nothing else to do.

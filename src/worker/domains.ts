@@ -45,6 +45,13 @@ export async function primaryDomain(env: Env, fresh = false): Promise<string | n
   return domain;
 }
 
+/** Domains people sign in with: active ones, the main domain first. */
+export async function signInDomains(env: Env): Promise<string[]> {
+  const rows = await env.DB.prepare(`SELECT domain FROM domains WHERE status = 'active' OR is_primary = 1
+    ORDER BY is_primary DESC, domain`).all<{ domain: string }>().catch(() => null);
+  return rows?.results.map(row => row.domain.toLowerCase()) ?? [];
+}
+
 /**
  * An install is established once it holds data or an owner passkey. Migration
  * 0010 seeds native:primary with a placeholder address, so a fresh install

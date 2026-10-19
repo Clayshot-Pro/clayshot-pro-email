@@ -137,12 +137,49 @@ export async function run() {
         assert.deepEqual(inbox.json.messages.map(m => m.subject).sort(), ["Plus address", "Quarterly report"]);
       }],
 
+      ["the sign-in form takes a name and offers every active domain", async () => {
+        const visitor = await contextWithPasskey(browser);
+        try {
+          const { page } = visitor;
+          state.page = page;
+          // A second active domain, as an instance serving two would report it.
+          await page.route("**/api/instance", async route => {
+            const response = await route.fetch();
+            const json = await response.json();
+            await route.fulfill({ response, json: { ...json, domains: [DOMAIN, "second.test"] } });
+          });
+          const posted = [];
+          await page.route("**/api/device/login", async route => {
+            posted.push(JSON.parse(route.request().postData()).email);
+            await route.continue();
+          });
+          await page.goto(worker.origin);
+          const picker = page.locator("select.signin-domain");
+          await picker.waitFor({ timeout: 15_000 });
+          assert.deepEqual(await picker.locator("option").allInnerTexts(), [`@${DOMAIN}`, "@second.test"]);
+          assert.equal(await picker.inputValue(), DOMAIN, "the main domain is chosen first");
+          await page.fill("#device-email", "Nobody");
+          await picker.selectOption("second.test");
+          await page.fill("#device-password", "wrong-password");
+          await page.locator("button.signin-submit").click();
+          await page.locator(".auth-error").waitFor({ timeout: 15_000 });
+          assert.deepEqual(posted, ["Nobody@second.test"]);
+          // A full address is used as typed, and the picker steps aside.
+          await page.fill("#device-email", `nobody@${DOMAIN}`);
+          assert.equal(await picker.count(), 0);
+        } finally {
+          await visitor.context.close();
+        }
+      }],
+
       ["alice signs in with her mailbox password and reads the message safely", async () => {
         alice = await contextWithPasskey(browser);
         state.page = alice.page;
         const { page } = alice;
         await page.goto(worker.origin);
-        await page.fill("#device-email", `alice@${DOMAIN}`);
+        // One domain: the form shows it after the name, so the name is enough.
+        await page.locator(".signin-domain-fixed").filter({ hasText: `@${DOMAIN}` }).waitFor({ timeout: 15_000 });
+        await page.fill("#device-email", "alice");
         await page.fill("#device-password", state.alicePassword);
         await page.locator("button.signin-submit").click();
         await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });

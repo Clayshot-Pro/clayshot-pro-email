@@ -3,16 +3,34 @@ import { unlockOwnerPasskey } from "./adminPasskey";
 import { useInstance } from "./instance";
 import { isAdminLoginEmail } from "./adminIdentity";
 
+const DOMAIN_KEY = "ltm.signin.domain";
+
+function rememberedDomain(): string | null {
+  try { return localStorage.getItem(DOMAIN_KEY); } catch { return null; }
+}
+
+function rememberDomain(domain: string): void {
+  try { localStorage.setItem(DOMAIN_KEY, domain); } catch { /* private mode: nothing to keep */ }
+}
+
 export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: () => void; showGoogle?: boolean }) {
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [chosenDomain, setChosenDomain] = useState(rememberedDomain);
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState<"google" | "custom" | null>(null);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const { primaryDomain, domains: instanceDomains } = useInstance();
+  // Type the name and pick the domain; a full address (typed, pasted or
+  // filled in by a password manager) is used as it is.
+  const domains = instanceDomains?.length ? instanceDomains : primaryDomain ? [primaryDomain] : [];
+  const domain = chosenDomain && domains.includes(chosenDomain) ? chosenDomain : domains[0] ?? "";
+  const typed = name.trim();
+  const fullAddress = typed.includes("@") || !domain;
+  const email = fullAddress ? typed : `${typed}@${domain}`;
   // Client routing only: any admin@ address goes to the administrator
   // password + passkey flow. The Worker authenticates the exact identity.
   const isAdmin = isAdminLoginEmail(email);
-  const { primaryDomain } = useInstance();
 
   async function addGoogle() {
     setPending("google"); setError("");
@@ -38,6 +56,7 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
       const result = await response.json() as {error?:string;passkeyRequired?:boolean};
       if (!response.ok) throw new Error(result.error || "Email sign-in failed");
       setPassword("");
+      if (!fullAddress) rememberDomain(domain);
       if (result.passkeyRequired) {
         // A separate, server-bound passkey challenge completes the second factor.
         await unlockOwnerPasskey();
@@ -67,20 +86,32 @@ export function AccountSignIn({ onSignedIn, showGoogle = true }: { onSignedIn: (
         <p>Enter the credentials for your mailbox.</p>
       </div>
       <div className="signin-field">
-        <label htmlFor="device-email">Email address</label>
-        <input
-          id="device-email"
-          type="email"
-          inputMode="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder={primaryDomain ? `name@${primaryDomain}` : "name@example.com"}
-          autoComplete="username"
-          autoCapitalize="none"
-          spellCheck={false}
-          required
-          maxLength={254}
-        />
+        <label htmlFor="device-email">{domain ? "Username" : "Email address"}</label>
+        <div className="signin-address-field">
+          <input
+            id="device-email"
+            type="text"
+            inputMode="email"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={domain ? "name" : "name@example.com"}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            maxLength={254}
+          />
+          {fullAddress ? null : domains.length > 1 ? (
+            <select
+              className="signin-domain"
+              aria-label="Domain"
+              value={domain}
+              onChange={(event) => setChosenDomain(event.target.value)}
+            >
+              {domains.map((option) => <option key={option} value={option}>@{option}</option>)}
+            </select>
+          ) : <span className="signin-domain signin-domain-fixed">@{domain}</span>}
+        </div>
       </div>
       <div className="signin-field">
         <label htmlFor="device-password">Password</label>
