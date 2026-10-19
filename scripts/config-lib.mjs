@@ -45,13 +45,68 @@ export function assertNoSecrets(text, values) {
   }
 }
 
-async function cloudflare(path, values) {
+/** One account-scoped Cloudflare API call: { status, success, result, errors }; status 0 when unreachable. */
+async function cloudflareCall(path, values, { method = "GET", body } = {}) {
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(values.CLOUDFLARE_ACCOUNT_ID)}${path}`, {
-    headers: { Authorization: `Bearer ${values.CLOUDFLARE_API_TOKEN}`, Accept: "application/json" },
+    method,
+    headers: {
+      Authorization: `Bearer ${values.CLOUDFLARE_API_TOKEN}`, Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   }).catch(() => null);
-  if (!response?.ok) return null;
+  if (!response) return { status: 0, success: false, result: null, errors: [] };
   const payload = await response.json().catch(() => null);
-  return payload?.success ? payload.result : null;
+  return { status: response.status, success: Boolean(response.ok && payload?.success), result: payload?.result ?? null, errors: payload?.errors ?? [] };
+}
+
+async function cloudflare(path, values) {
+  const call = await cloudflareCall(path, values);
+  return call.success ? call.result : null;
+}
+
+const describe = call => call.status === 0 ? "Cloudflare could not be reached"
+  : `HTTP ${call.status}${call.errors[0]?.message ? `: ${call.errors[0].message}` : ""}`;
+
+/**
+ * Whether the Worker is already deployed in the account: true, false (it is
+ * not), or null when that cannot be told (no permission, network error).
+ */
+export async function workerExists(values) {
+  const call = await cloudflareCall(`/workers/scripts/${encodeURIComponent(values.WORKER_NAME)}/settings`, values);
+  if (call.success) return true;
+  if (call.status === 404 || call.errors.some(error => error?.code === 10007)) return false;
+  return null;
+}
+
+/**
+ * First deploy of a new instance (a fresh fork): create the D1 database and
+ * the R2 bucket named in the config when they do not exist yet. Only called
+ * when the Worker itself does not exist, so an existing instance is never
+ * pointed at a new, empty database. Returns the database ID.
+ */
+export async function provisionFirstDeploy(values, log = console.log) {
+  let databaseId = await databaseIdByName(values);
+  if (!databaseId) {
+    const created = await cloudflareCall("/d1/database", values, { method: "POST", body: { name: values.D1_DATABASE_NAME } });
+    databaseId = created.success ? created.result?.uuid ?? created.result?.id ?? null : null;
+    if (!databaseId) {
+      throw new Error(`Could not create the D1 database "${values.D1_DATABASE_NAME}" (${describe(created)}). The API token needs D1: Edit.`);
+    }
+    log(`First deploy: created the D1 database "${values.D1_DATABASE_NAME}".`);
+  }
+  const bucket = await cloudflareCall(`/r2/buckets/${encodeURIComponent(values.R2_BUCKET_NAME)}`, values);
+  if (!bucket.success) {
+    if (bucket.status !== 404) {
+      throw new Error(`Could not check the R2 bucket "${values.R2_BUCKET_NAME}" (${describe(bucket)}). The API token needs Workers R2 Storage: Edit, and R2 must be enabled in the Cloudflare dashboard.`);
+    }
+    const created = await cloudflareCall("/r2/buckets", values, { method: "POST", body: { name: values.R2_BUCKET_NAME } });
+    if (!created.success) {
+      throw new Error(`Could not create the R2 bucket "${values.R2_BUCKET_NAME}" (${describe(created)}). The API token needs Workers R2 Storage: Edit, and R2 must be enabled in the Cloudflare dashboard.`);
+    }
+    log(`First deploy: created the R2 bucket "${values.R2_BUCKET_NAME}".`);
+  }
+  return databaseId;
 }
 
 /** LTM production path: resolve D1 from the currently deployed Worker binding. */

@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.14 are released; production (`main`) runs v3.14, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.15 are released; production (`main`) runs v3.15, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -21,6 +21,7 @@
 | `v3.12` | Easier setup: Deploy to Cloudflare button, in-app migrations, one-page setup with a Cloudflare token, automatic domain wiring (migration 0023) |
 | `v3.13` | Forks: deploy a GitHub fork with Cloudflare and update with Sync fork; app version and update notice; licence allows unmodified forks |
 | `v3.14` | End-to-end and unit tests; fixes from a security and bug review; real outbound Message-IDs (migration 0024) |
+| `v3.15` | Simpler fork deploys: the first GitHub Actions deploy creates the D1 database and R2 bucket; missing secrets are named |
 
 ## Decisions applied in v3.05
 
@@ -131,6 +132,13 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Requires manual validation:** Gmail reply and forward with an attachment, the junk verdict on real Cloudflare-delivered mail, the Message-ID of mail sent through Resend (needs its webhook), and that the Cloudflare binding's `messageId` is the header recipients see.
 - **Known limits (low):** a late autosave from a second tab can recreate a Gmail draft after sending; text typed while Send waits for a draft save is not sent; signing a device out does not revoke its Gmail token (removing the account does).
 - **Kept by decision:** mailbox passwords stay 4–32 characters; Google sign-in stays open to any Google account.
+
+## v3.15: simpler fork deploys
+
+- **First deploy provisions:** when the Worker does not exist yet in the account, the GitHub Actions deploy creates the D1 database and R2 bucket by name (`provisionFirstDeploy` in `scripts/config-lib.mjs`). An existing Worker resolves its own database as before, and a failed lookup still stops the deploy, so an instance is never pointed at a new, empty database.
+- **Clear failures:** a first workflow step names missing or malformed `CLOUDFLARE_*` secrets; R2 and D1 errors say which permission or dashboard step is missing. The run summary shows the workers.dev address.
+- **Fork steps:** fork → enable Actions → token (*Edit Cloudflare Workers* + D1: Edit) → two repository secrets → run **Deploy production**.
+- **Requires manual validation:** a first deploy into a fresh Cloudflare account.
 
 ## Production rollout (LTM instance)
 
