@@ -1,4 +1,5 @@
 import { adminPasswordConfigured, pendingAdminHash, consumePendingAdmin, clearPendingCookie } from "./adminAuth";
+import { revokeAllMailAlerts } from "./push";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -403,9 +404,11 @@ export async function verifyAuthentication(request: Request, env: Env): Promise<
 export async function logout(request: Request, env: Env): Promise<Response> {
   const token = readOwnerSessionToken(request);
   if (token) {
-    await env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?")
-      .bind(await sha256Hex(token))
-      .run();
+    const hash = await sha256Hex(token);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(hash),
+      revokeAllMailAlerts(env, { only: hash }),
+    ]);
   }
 
   return new Response(JSON.stringify({ ok: true }), {
@@ -443,9 +446,10 @@ export async function resetSessions(request: Request, env: Env): Promise<Respons
   if (!token) return unauthorizedResponse();
 
   const current = await sha256Hex(token);
-  await env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash != ?")
-    .bind(current)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash != ?").bind(current),
+    revokeAllMailAlerts(env, { except: current }),
+  ]);
   return Response.json({ ok: true });
 }
 
@@ -458,6 +462,9 @@ export async function revokeSession(
   if (!token) return unauthorizedResponse();
 
   const current = await sha256Hex(token);
+  const ended = await env.DB.prepare("SELECT token_hash FROM auth_sessions WHERE session_id = ? AND token_hash != ?")
+    .bind(sessionId, current).first<{ token_hash: string }>();
+  if (ended) await revokeAllMailAlerts(env, { only: ended.token_hash }).run();
   const result = await env.DB.prepare(
     "DELETE FROM auth_sessions WHERE session_id = ? AND token_hash != ?",
   )

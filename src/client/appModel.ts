@@ -18,8 +18,15 @@ const NOTIFICATION_DISABLED_STATES = new Set<NotificationState>([
   "working",
   "blocked",
   "unsupported",
+  "install",
   "unconfigured",
 ]);
+
+/** iPhone and iPad allow web push only for an app added to the Home Screen. */
+export function needsHomeScreenInstall(nav: Navigator & { standalone?: boolean }, standalone: boolean): boolean {
+  const ios = /iPhone|iPad|iPod/.test(nav.userAgent) || (/Macintosh/.test(nav.userAgent) && nav.maxTouchPoints > 1);
+  return ios && !standalone && nav.standalone !== true;
+}
 
 export const FOLDERS: FolderDefinition[] = [
   { key: "inbox", label: "Inbox", icon: "inbox" },
