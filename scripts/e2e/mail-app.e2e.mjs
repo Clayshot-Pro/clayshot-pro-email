@@ -117,9 +117,50 @@ export async function run() {
         assert.equal(results.goodTarget, "_blank", "safe links open in a new tab");
         assert.equal(results.forms, 0);
         assert.equal(results.iframes, 0);
-        assert.ok(!results.tracker || !/^https?:/i.test(results.tracker), "remote images (trackers) are not loaded");
+        assert.ok(!results.tracker || results.tracker.startsWith(`${worker.origin}/api/image-proxy?url=`),
+          "remote images (trackers) never load from the sender's server, only through the app's proxy");
         assert.doesNotMatch(results.sandbox, /allow-scripts/);
         assert.deepEqual(alice.errors, [], "no page errors");
+      }],
+
+      ["embedded images show from the mail; remote images load through the image proxy", async () => {
+        const { page } = alice;
+        state.page = page;
+        const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+        const delivered = await deliver(worker.origin, { from: "Shop <news@shop.test>", to: `alice@${DOMAIN}`, subject: "Order with pictures",
+          text: "Your order", html: '<p>Your order</p><img id="logo" src="cid:logo@shop.test" width="40"><img id="banner" src="https://images.shop.test/banner.png" width="200">',
+          attachments: [{ name: "logo.png", type: "image/png", content: png, contentId: "logo@shop.test" }, { name: "receipt.csv", type: "text/csv", content: "a,b\n1,2\n" }] });
+        assert.equal(delivered.status, 200, delivered.body);
+        const openOrder = async () => {
+          await page.reload();
+          await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
+          await page.locator(".mail-row").filter({ hasText: "Order with pictures" }).first().click();
+          const frame = page.frameLocator(".rich-email-frame");
+          await frame.locator("#logo").waitFor({ timeout: 15_000 });
+          return frame;
+        };
+        const frame = await openOrder();
+        await page.waitForFunction(() => {
+          const logo = document.querySelector(".rich-email-frame")?.contentDocument?.querySelector("#logo");
+          return logo?.complete && logo.naturalWidth > 0;
+        }, null, { timeout: 15_000 });
+        const banner = await frame.locator("#banner").getAttribute("src");
+        assert.equal(banner, `${worker.origin}/api/image-proxy?url=${encodeURIComponent("https://images.shop.test/banner.png")}`, "remote images go through the proxy");
+        const listed = await page.locator(".reader-attachments .attachment-card").allInnerTexts();
+        assert.ok(listed.some(text => text.includes("receipt.csv")) && !listed.some(text => text.includes("logo.png")), "the embedded logo is not listed as an attachment");
+
+        // "Ask first": remote images stay hidden until Show images; embedded ones still show.
+        await page.evaluate(() => localStorage.setItem("ltm.remoteImages", "ask"));
+        const asked = await openOrder();
+        assert.equal(await asked.locator("#banner").getAttribute("src"), null, "hidden until asked");
+        await page.getByRole("button", { name: "Show images" }).click();
+        await page.waitForFunction(() => document.querySelector(".rich-email-frame")?.contentDocument?.querySelector("#banner")?.getAttribute("src")?.includes("/api/image-proxy?url="),
+          null, { timeout: 15_000 });
+        await page.evaluate(() => localStorage.removeItem("ltm.remoteImages"));
+
+        // The proxy is for signed-in readers only.
+        const anonymous = await fetch(`${worker.origin}/api/image-proxy?url=${encodeURIComponent("https://images.shop.test/banner.png")}`);
+        assert.equal(anonymous.status, 401);
       }],
 
       ["attachments download as attachments with safe headers", async () => {

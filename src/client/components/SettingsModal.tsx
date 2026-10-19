@@ -3,6 +3,7 @@ import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
 import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
 import { BlockedSenders } from "./BlockedSenders";
+import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 
 type Props = {
   open: boolean;
@@ -129,6 +130,8 @@ export function SettingsModal(props: Props) {
             </div>
           </section>
 
+          <RemoteImagesSetting />
+
           <BlockedSenders accounts={props.accounts} preferredAccountId={props.activeAccountId} />
 
           <section className="settings-section">
@@ -198,5 +201,28 @@ export function SettingsModal(props: Props) {
         </div>
       </section>
     </div>
+  );
+}
+
+/** Remote images: loaded privately through the app, or hidden until "Show images". */
+function RemoteImagesSetting() {
+  const mode = useRemoteImagesMode();
+  return (
+    <section className="settings-section">
+      <h3>Images in mail</h3>
+      <div className="settings-row">
+        <div>
+          <strong>Remote images</strong>
+          <small>
+            {mode === "show"
+              ? "Shown automatically. They load through this app, so senders never see your IP address, but can tell the email was opened."
+              : "Hidden until you choose Show images in an email. Embedded images always show."}
+          </small>
+        </div>
+        <button type="button" onClick={() => setRemoteImagesMode(mode === "show" ? "ask" : "show")}>
+          {mode === "show" ? "Ask first" : "Show automatically"}
+        </button>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { messageUnsubscribeUrl } from "../../worker/email/unsubscribe";
-import { buildSafeEmailDocument } from "../emailHtml";
+import { buildSafeEmailDocument, remoteImageCount } from "../emailHtml";
+import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 import { applyNativeColors, classifyEmail, emailBaseStyles, fitEmailWidth, parseColor, type EmailMode, type EmailTheme } from "../emailTheme";
 import type { MessageDetail } from "../mailTypes";
 import { formatBytes, formatFullDate, senderLabel } from "../mailUtils";
@@ -57,14 +58,14 @@ function readerTheme(shell: HTMLElement): EmailTheme {
  * The frame stays hidden until it is adapted, and its height follows the
  * content as the reader resizes or images load.
  */
-function RichEmailBody({ html }: { html: string }) {
+function RichEmailBody({ html, remoteImages }: { html: string; remoteImages: boolean }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const [mode, setMode] = useState<EmailMode | null>(null);
   // Native colours are written into the document, so a theme change re-renders it.
   const [themeVersion, setThemeVersion] = useState(0);
-  const srcDoc = useMemo(() => buildSafeEmailDocument(html), [html]);
+  const srcDoc = useMemo(() => buildSafeEmailDocument(html, { remoteImages }), [html, remoteImages]);
 
   useEffect(() => () => observerRef.current?.disconnect(), []);
   // Synchronous with the commit, so it always runs before the new document loads.
@@ -128,6 +129,9 @@ function RichEmailBody({ html }: { html: string }) {
 export function MessageReader({ message, thread, folderLabel, loading = false, accountId, onBack, onReply, onForward, onPatch, canPermanentlyDelete, onPermanentDelete, onBlockSender }: MessageReaderProps) {
   const [previewAttachment, setPreviewAttachment] = useState<MessageDetail["attachments"][number] | null>(null);
   const [unsubscribeOpen, setUnsubscribeOpen] = useState(false);
+  const imagesMode = useRemoteImagesMode();
+  // "Show images" for one message when remote images are set to ask first.
+  const [imagesShownFor, setImagesShownFor] = useState<Set<string>>(() => new Set());
   const unsubscribeUrl = useMemo(
     () => message?.unsubscribeUrl || messageUnsubscribeUrl(message?.bodyHtml, message?.bodyText),
     [message?.unsubscribeUrl, message?.bodyHtml, message?.bodyText],
@@ -228,9 +232,16 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
             ) : null}
 
             <div className="message-content">
-              {item.bodyHtml ? <RichEmailBody html={item.bodyHtml}/> : <pre>{item.bodyText || "(No readable text content)"}</pre>}
+              {item.bodyHtml && imagesMode === "ask" && !imagesShownFor.has(item.id) && remoteImageCount(item.bodyHtml) > 0 ? (
+                <div className="remote-images-banner" role="status">
+                  <span>Images in this email are hidden.</span>
+                  <button type="button" onClick={() => setImagesShownFor(current => new Set(current).add(item.id))}>Show images</button>
+                  <button type="button" className="remote-images-always" onClick={() => setRemoteImagesMode("show")}>Always show</button>
+                </div>
+              ) : null}
+              {item.bodyHtml ? <RichEmailBody html={item.bodyHtml} remoteImages={imagesMode === "show" || imagesShownFor.has(item.id)}/> : <pre>{item.bodyText || "(No readable text content)"}</pre>}
               {item.bodyHtmlAvailable ? (
-                <div className="security-note"><Icon name="lock" size={14}/><span>Rich email displayed safely. Links work; remote tracking images stay blocked.</span></div>
+                <div className="security-note"><Icon name="lock" size={14}/><span>Rich email displayed safely. Images load privately through this app, so senders never see your address.</span></div>
               ) : null}
             </div>
 

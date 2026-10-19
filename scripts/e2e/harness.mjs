@@ -100,8 +100,10 @@ export function mime({ from, to, subject, text = "", html, headers = {}, attachm
   if (html) lines.push(`--${alt}`, "Content-Type: text/html; charset=utf-8", "", html);
   lines.push(`--${alt}--`);
   for (const file of attachments) {
+    // contentId: an embedded image the HTML references as cid:<contentId>.
     lines.push(`--${boundary}`, `Content-Type: ${file.type}; name="${file.name}"`, "Content-Transfer-Encoding: base64",
-      `Content-Disposition: attachment; filename="${file.name}"`, "", Buffer.from(file.content).toString("base64"));
+      ...(file.contentId ? [`Content-ID: <${file.contentId}>`, `Content-Disposition: inline; filename="${file.name}"`] : [`Content-Disposition: attachment; filename="${file.name}"`]),
+      "", Buffer.from(file.content).toString("base64"));
   }
   lines.push(`--${boundary}--`, "");
   return { raw: lines.join("\r\n"), messageId: id };

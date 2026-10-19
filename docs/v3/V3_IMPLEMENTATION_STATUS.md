@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.18 are released; production (`main`) runs v3.18, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.19 are released; production (`main`) runs v3.19, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -25,6 +25,7 @@
 | `v3.16` | Fork deploys also provision when the Worker exists without a database (an earlier failed setup); an unreadable Worker names the account and permissions |
 | `v3.17` | New compose icon; mail with squeezed table layouts no longer renders one letter per line |
 | `v3.18` | Reliable phone notifications: re-registration on start, sign-ins renewed while used, high-urgency pushes, Home Screen hint on iPhone; sender and subject in alerts; admin phones alerted for every mailbox (migration 0025) |
+| `v3.19` | Images in mail: embedded images shown, remote images through a private image proxy (or on request), older mail rebuilt once (migration 0026) |
 
 ## Decisions applied in v3.05
 
@@ -157,6 +158,14 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Alert text:** the sender is the title; the body is the subject, then a short preview.
 - **Administrator:** a phone that turns alerts on while signed in as admin gets alerts for every mailbox (the title also names the mailbox) for 30 days, renewed each time the app starts with the admin signed in. Admin passkey sessions stay short (12 hours, 1 hour idle); signing out as admin, signing out other sessions, ending that session or changing the admin password stops it (`push_subscriptions.all_mail_until`, migration 0025).
 - **Requires manual validation:** an iPhone installed from the Home Screen and an Android phone receiving an alert after the update.
+
+## v3.19: images in mail
+
+- **Embedded images (`cid:`)** were stored as attachments but never shown. Attachments now keep their Content-ID; opening a message points the image at `/api/attachment-previews/<id>` (raster types only) and leaves it out of the attachment list.
+- **Remote images** were deleted from the stored HTML. The sanitizer now keeps the address in `data-remote-src`, which never loads by itself. The reader shows it through `GET /api/image-proxy?url=…` (signed-in users only): public http(s) addresses on standard ports, redirects re-checked, images only, 10 MB cap, sandboxing CSP, cached in the reader's browser for a day. Senders see Cloudflare, never the reader's IP address, cookies or browser; they can still tell the email was opened.
+- **Setting:** Settings → Images in mail → Remote images: shown automatically (default) or "Ask first" with **Show images** / **Always show** in the reader. Per device.
+- **Older mail** (`messages.html_version` 1) is rebuilt once from its raw message when opened (up to 10 per conversation per open), which restores remote image addresses and fills in Content-IDs (migration 0026).
+- **Requires manual validation:** newsletters with embedded logos and remote images on a phone.
 
 ## Production rollout (LTM instance)
 
