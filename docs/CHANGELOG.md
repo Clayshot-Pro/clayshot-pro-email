@@ -31,6 +31,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.22` | GitHub Actions deploys hand the deploy token to the app (`CLOUDFLARE_DEPLOY_CONNECTION`), so domain setup works without connecting a token in the app |
 | `v3.23` | Three-line new-mail alerts: sender, subject, preview |
 | `v3.24` | Repository cleanup: unused routes and scripts removed, shared Worker helpers, bug and security fixes, dependency updates, reorganised docs |
+| `v3.25` | Sign in with a username and a domain picked from a list |
 
 ## Decisions applied in v3.05
 
@@ -208,3 +209,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **CSS:** 673 declarations that were always overridden, rules for 17 classes no markup uses and four unread custom properties are gone (the stylesheet bundle drops from 209 kB to 186 kB); rendering is unchanged. `verify-css-equivalence` now compares the declarations that win the cascade, selector by selector.
 - **Dependencies:** `@simplewebauthn/server` 14, `postal-mime` 4.0.11; Node.js 22.12 or later (`engines` in `package.json`); Dependabot targets the current version branch.
 - **Docs:** sign-in docs merged into [SIGN_IN.md](./SIGN_IN.md), the v3 status page became this changelog, design records moved to [history](./history/README.md).
+
+## v3.25: username and domain sign-in
+
+- The sign-in form takes a username and the domain from a list of the instance's active domains (main domain first; one domain is shown without a list). The last domain used is remembered on that browser, and a full address still works. `GET /api/instance` lists the active domains for it.

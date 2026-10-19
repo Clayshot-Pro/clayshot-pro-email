@@ -6,6 +6,8 @@ type InstanceInfo = {
   brandName: string;
   brandShortName: string;
   primaryDomain: string;
+  /** Active mail domains, the main domain first (for the sign-in form). */
+  domains?: string[];
   features: { gmail: boolean };
   /** False on a fresh install until first-run setup chooses the mail domain. */
   initialized?: boolean;

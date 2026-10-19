@@ -175,3 +175,11 @@
 .settings-backdrop {
   z-index: 210;
 }
+
+/* v3.25: sign in with a name and a domain picked from the instance's domains. */
+.signin-address-field { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.signin-address-field input { flex: 1 1 8em; }
+.signin-domain { flex: 0 1 auto; max-width: 60%; min-height: 47px; border-radius: 11px; font: inherit; font-size: .93rem; }
+select.signin-domain { min-width: 0; padding: 0 30px 0 12px; border: 1px solid var(--ui-field-border); background-color: var(--ui-field); color: var(--text); text-overflow: ellipsis; color-scheme: dark; cursor: pointer; }
+select.signin-domain:focus { border-color: var(--ui-focus-border); outline: none; box-shadow: 0 0 0 3px var(--ui-focus-ring); }
+.signin-domain-fixed { display: flex; align-items: center; padding: 0 2px; overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }

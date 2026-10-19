@@ -29,6 +29,9 @@ async function run(m) {
     assert.deepEqual(mailboxes(db), ["native:admin=admin@example.org"], "only admin@ exists after setup");
     assert.equal(await m.primaryDomain(env, true), "example.org");
     assert.match(await m.initializeInstance(env, "other.org"), /already set up/);
+    // The sign-in form lists active domains, the main domain first.
+    db.exec(`INSERT INTO domains (domain, status) VALUES ('zeta.org', 'active'), ('beta.org', 'pending'), ('alpha.org', 'active'), ('off.org', 'disabled')`);
+    assert.deepEqual(await m.signInDomains(env), ["example.org", "alpha.org", "zeta.org"]);
     assert.equal((await m.resolveProvider(env, null))?.accountId, "native:admin", "the default account is admin@");
   }
 
@@ -104,7 +107,7 @@ const out = mkdtempSync(join(tmpdir(), "ltm-admin-mailbox-"));
 try {
   const entry = join(out, "entry.ts");
   const src = new URL("../src/worker/", import.meta.url).pathname;
-  writeFileSync(entry, `export { ensureDomains, initializeInstance, postmasterMailboxId, primaryDomain } from "${src}domains.ts";
+  writeFileSync(entry, `export { ensureDomains, initializeInstance, postmasterMailboxId, primaryDomain, signInDomains } from "${src}domains.ts";
 export { allNativeMailboxes, mailboxForRecipient, purgeNativeMailbox, scheduleNativeMailboxDeletion, updateNativeMailbox, createNativeMailbox } from "${src}mailboxes.ts";
 export { setMailboxPassword } from "${src}deviceAuth.ts";
 export { resolveProvider } from "${src}providers/registry.ts";`);
