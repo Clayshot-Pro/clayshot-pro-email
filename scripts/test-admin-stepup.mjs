@@ -79,4 +79,9 @@ assert.match(manager,/adminActionFetch\(path, method, payload, approval\)/);
 const migration=readFileSync(new URL("../migrations/0015_admin_stepup_audit.sql",import.meta.url),"utf8");
 for (const table of ["admin_stepup_challenges","admin_stepup_approvals","admin_security_events"])
   assert.ok(migration.includes(table));
+// Showing the encryption key needs a fresh passkey approval and is audited.
+assert.equal(adminMutationNeedsStepUp("POST", "/api/admin/encryption-key/backup"), true);
+assert.equal(isApprovedAdminMutation("POST", "/api/admin/encryption-key/backup"), true);
+assert.equal(isApprovedAdminMutation("GET", "/api/admin/encryption-key/backup"), false);
+assert.equal(adminMutationEvent("POST", "/api/admin/encryption-key/backup"), "admin.encryption_key.shown");
 console.log("PASS: passkey action binding, route coverage, one-time approvals and audit migrations");

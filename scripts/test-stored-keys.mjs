@@ -41,7 +41,7 @@ function database() {
 }
 
 async function run(keys) {
-  const { planKeys, validKeyValue, keyHint, withStoredKeys, adminKeysResponse, saveStoredKey, deleteStoredKey } = keys;
+  const { planKeys, validKeyValue, keyHint, withStoredKeys, adminKeysResponse, saveStoredKey, deleteStoredKey, encryptionKeyBackup } = keys;
   const credential = randomBytes(32).toString("base64url");
   const resend = "re_live_ABCDEFGH12345678";
   const put = value => new Request("https://mail.example.com/api/admin/keys/x", { method: "PUT", body: JSON.stringify({ value }) });
@@ -123,5 +123,14 @@ async function run(keys) {
   // The table only accepts known names.
   assert.throws(() => db.prepare("INSERT INTO instance_keys (name, value) VALUES ('AUTH_SETUP_TOKEN', 'x')").run());
 
+  // The encryption key backup (behind a passkey approval) returns the Worker secret, and only a valid one.
+  {
+    const shown = await encryptionKeyBackup(await withStoredKeys({ DB: d1(db), PROVIDER_CREDENTIAL_KEY: credential }));
+    assert.equal(shown.status, 200);
+    assert.equal((await shown.json()).key, credential);
+    assert.equal(shown.headers.get("cache-control"), "no-store");
+    assert.equal((await encryptionKeyBackup({ DB: d1(db) })).status, 404, "no key set");
+    assert.equal((await encryptionKeyBackup({ DB: d1(db), PROVIDER_CREDENTIAL_KEY: "not-a-key" })).status, 404, "an invalid key is not shown");
+  }
   console.log("PASS: stored keys are encrypted, write-only, mirrored from Worker secrets, VAPID generated once");
 }

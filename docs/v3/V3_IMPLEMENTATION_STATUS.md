@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.19 are released; production (`main`) runs v3.19, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.20 are released; production (`main`) runs v3.20, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -26,6 +26,7 @@
 | `v3.17` | New compose icon; mail with squeezed table layouts no longer renders one letter per line |
 | `v3.18` | Reliable phone notifications: re-registration on start, sign-ins renewed while used, high-urgency pushes, Home Screen hint on iPhone; sender and subject in alerts; admin phones alerted for every mailbox (migration 0025) |
 | `v3.19` | Images in mail: embedded images shown, remote images through a private image proxy (or on request), older mail rebuilt once (migration 0026) |
+| `v3.20` | The deploy creates the encryption key (`PROVIDER_CREDENTIAL_KEY`) when missing, so push keys generate on their own; passkey-protected key backup in Admin → Keys |
 
 ## Decisions applied in v3.05
 
@@ -166,6 +167,13 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Setting:** Settings → Images in mail → Remote images: shown automatically (default) or "Ask first" with **Show images** / **Always show** in the reader. Per device.
 - **Older mail** (`messages.html_version` 1) is rebuilt once from its raw message when opened (up to 10 per conversation per open), which restores remote image addresses and fills in Content-IDs (migration 0026).
 - **Requires manual validation:** newsletters with embedded logos and remote images on a phone.
+
+## v3.20: encryption key created automatically
+
+- **Why instances lacked push notifications:** VAPID keys are generated and stored encrypted with `PROVIDER_CREDENTIAL_KEY`, which only setup with a Cloudflare token (or connecting one in Admin → Keys) created. An instance set up with the setup secret had neither.
+- **Deploy:** `npm run deploy` (GitHub Actions) ends with `scripts/ensure-worker-secrets.mjs`, which creates the Worker secret through the Cloudflare API when it is missing, never replacing an existing one. Problems are warnings; a deploy that succeeded never fails on this step. The app then generates its VAPID pair on the next request.
+- **Backup:** Admin → Keys → **Back up encryption key** shows the key after a passkey approval (audited as `admin.encryption_key.shown`).
+- **Requires manual validation:** a fork deploy creating the key, then push notifications on that instance.
 
 ## Production rollout (LTM instance)
 

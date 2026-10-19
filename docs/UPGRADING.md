@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.20
+
+- Instances without `PROVIDER_CREDENTIAL_KEY` get it on the next deploy, and push notifications start working. Back it up: **Admin → Keys → Back up encryption key**.
+
 ## v3.19
 
 - Images in mail now show: embedded images from the message, remote images through the app (privately). Prefer the old behaviour? Settings → Images in mail → **Ask first**.

@@ -229,3 +229,16 @@ export async function deleteStoredKey(env: Env, name: string): Promise<Response>
   generation++;
   return adminKeysResponse(env);
 }
+
+/**
+ * POST /api/admin/encryption-key/backup (administrator step-up): the
+ * PROVIDER_CREDENTIAL_KEY value, for the administrator's password manager. A
+ * key created by a deploy is never shown anywhere else.
+ */
+export async function encryptionKeyBackup(env: Env): Promise<Response> {
+  const key = workerEnv(env).PROVIDER_CREDENTIAL_KEY;
+  if (typeof key !== "string" || !(await credentialEncryptionAvailable(env))) {
+    return Response.json({ error: "No valid encryption key is set." }, { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
+  return Response.json({ key }, { headers: { "Cache-Control": "no-store" } });
+}
