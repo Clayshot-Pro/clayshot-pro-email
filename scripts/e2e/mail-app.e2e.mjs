@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { SETUP_SECRET, api, contextWithPasskey, deliver, launchBrowser, mime, startWorker, steps } from "./harness.mjs";
 
 const DOMAIN = "e2e.test";
+const navItem = (page, name) => page.locator(".desktop-sidebar .nav-item", { hasText: name });
 const ADMIN_PASSWORD = "correct horse";
 
 export async function run() {
@@ -343,6 +344,174 @@ export async function run() {
           const late = await aliceApi("/api/drafts", { method: "POST", body: { accountId: state.aliceId, id: "sent-draft-1", subject: "late" } });
           assert.equal(late.status, 409, "a late save of a sent draft is refused");
           assert.ok(!(await drafts()).includes("late"));
+        }
+      }],
+
+      ["opening unread Junk mail leaves the Inbox badge alone", async () => {
+        const { page } = alice;
+        state.page = page;
+        const aliceApi = api(alice.context, worker.origin);
+        const account = `accountId=${encodeURIComponent(state.aliceId)}`;
+        const inbox = (await aliceApi(`/api/messages?${account}&folder=inbox`)).json.messages.map(m => m.id);
+        assert.equal((await aliceApi(`/api/messages/bulk?${account}`, { method: "POST", body: { ids: inbox, action: "read" } })).status, 200);
+        assert.equal((await aliceApi(`/api/messages?${account}&folder=inbox`)).json.unreadCount, 0);
+        assert.equal((await deliver(worker.origin, { from: "y@partner.test", to: `alice@${DOMAIN}`, subject: "Unread spam", text: "x",
+          headers: { "X-Spam-Flag": "YES" } })).status, 200);
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane");
+        await navItem(page, "Junk").click();
+        await page.locator(".mail-row", { hasText: "Unread spam" }).click();
+        await page.locator(".reader-pane h2", { hasText: "Unread spam" }).waitFor();
+        await page.waitForTimeout(500);
+        assert.equal((await aliceApi(`/api/messages?${account}&folder=inbox`)).json.unreadCount, 0);
+        assert.deepEqual(await navItem(page, "Inbox").locator(".nav-count").allInnerTexts(), [], "no unread badge on an empty Inbox");
+      }],
+
+      ["the list never stays on \"Loading mail…\" after a refresh overlaps a load", async () => {
+        const { page } = alice;
+        const spinner = page.locator(".mail-list-state", { hasText: "Loading mail" });
+        const slowOnce = folder => {
+          let delayed = false;
+          return async route => {
+            if (!delayed && route.request().url().includes(`folder=${folder}`)) {
+              delayed = true;
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            await route.continue().catch(() => undefined);
+          };
+        };
+        // The window regains focus while a folder is loading.
+        const archive = slowOnce("archive");
+        await page.route("**/api/messages?*", archive);
+        try {
+          await navItem(page, "Archive").click();
+          await spinner.waitFor();
+          await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+          await spinner.waitFor({ state: "detached", timeout: 6_000 });
+        } finally {
+          await page.unroute("**/api/messages?*", archive);
+        }
+        // A reader action fails while the list is refreshing.
+        await navItem(page, "Inbox").click();
+        await page.locator(".mail-row").first().click();
+        await page.locator(".reader-pane h2").waitFor();
+        const inbox = slowOnce("inbox");
+        const failPatch = route => route.request().method() === "PATCH"
+          ? route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"unavailable"}' })
+          : route.continue();
+        await page.route("**/api/messages?*", inbox);
+        await page.route("**/api/messages/*", failPatch);
+        try {
+          await page.getByRole("button", { name: "Refresh mailbox" }).first().click();
+          await spinner.waitFor();
+          await page.getByRole("button", { name: "Star message" }).click();
+          await spinner.waitFor({ state: "detached", timeout: 6_000 });
+        } finally {
+          await page.unroute("**/api/messages?*", inbox);
+          await page.unroute("**/api/messages/*", failPatch);
+        }
+      }],
+
+      ["attachments never carry into another message", async () => {
+        const { page } = alice;
+        const chips = () => page.locator(".compose-modal .file-chips").count();
+        const attach = name => page.locator(".compose-modal input[type=file]").setInputFiles({ name, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 x") });
+        const close = async () => {
+          await page.locator(".compose-close").dispatchEvent("click");
+          await page.locator(".compose-modal").waitFor({ state: "detached" });
+        };
+        await page.getByRole("button", { name: "New message" }).first().click();
+        await page.fill(".compose-modal input[placeholder='name@example.com']", "carry@else.test");
+        await attach("first.pdf");
+        await close();
+        // Reopening the saved draft (drafts keep no attachments).
+        await navItem(page, "Drafts").click();
+        await page.locator(".mail-row", { hasText: "carry@else.test" }).click();
+        await page.locator(".compose-modal").waitFor();
+        assert.equal(await chips(), 0, "a reopened draft has no attachments from another message");
+        await attach("second.pdf");
+        await close();
+        await navItem(page, "Inbox").click();
+        await page.locator(".mail-row").first().click();
+        await page.locator(".reader-pane h2").waitFor();
+        await page.locator(".reply-primary").click();
+        await page.locator(".compose-modal").waitFor();
+        assert.equal(await chips(), 0, "a reply starts without attachments");
+        await attach("third.pdf");
+        await close();
+        await page.locator(".reader-reply-bar button", { hasText: "Forward" }).click();
+        await page.locator(".compose-modal").waitFor();
+        assert.equal(await chips(), 0, "a forward starts without attachments");
+        await close();
+      }],
+
+      ["discarding an autosaved draft updates the Drafts count", async () => {
+        const { page } = alice;
+        const aliceApi = api(alice.context, worker.origin);
+        const server = async () => (await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=drafts`)).json.draftCount;
+        const badge = () => navItem(page, "Drafts").locator(".nav-count").allInnerTexts();
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane");
+        const before = await server();
+        await page.waitForFunction(n => [...document.querySelectorAll(".desktop-sidebar .nav-item")]
+          .some(el => el.textContent.includes("Drafts") && (el.querySelector(".nav-count")?.textContent ?? "") === (n ? String(n) : "")), before);
+        await page.getByRole("button", { name: "New message" }).first().click();
+        await page.fill(".compose-modal input[placeholder='What’s this about?']", "Throwaway");
+        await page.locator(".compose-from", { hasText: "Draft saved" }).waitFor({ timeout: 10_000 });
+        await page.locator(".compose-discard").dispatchEvent("click");
+        await page.locator(".compose-modal").waitFor({ state: "detached" });
+        await page.waitForTimeout(800);
+        assert.equal(await server(), before);
+        assert.deepEqual(await badge(), before ? [String(before)] : [], "the badge matches the server");
+      }],
+
+      ["a failed reader action never hides the message after leaving the folder", async () => {
+        const { page } = alice;
+        const failPatch = async route => {
+          if (route.request().method() !== "PATCH") return route.continue();
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          await route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"unavailable"}' });
+        };
+        await page.route("**/api/messages/*", failPatch);
+        try {
+          const row = page.locator(".mail-row").first();
+          const subject = (await row.locator(".mail-row-subject strong").innerText()).trim();
+          await row.click();
+          await page.locator(".reader-pane h2", { hasText: subject }).waitFor();
+          await page.locator(".reader-reply-bar button.destructive").click();
+          await navItem(page, "Archive").click();
+          await page.waitForTimeout(2500);
+          await navItem(page, "Inbox").click();
+          await page.locator(".mail-row", { hasText: subject }).first().waitFor({ timeout: 6_000 });
+        } finally {
+          await page.unroute("**/api/messages/*", failPatch);
+        }
+      }],
+
+      ["compose and settings close buttons work on a laptop-height window", async () => {
+        const { page } = alice;
+        const reachable = selector => page.evaluate(sel => {
+          const box = document.querySelector(sel).getBoundingClientRect();
+          return Boolean(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest(sel));
+        }, selector);
+        try {
+          for (const [width, height, file] of [[1366, 657, false], [1280, 720, true]]) {
+            await page.setViewportSize({ width, height });
+            await page.getByRole("button", { name: "New message" }).first().click();
+            await page.fill(".compose-modal input[placeholder='What’s this about?']", "Laptop");
+            if (file) await page.locator(".compose-modal input[type=file]").setInputFiles({ name: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from("x") });
+            assert.ok(await reachable(".compose-close"), `Close is clickable at ${width}x${height}`);
+            assert.ok(await reachable(".compose-discard"), `Discard is clickable at ${width}x${height}`);
+            await page.locator(".compose-discard").click({ timeout: 3_000 });
+            await page.locator(".compose-modal").waitFor({ state: "detached" });
+          }
+          await page.setViewportSize({ width: 1366, height: 657 });
+          await page.locator(".desktop-sidebar button", { hasText: "Settings" }).click();
+          assert.ok(await reachable(".settings-close"), "Settings close is clickable");
+          await page.locator(".settings-close").click({ timeout: 3_000 });
+          await page.locator(".settings-backdrop").waitFor({ state: "detached" });
+        } finally {
+          await page.setViewportSize({ width: 1280, height: 720 });
         }
       }],
 

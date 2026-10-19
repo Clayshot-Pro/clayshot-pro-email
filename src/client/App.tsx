@@ -205,7 +205,9 @@ export function App() {
           setError(caught instanceof Error ? caught.message : "Could not load mail");
         }
       } finally {
-        if (!silent && requestId === listRequest.current) setLoading(false);
+        // The newest load ends "Loading mail…", silent or not: a silent refresh
+        // that superseded a visible load replaces its result.
+        if (requestId === listRequest.current) setLoading(false);
       }
     },
     [folder, search, activeAccountId, accounts],
@@ -456,7 +458,12 @@ export function App() {
           )
           ? savedSenderId
           : draft.accountId || accountId;
-        setCompose({
+        // An opened draft is already saved: editing it must not count it again.
+        // It may have been closed earlier in this tab (a failed discard): reopen it.
+        persistedDraftIds.current.add(draft.id);
+        closedDraftIds.current.delete(draft.id);
+        // Saved drafts keep no attachments (the drafts table has none).
+        openComposer({
           to: draft.to,
           cc: draft.cc,
           bcc: draft.bcc,
@@ -465,13 +472,7 @@ export function App() {
           replyToMessageId: draft.replyToMessageId,
           forwardMessageId: draft.forwardMessageId,
           draftId: draft.id,
-        });
-        // An opened draft is already saved: editing it must not count it again.
-        // It may have been closed earlier in this tab (a failed discard): reopen it.
-        persistedDraftIds.current.add(draft.id);
-        closedDraftIds.current.delete(draft.id);
-        setComposeAccountId(draftSenderId);
-        setComposeOpen(true);
+        }, draftSenderId);
       } catch {
         setError("Could not open message");
       }
@@ -483,12 +484,15 @@ export function App() {
     setReaderAccountId(accountId);
     const cached = detailCache.current.get(key);
     const wasUnread = Boolean(listItem && !listItem.isRead);
+    // The badge (and the server's newlyReadCount) counts unread inbox mail only.
+    const countedUnread = Boolean(wasUnread && listItem && listItem.direction === "inbound"
+      && !listItem.isArchived && !listItem.isDeleted && !listItem.isJunk);
 
     setError(null);
     if (wasUnread) {
       setMessages((current) => current.map((message) =>
         message.id === id ? { ...message, isRead: true } : message));
-      setUnreadCount((count) => Math.max(0, count - 1));
+      if (countedUnread) setUnreadCount((count) => Math.max(0, count - 1));
     }
 
     if (cached && Date.now() - cached.savedAt < DETAIL_CACHE_MS) {
@@ -535,15 +539,15 @@ export function App() {
       setMessages((current) => current.map((item) =>
         item.id === id || (wholeThread && threadKey(item) === threadKey(listItem))
           ? { ...item, isRead: true } : item));
-      const furtherRead = data.newlyReadCount - (wasUnread ? 1 : 0);
-      if (furtherRead) setUnreadCount((count) => Math.max(0, count - furtherRead));
+      const furtherRead = data.newlyReadCount - (countedUnread ? 1 : 0);
+      if (furtherRead > 0) setUnreadCount((count) => Math.max(0, count - furtherRead));
     } catch {
       if (requestId !== openRequest.current) return;
       setOpeningMessageId(null);
       if (wasUnread) {
         setMessages((current) => current.map((message) =>
           message.id === id ? { ...message, isRead: false } : message));
-        setUnreadCount((count) => count + 1);
+        if (countedUnread) setUnreadCount((count) => count + 1);
       }
       setError("Could not open message");
     }
@@ -640,15 +644,18 @@ export function App() {
         await loadMessages(folder, search, true);
       }
     } catch {
-      if (mailViewRef.current.accountId !== activeAccountId || mailViewRef.current.folder !== folder) return;
+      // Always drop the shields: the change did not happen, wherever the user is now.
       for (const key of shieldKeys) mutationShields.current.delete(key);
+      if (cached) detailCache.current.set(key, cached);
+      else detailCache.current.delete(key);
+      setError("Could not update message");
+      if (mailViewRef.current.accountId !== activeAccountId || mailViewRef.current.folder !== folder) return;
       setMessages(previousMessages);
       setSelected(previousSelected);
       setThread(previousThread);
       setUnreadCount(previousUnreadCount);
-      if (cached) detailCache.current.set(key, cached);
-      else detailCache.current.delete(key);
-      setError("Could not update message");
+      // This change rejected any list load in flight; fetch the list again.
+      void loadMessages(folder, search, true);
     }
   };
 
@@ -826,22 +833,32 @@ export function App() {
     }
   };
 
-  const startCompose = () => {
-    const draftId = crypto.randomUUID();
-    setCompose({ ...EMPTY_COMPOSE, draftId });
-    const sender = defaultSenderId();
+  // Every way into the composer starts clean: attachments, draft status and a
+  // send error belong to the message they were made for, never the next one.
+  const openComposer = (next: ComposeState, sender: string) => {
+    setCompose(next);
     setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
     setFiles([]);
     setDraftStatus(null);
+    setComposeError(null);
     setComposeOpen(true);
+  };
+
+  const startCompose = () => {
+    const draftId = crypto.randomUUID();
+    const sender = defaultSenderId();
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({ ...EMPTY_COMPOSE, draftId }, sender);
   };
 
   const startReply = () => {
     if (!selected) return;
     const target = thread.at(-1) ?? selected;
     const draftId = crypto.randomUUID();
-    setCompose({
+    // Reply from the account that received the message.
+    const sender = readerAccountId ?? activeAccountId;
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({
       ...EMPTY_COMPOSE,
       to: target.direction === "inbound"
         ? target.fromAddress
@@ -849,28 +866,21 @@ export function App() {
       subject: replySubject(target.subject),
       replyToMessageId: target.id,
       draftId,
-    });
-    // Reply from the account that received the message.
-    const sender = readerAccountId ?? activeAccountId;
-    setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
-    setComposeOpen(true);
+    }, sender);
   };
 
   const startForward = () => {
     if (!selected) return;
     const draftId = crypto.randomUUID();
-    setCompose({
+    const sender = readerAccountId ?? activeAccountId;
+    localStorage.setItem(draftSenderKey(draftId), sender);
+    openComposer({
       ...EMPTY_COMPOSE,
       subject: forwardSubject(selected.subject),
       text: forwardedBody(selected),
       forwardMessageId: selected.id,
       draftId,
-    });
-    const sender = readerAccountId ?? activeAccountId;
-    setComposeAccountId(sender);
-    localStorage.setItem(draftSenderKey(draftId), sender);
-    setComposeOpen(true);
+    }, sender);
   };
 
   const changeComposeAccount = (accountId: string) => {
@@ -899,10 +909,12 @@ export function App() {
   const discardCompose = async () => {
     if (compose.draftId) {
       localStorage.removeItem(draftSenderKey(compose.draftId));
+      const wasCounted = persistedDraftIds.current.has(compose.draftId);
       await closeDraft(compose.draftId);
-      await fetch(`/api/drafts/${encodeURIComponent(compose.draftId)}?accountId=${encodeURIComponent(composeAccountId)}`, {
+      const deleted = await fetch(`/api/drafts/${encodeURIComponent(compose.draftId)}?accountId=${encodeURIComponent(composeAccountId)}`, {
         method: "DELETE",
-      }).catch(() => undefined);
+      }).then((response) => response.ok, () => false);
+      if (deleted && wasCounted) setDraftCount((count) => Math.max(0, count - 1));
     }
     setComposeOpen(false);
     setCompose(EMPTY_COMPOSE);
