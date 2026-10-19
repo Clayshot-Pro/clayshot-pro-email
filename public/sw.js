@@ -40,12 +40,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
 
+  // Bring an open app window forward as it is: navigating it would reload the
+  // page (losing an open compose) and rejects for a window this worker does
+  // not control. The app refreshes the mailbox when it regains focus.
   event.waitUntil((async () => {
     const windows = await clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of windows) {
-      if ("focus" in client) {
-        if ("navigate" in client) await client.navigate(target);
-        return client.focus();
+      try {
+        return await client.focus();
+      } catch {
+        // This window cannot be focused; try the next one or open a new one.
       }
     }
     return clients.openWindow(target);

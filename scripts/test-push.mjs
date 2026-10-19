@@ -170,6 +170,40 @@ async function run(m) {
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Linux; Android 15; Pixel 9)"), false), false);
   assert.equal(m.needsHomeScreenInstall(nav("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), false), false, "a desktop Mac");
 
+  // Clicking an alert brings the open app forward without reloading it (an
+  // open compose would be lost), also when the window is not controlled by the
+  // worker (navigate() rejects then); with no window open it opens the app.
+  {
+    const vm = await import("node:vm");
+    const click = async windows => {
+      const listeners = {};
+      const calls = [];
+      const clients = {
+        matchAll: async () => windows.map(w => ({
+          url: w.url,
+          focus: async () => { calls.push(`focus ${w.url}`); return w; },
+          navigate: async target => {
+            calls.push(`navigate ${w.url} -> ${target}`);
+            if (!w.controlled) throw new TypeError("The client is not controlled by this service worker");
+            return w;
+          },
+        })),
+        openWindow: async url => { calls.push(`open ${url}`); },
+      };
+      const self = { location: { origin: "https://mail.example.org" }, registration: {}, addEventListener: (type, fn) => { listeners[type] = fn; } };
+      vm.runInNewContext(source("public/sw.js"), { self, clients, URL, fetch: async () => ({}) });
+      let done;
+      listeners.notificationclick({ notification: { close: () => calls.push("close"), data: { url: "/" } }, waitUntil: p => { done = p; } });
+      await done;
+      return calls;
+    };
+    assert.deepEqual(await click([{ url: "https://mail.example.org/#admin", controlled: true }]),
+      ["close", "focus https://mail.example.org/#admin"], "an open window is focused, not reloaded");
+    assert.deepEqual(await click([{ url: "https://mail.example.org/", controlled: false }]),
+      ["close", "focus https://mail.example.org/"], "an uncontrolled window is focused too");
+    assert.deepEqual(await click([]), ["close", "open https://mail.example.org/"], "with no window open the app opens");
+  }
+
   console.log("PASS: push alerts (sender, subject, preview) reach live sign-ins and the admin phone for all mail; phones stay registered and signed in while used");
 }
 
