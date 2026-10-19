@@ -96,7 +96,8 @@ async function run(m) {
   const mail = { id: "m2", subject: "Lunch on Friday?", fromAddress: "sam@example.net", fromName: "Sam Lee", toAddress: "friend@example.org", preview: "Are you free around noon" };
   assert.deepEqual(m.notificationCopy(mail), { title: "Sam Lee", body: "Lunch on Friday?\nAre you free around noon" });
   assert.deepEqual(m.notificationCopy({ ...mail, fromName: null, preview: "" }), { title: "sam@example.net", body: "Lunch on Friday?" });
-  assert.deepEqual(m.notificationCopy({ ...mail, subject: "" }, true), { title: "Sam Lee → friend@example.org", body: "(no subject)\nAre you free around noon" });
+  assert.deepEqual(m.notificationCopy({ ...mail, subject: "" }), { title: "Sam Lee", body: "(no subject)\nAre you free around noon" },
+    "every alert, administrator ones included, is sender / subject / body");
 
   // The administrator's phone gets every mailbox's mail for 30 days after enabling
   // alerts as admin, even after the short admin session has ended.
