@@ -11,17 +11,32 @@ function isSafeLink(value: string): boolean {
   }
 }
 
-function isSafeImage(value: string): boolean {
-  const trimmed = value.trim().toLowerCase();
-  return trimmed.startsWith("data:image/") || trimmed.startsWith("cid:");
+/** Inline data, an embedded image stored with the mail, or the app's image proxy. */
+function isSafeImage(value: string, origin: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.toLowerCase().startsWith("data:image/")
+    || trimmed.startsWith(`${origin}/api/attachment-previews/`)
+    || trimmed.startsWith(`${origin}/api/image-proxy?`);
 }
+
+/** Remote image addresses the Worker kept in data-remote-src (never loaded directly). */
+export function remoteImageCount(html: string): number {
+  return (html.match(/\bdata-remote-src\s*=/gi) ?? []).length;
+}
+
+export type EmailDocumentOptions = {
+  /** Load remote images through the app's image proxy. */
+  remoteImages?: boolean;
+  origin?: string;
+};
 
 /**
  * Creates an isolated email document. The source HTML has already been cleaned
  * on the worker, but this performs a second browser-side sanitization pass and
  * adds a restrictive CSP before it is handed to the sandboxed iframe.
  */
-export function buildSafeEmailDocument(html: string): string {
+export function buildSafeEmailDocument(html: string, options: EmailDocumentOptions = {}): string {
+  const origin = options.origin ?? location.origin;
   const document = new DOMParser().parseFromString(html, "text/html");
 
   document.querySelectorAll(BLOCKED_ELEMENTS).forEach((element) => element.remove());
@@ -42,8 +57,13 @@ export function buildSafeEmailDocument(html: string): string {
     }
 
     if (element instanceof HTMLImageElement) {
+      const remote = element.getAttribute("data-remote-src")?.trim() ?? "";
+      element.removeAttribute("data-remote-src");
+      if (options.remoteImages && /^https?:\/\//i.test(remote)) {
+        element.setAttribute("src", `${origin}/api/image-proxy?url=${encodeURIComponent(remote)}`);
+      }
       const src = element.getAttribute("src");
-      if (src && !isSafeImage(src)) element.removeAttribute("src");
+      if (src && !isSafeImage(src, origin)) element.removeAttribute("src");
       element.removeAttribute("srcset");
       element.removeAttribute("usemap");
     }
@@ -55,7 +75,7 @@ export function buildSafeEmailDocument(html: string): string {
   document.documentElement.removeAttribute("bgcolor");
   document.body?.removeAttribute("bgcolor");
 
-  const securityHead = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'">
+  const securityHead = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${origin}; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; media-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">`;
   const finalSafetyStyles = `<style>
   html, body { margin: 0 !important; padding: 0 !important; min-width: 0; max-width: 100%; background: transparent !important; }

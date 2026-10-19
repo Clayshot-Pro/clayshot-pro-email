@@ -14,10 +14,14 @@ const DANGEROUS_ATTRIBUTES = new RegExp(`${SEP}(?:srcdoc|formaction|action|ping)
 // Neutralize the scheme itself, whatever the quoting or length of the URL:
 // `href="javascript:..."` becomes `href="blocked:javascript:..."`.
 const DANGEROUS_URL = new RegExp(`(${SEP}(?:href|src|xlink:href)\\s*=\\s*(?:["']\\s*)?)(?=javascript|vbscript|file|data:text\\/html)`, "gi");
-// Each <img …> tag is matched once (matches never overlap), then its remote src is removed inside it.
+// Each <img …> tag is matched once (matches never overlap). A remote src is
+// moved to data-remote-src: it never loads by itself, and the reader shows
+// it through the app's image proxy when remote images are allowed.
 const IMAGE_TAG = /<img\b[^>]*>?/gi;
 // No two unbounded whitespace runs may meet: `\\s*(?=["']?\\s*…)` was quadratic.
-const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=(?:["']\\s*)?https?:)${VALUE}`, "gi");
+const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=(?:["']\\s*)?https?:)(${VALUE})`, "gi");
+/** Stored HTML format: 2 keeps remote image addresses (data-remote-src). */
+export const HTML_VERSION = 2;
 const IMAGE_SRCSET = new RegExp(`${SEP}srcset\\s*=\\s*${VALUE}`, "gi");
 /** HTML beyond this is not processed; the stored copy is capped at 2 MB anyway. */
 export const MAX_SANITIZE_CHARS = 2 * 1024 * 1024;
@@ -72,7 +76,7 @@ export function sanitizeEmailHtml(html: string): string {
     .replace(EVENT_ATTRIBUTES, " ")
     .replace(DANGEROUS_ATTRIBUTES, " ")
     .replace(DANGEROUS_URL, "$1blocked:")
-    .replace(IMAGE_TAG, tag => tag.replace(REMOTE_SRC, "$1data-remote-image-blocked=\"true\""))
+    .replace(IMAGE_TAG, tag => tag.replace(REMOTE_SRC, "$1data-remote-src=$2"))
     .replace(IMAGE_SRCSET, " ")
     .trim();
 }

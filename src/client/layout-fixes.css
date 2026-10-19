@@ -154,3 +154,9 @@
 .admin-update-notice { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 12px; color: var(--muted); font-size: 13px; line-height: 1.55; }
 .admin-update-notice strong { color: var(--text); }
 .admin-update-notice a { color: var(--accent); }
+
+/* v3.19: remote images hidden until "Show images" (Settings → Images in mail). */
+.remote-images-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; padding: 9px 12px; border-radius: 10px; background: var(--tone-surface-raised-904); color: var(--tone-text-subtle-537); font-size: 12px; }
+.remote-images-banner span { flex: 1 1 180px; }
+.remote-images-banner button { border: 0; border-radius: 8px; padding: 6px 10px; background: var(--tone-bg-35); color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.remote-images-banner .remote-images-always { background: transparent; text-decoration: underline; font-weight: 500; }

@@ -2,7 +2,7 @@ import { junkVerdict, senderAuthenticated } from "./junk";
 import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
-import { htmlToText, sanitizeEmailHtml } from "./html";
+import { HTML_VERSION, htmlToText, sanitizeEmailHtml } from "./html";
 import { domainOf } from "../appConfig";
 import { instanceSettings } from "../branding";
 import { isBlockedSender } from "../blockedSenders";
@@ -29,6 +29,12 @@ async function hasWrittenTo(env: Env, mailboxId: string, address: string): Promi
 const safePreview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
 // Control characters and path separators become "_"; Unicode direction
 // overrides are dropped so "invoice\u202Efdp.exe" cannot pose as a PDF.
+/** A part's Content-ID without angle brackets, as cid: URLs name it. */
+export const contentIdOf = (value: string | null | undefined) => {
+  const id = (value ?? "").trim().replace(/^<|>$/g, "").slice(0, 250);
+  return id || null;
+};
+
 export const safeFilename = (value: string | null | undefined, fallback: string) => (value || fallback)
   .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
   .replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 255) || fallback;
@@ -192,7 +198,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   const releaseClaim = () => env.DB.prepare("DELETE FROM inbound_receipts WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'")
     .bind(mailbox.id, fingerprint).run();
   const key = `emails/${mailbox.id.replace(":", "_")}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${String(now.getUTCDate()).padStart(2, "0")}/${id}/raw.eml`;
-  const rows: Array<{ id: string; filename: string; mimeType: string; size: number; key: string }> = [];
+  const rows: Array<{ id: string; filename: string; mimeType: string; size: number; key: string; contentId: string | null }> = [];
 
   // Reserve the raw MIME plus extracted attachment bytes before writing to
   // R2. A conditional D1 update is atomic across concurrent deliveries.
@@ -219,12 +225,12 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
       const attachmentKey = `${key.slice(0, -7)}attachments/${attachmentId}`;
       const mimeType = (attachment.mimeType || "application/octet-stream").slice(0, 127);
       await env.MAIL.put(attachmentKey, bytes, { httpMetadata: { contentType: mimeType } });
-      rows.push({ id: attachmentId, filename: safeFilename(attachment.filename, "attachment"), mimeType, size: bytes.byteLength, key: attachmentKey });
+      rows.push({ id: attachmentId, filename: safeFilename(attachment.filename, "attachment"), mimeType, size: bytes.byteLength, key: attachmentKey, contentId: contentIdOf(attachment.contentId) });
     }
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO threads (id, subject, latest_message_at, message_count, is_read, mailbox_id) VALUES (?1, ?2, ?3, 0, 0, ?4)").bind(threadId, (parsed.subject || "(no subject)").slice(0, 998), nowIso, mailbox.id),
-      env.DB.prepare(`INSERT INTO messages (id,message_id,original_message_id,mailbox_id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,subject,preview,body_text,body_html,received_at,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,is_junk) VALUES (?1,?2,?3,?4,?5,'inbound',?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,'received',?19)`).bind(id, storedMessageId, headerMessageId, mailbox.id, threadId, (sender?.address || message.from).slice(0, 320), sender?.name?.slice(0, 320) || null, JSON.stringify(to.length ? to : [message.to]), JSON.stringify(cc), (parsed.subject || "(no subject)").slice(0, 998), safePreview(bodyText), bodyText, bodyHtml, nowIso, rows.length ? 1 : 0, key, inReplyTo, references, Number(isJunk)),
-      ...rows.map(attachment => env.DB.prepare("INSERT INTO attachments (id,message_id,filename,content_type,size,r2_key) VALUES (?1,?2,?3,?4,?5,?6)").bind(attachment.id, id, attachment.filename, attachment.mimeType, attachment.size, attachment.key)),
+      env.DB.prepare(`INSERT INTO messages (id,message_id,original_message_id,mailbox_id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,subject,preview,body_text,body_html,received_at,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,is_junk,html_version) VALUES (?1,?2,?3,?4,?5,'inbound',?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,'received',?19,${HTML_VERSION})`).bind(id, storedMessageId, headerMessageId, mailbox.id, threadId, (sender?.address || message.from).slice(0, 320), sender?.name?.slice(0, 320) || null, JSON.stringify(to.length ? to : [message.to]), JSON.stringify(cc), (parsed.subject || "(no subject)").slice(0, 998), safePreview(bodyText), bodyText, bodyHtml, nowIso, rows.length ? 1 : 0, key, inReplyTo, references, Number(isJunk)),
+      ...rows.map(attachment => env.DB.prepare("INSERT INTO attachments (id,message_id,filename,content_type,size,r2_key,content_id) VALUES (?1,?2,?3,?4,?5,?6,?7)").bind(attachment.id, id, attachment.filename, attachment.mimeType, attachment.size, attachment.key, attachment.contentId)),
       env.DB.prepare("UPDATE threads SET latest_message_at=?2,message_count=message_count+1,is_read=0,subject=CASE WHEN subject='' THEN ?3 ELSE subject END WHERE id=?1 AND mailbox_id=?4").bind(threadId, nowIso, (parsed.subject || "(no subject)").slice(0, 998), mailbox.id),
       ...(learned ? [env.DB.prepare("UPDATE OR IGNORE messages SET message_id=?3 WHERE id=?1 AND mailbox_id=?2 AND message_id IS NULL").bind(learned.id, mailbox.id, learned.messageId)] : []),
       env.DB.prepare("UPDATE inbound_receipts SET state='accepted',message_id=?3 WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'").bind(mailbox.id,fingerprint,id),

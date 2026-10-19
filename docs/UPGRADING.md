@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.19
+
+- Images in mail now show: embedded images from the message, remote images through the app (privately). Prefer the old behaviour? Settings → Images in mail → **Ask first**.
+
 ## v3.18
 
 - Phone notifications keep working: open the app once after updating on each phone so it re-registers. iPhone users need the app added to the Home Screen.

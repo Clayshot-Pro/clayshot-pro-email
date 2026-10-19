@@ -1,4 +1,5 @@
 import { primaryProfilePath, protectedAccountPath, requestedMailAccount } from "./accountAccess";
+import { imageProxy } from "./api/imageProxy";
 import { adminProtectedApiPath } from "./adminRoutePolicy";
 import { consumeAdminApproval, stepUpOptions, stepUpVerify } from "./adminStepUp";
 import { adminMutationNeedsStepUp, isApprovedAdminMutation } from "./adminStepUpPolicy";
@@ -79,10 +80,12 @@ const sameOrigin = (request: Request): boolean => {
 
 function secureApiResponse(response: Response): Response {
   const headers = new Headers(response.headers);
-  // Public, versioned instance icons are the only cacheable API responses.
-  if (headers.get("Cache-Control") !== "public, max-age=31536000, immutable" || headers.get("Content-Type") !== "image/png") {
-    headers.set("Cache-Control", "private, no-store");
-  }
+  // Public, versioned instance icons, and proxied mail images in the reader's
+  // own browser cache, are the only cacheable API responses.
+  const cache = headers.get("Cache-Control") ?? "";
+  const icon = cache === "public, max-age=31536000, immutable" && headers.get("Content-Type") === "image/png";
+  const mailImage = cache === "private, max-age=86400" && (headers.get("Content-Type") ?? "").startsWith("image/");
+  if (!icon && !mailImage) headers.set("Cache-Control", "private, no-store");
   // Preserve stricter endpoint-specific CSP directives (e.g. the "sandbox"
   // directive for attachments) instead of overwriting them.
   if (!headers.has("Content-Security-Policy")) {
@@ -161,6 +164,8 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   ]);
   if (!isAdmin && accountIds.length === 0) return unauthorizedResponse();
   if (adminProtectedApiPath(url.pathname) && !isAdmin) return jsonError("Administrator passkey required", 403);
+  // Remote images in mail, fetched privately for any signed-in reader.
+  if (url.pathname === "/api/image-proxy" && request.method === "GET") return imageProxy(request);
   if (url.pathname === "/api/admin/step-up/options" && request.method === "POST") return stepUpOptions(request, env);
   if (url.pathname === "/api/admin/step-up/verify" && request.method === "POST") return stepUpVerify(request, env);
   if (url.pathname === "/api/admin/audit" && request.method === "GET") return listAdminSecurityEvents(env);

@@ -1,5 +1,6 @@
 import PostalMime from "postal-mime";
-import { sanitizeEmailHtml } from "../email/html";
+import { HTML_VERSION, sanitizeEmailHtml } from "../email/html";
+import { contentIdOf, safeFilename } from "../email/receive";
 import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { resolveProvider } from "../providers/registry";
 import { gmailAttachment, gmailFullMessage, gmailThread } from "../providers/gmailProvider";
@@ -32,12 +33,15 @@ type MessageRow = {
   reference_ids: string | null;
   delivery_status: string | null;
   delivery_error: string | null;
+  html_version: number;
 };
 type DraftListRow = { id: string; thread_id: string | null; to_addresses: string; subject: string; body_text: string; updated_at: string };
-type AttachmentRow = { id: string; message_id: string; filename: string; content_type: string; size: number; r2_key: string };
+type AttachmentRow = { id: string; message_id: string; filename: string; content_type: string; size: number; r2_key: string; content_id: string | null };
 
 const folders = new Set<Folder>(["inbox", "junk", "starred", "sent", "drafts", "archive", "trash"]);
 const INLINE_DOWNLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+/** Raster types an email may embed (cid:); the preview endpoint serves exactly these images. */
+const EMBEDDABLE_IMAGE_TYPES = INLINE_DOWNLOAD_TYPES;
 const MAX_RECOVERED_HTML = 2 * 1024 * 1024;
 const encoder = new TextEncoder();
 const folderFrom = (value: string | null): Folder => value && folders.has(value as Folder) ? value as Folder : "inbox";
@@ -64,19 +68,55 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return value.slice(0, low);
 }
 
+/**
+ * Received mail stored in an older HTML format (or without HTML) is rebuilt
+ * once from its raw message: remote image addresses come back (shown through
+ * the image proxy) and attachments get their Content-IDs (embedded images).
+ */
 async function recoverStoredHtml(env: Env, row: MessageRow): Promise<MessageRow> {
-  if (row.body_html !== null || row.direction !== "inbound" || !row.raw_r2_key) return row;
+  if (row.direction !== "inbound" || !row.raw_r2_key) return row;
+  if (row.body_html !== null && (row.html_version ?? 1) >= HTML_VERSION) return row;
   try {
     const object = await env.MAIL.get(row.raw_r2_key);
     if (!object) return row;
     const raw = await object.arrayBuffer();
     const parsed = await new PostalMime({ maxNestingDepth: 30, maxHeadersSize: 256 * 1024 }).parse(raw);
     const bodyHtml = parsed.html ? truncateUtf8(sanitizeEmailHtml(parsed.html), MAX_RECOVERED_HTML) : "";
-    await env.DB.prepare("UPDATE messages SET body_html=?2 WHERE id=?1 AND body_html IS NULL").bind(row.id, bodyHtml).run();
-    return { ...row, body_html: bodyHtml };
+    // Stored attachments are the parsed ones, named and sized the same way.
+    const contentIds = parsed.attachments.flatMap(attachment => {
+      const contentId = contentIdOf(attachment.contentId);
+      const size = typeof attachment.content === "string" ? new TextEncoder().encode(attachment.content).byteLength : attachment.content.byteLength;
+      return contentId ? [{ contentId, filename: safeFilename(attachment.filename, "attachment"), size }] : [];
+    });
+    await env.DB.batch([
+      env.DB.prepare("UPDATE messages SET body_html=?2, html_version=?3 WHERE id=?1").bind(row.id, bodyHtml, HTML_VERSION),
+      ...contentIds.map(item => env.DB.prepare(
+        "UPDATE attachments SET content_id=?4 WHERE id=(SELECT id FROM attachments WHERE message_id=?1 AND filename=?2 AND size=?3 AND content_id IS NULL LIMIT 1)",
+      ).bind(row.id, item.filename, item.size, item.contentId)),
+    ]);
+    return { ...row, body_html: bodyHtml, html_version: HTML_VERSION };
   } catch {
     return row;
   }
+}
+
+/** Embedded images (cid:) point at their stored attachment; those are not listed as attachments. */
+function resolveEmbeddedImages(html: string | null, attachments: AttachmentRow[], origin: string, accountId: string) {
+  const embedded = new Set<string>();
+  if (!html || !/cid:/i.test(html)) return { html, embedded };
+  let next = html;
+  for (const attachment of attachments) {
+    if (!attachment.content_id || !EMBEDDABLE_IMAGE_TYPES.has(attachment.content_type)) continue;
+    const url = `${origin}/api/attachment-previews/${encodeURIComponent(attachment.id)}?accountId=${encodeURIComponent(accountId)}`;
+    for (const id of new Set([attachment.content_id, encodeURIComponent(attachment.content_id)])) {
+      const pattern = new RegExp(`cid:${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=["'\\s>)])`, "gi");
+      if (pattern.test(next)) {
+        next = next.replace(pattern, url);
+        embedded.add(attachment.id);
+      }
+    }
+  }
+  return { html: next, embedded };
 }
 
 /** Read only a bounded MIME header prefix from R2, including old stored messages. */
@@ -193,19 +233,20 @@ export async function listMessages(request: Request, env: Env): Promise<Response
   return Response.json({ folder, ...counts, folderTotalCount: trashTotal?.count ?? null, accountId: provider.accountId, messages });
 }
 
-function detailFrom(row: MessageRow, attachments: AttachmentRow[], unsubscribeUrl: string | null = null) {
+function detailFrom(row: MessageRow, attachments: AttachmentRow[], unsubscribeUrl: string | null = null, images?: { origin: string; accountId: string }) {
+  const resolved = images ? resolveEmbeddedImages(row.body_html, attachments, images.origin, images.accountId) : { html: row.body_html, embedded: new Set<string>() };
   return {
     ...toListItem(row),
     ccAddresses: parseArray(row.cc_addresses),
     bccAddresses: parseArray(row.bcc_addresses),
     bodyText: row.body_text ?? row.preview,
-    bodyHtml: row.body_html || null,
+    bodyHtml: resolved.html || null,
     bodyHtmlAvailable: Boolean(row.body_html),
     inReplyTo: row.in_reply_to,
     references: row.reference_ids,
     deliveryError: row.delivery_error,
     unsubscribeUrl,
-    attachments: attachments.map((attachment) => ({
+    attachments: attachments.filter(attachment => !resolved.embedded.has(attachment.id)).map((attachment) => ({
       id: attachment.id,
       filename: attachment.filename,
       contentType: attachment.content_type,
@@ -243,7 +284,7 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
     }
   }
 
-  const initialRow = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error FROM messages WHERE id=?1 AND mailbox_id=?2`)
+  const initialRow = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE id=?1 AND mailbox_id=?2`)
     .bind(id, provider.accountId)
     .first<MessageRow>();
   if (!initialRow) return Response.json({ error: "Message not found" }, { status: 404 });
@@ -262,14 +303,23 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
     ]);
   }
 
-  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) ASC LIMIT 100`)
+  const threadRows = await env.DB.prepare(`SELECT id,thread_id,direction,from_address,from_name,to_addresses,cc_addresses,bcc_addresses,subject,preview,body_text,body_html,received_at,sent_at,is_read,is_starred,is_archived,is_deleted,is_junk,has_attachments,raw_r2_key,in_reply_to,reference_ids,delivery_status,delivery_error,html_version FROM messages WHERE thread_id=?1 AND mailbox_id=?2 ORDER BY COALESCE(sent_at,received_at) ASC LIMIT 100`)
     .bind(row.thread_id, provider.accountId)
     .all<MessageRow>();
-  const ids = threadRows.results.map((entry) => entry.id);
+  // Older messages of the conversation are rebuilt too (a few per open), after the
+  // opened one, so every message shows its images.
+  let rebuilds = 10;
+  const rows = [];
+  for (const entry of threadRows.results) {
+    rows.push(entry.id === row.id ? row : rebuilds > 0 && (entry.html_version ?? 1) < HTML_VERSION && entry.direction === "inbound"
+      ? (rebuilds--, await recoverStoredHtml(env, entry))
+      : entry);
+  }
+  const ids = rows.map((entry) => entry.id);
   const attachmentMap = new Map<string, AttachmentRow[]>();
   if (ids.length) {
     const placeholders = ids.map(() => "?").join(",");
-    const attachments = await env.DB.prepare(`SELECT id,message_id,filename,content_type,size,r2_key FROM attachments WHERE message_id IN (${placeholders}) ORDER BY created_at ASC`)
+    const attachments = await env.DB.prepare(`SELECT id,message_id,filename,content_type,size,r2_key,content_id FROM attachments WHERE message_id IN (${placeholders}) ORDER BY created_at ASC`)
       .bind(...ids)
       .all<AttachmentRow>();
     for (const attachment of attachments.results) {
@@ -277,7 +327,8 @@ export async function getMessage(request: Request, id: string, env: Env): Promis
     }
   }
   const unsubscribeUrl = row.direction === "inbound" ? await nativeUnsubscribeUrl(env, row.raw_r2_key) : null;
-  const thread = threadRows.results.map((entry) => detailFrom(entry, attachmentMap.get(entry.id) ?? [], entry.id === id ? unsubscribeUrl : null));
+  const images = { origin: new URL(request.url).origin, accountId: provider.accountId };
+  const thread = rows.map((entry) => detailFrom(entry, attachmentMap.get(entry.id) ?? [], entry.id === id ? unsubscribeUrl : null, images));
   const message = thread.find((entry) => entry.id === id);
   return message
     ? Response.json({ message, thread, newlyReadCount, accountId: provider.accountId })
@@ -340,7 +391,7 @@ export async function downloadAttachment(request: Request, id: string, env: Env)
     }
   }
 
-  const attachment = await env.DB.prepare("SELECT id,message_id,filename,content_type,size,r2_key FROM attachments WHERE id=?1")
+  const attachment = await env.DB.prepare("SELECT id,message_id,filename,content_type,size,r2_key,content_id FROM attachments WHERE id=?1")
     .bind(id)
     .first<AttachmentRow>();
   if (!attachment || !(await provider.getMessage(attachment.message_id))) {

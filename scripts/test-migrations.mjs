@@ -114,4 +114,9 @@ if (migrations.includes("0025_push_all_mail.sql")) {
   assert.ok(columns("push_subscriptions").includes("all_mail_until"), "administrator alerts for every mailbox");
 }
 
+if (migrations.includes("0026_email_images.sql")) {
+  assert.ok(columns("attachments").includes("content_id"), "embedded images keep their Content-ID");
+  assert.ok(columns("messages").includes("html_version"), "older mail is rebuilt once");
+}
+
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);
