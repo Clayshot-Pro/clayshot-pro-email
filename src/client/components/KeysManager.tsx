@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { EditableKey, KeySource } from "../../worker/storedKeys";
 import { adminActionFetch } from "../adminActions";
+import { CloudflareTokenHelp } from "./CloudflareSetup";
 
 type KeyStatus = { name: string; source: KeySource; hint: string };
-type KeysResponse = { encryption: boolean; keys: KeyStatus[]; push: KeyStatus; error?: string };
+type CloudflareStatus = { connected: boolean; hint?: string; accountId?: string; worker?: string };
+type KeysResponse = { encryption: boolean; keys: KeyStatus[]; push: KeyStatus; cloudflare?: CloudflareStatus; generatedKey?: string | null; error?: string };
 
 const LABELS: Record<EditableKey, { label: string; help: string; placeholder: string }> = {
   GOOGLE_CLIENT_ID: { label: "Google OAuth client ID", help: "For connecting Gmail accounts.", placeholder: "….apps.googleusercontent.com" },
@@ -49,6 +51,25 @@ export function KeysManager() {
     } finally { setBusy(false); }
   }
 
+  const [cloudflareToken, setCloudflareToken] = useState("");
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+
+  async function cloudflare(method: "PUT" | "DELETE") {
+    setBusy(true); setNotice(null);
+    try {
+      const body = method === "PUT" ? JSON.stringify({ token: cloudflareToken.trim() }) : undefined;
+      const response = await adminActionFetch("/api/admin/cloudflare", method, body);
+      const result = await response.json().catch(() => ({})) as KeysResponse;
+      if (!response.ok || !result.keys) throw new Error(result.error || "Could not update the Cloudflare connection");
+      setData(result);
+      setCloudflareToken("");
+      if (result.generatedKey) setGeneratedKey(result.generatedKey);
+      setNotice(method === "PUT" ? "Cloudflare connected. Domains can now be set up automatically." : "Cloudflare token removed.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update the Cloudflare connection");
+    } finally { setBusy(false); }
+  }
+
   function save(event: FormEvent<HTMLFormElement>, name: EditableKey) {
     event.preventDefault();
     void mutate(name, "PUT", `${LABELS[name].label} saved.`);
@@ -67,10 +88,44 @@ export function KeysManager() {
         <>
           {!data.encryption && (
             <p className="admin-inline-state" role="alert">
-              Add a <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret to store keys here. Keep a copy of it: changing it makes stored keys unreadable.
+              Keys need the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. Connecting Cloudflare below creates it; or add it
+              yourself under Worker → Settings → Variables &amp; Secrets. Keep a copy of it: changing it makes stored keys unreadable.
             </p>
           )}
+          {generatedKey && (
+            <div className="setup-key" role="status">
+              <label htmlFor="generated-key">New encryption key</label>
+              <input id="generated-key" readOnly value={generatedKey} onFocus={event => event.currentTarget.select()} />
+              <p>Saved in Cloudflare as <code>PROVIDER_CREDENTIAL_KEY</code>. Keep a copy in your password manager; it is shown only now.</p>
+            </div>
+          )}
           <ul className="admin-dns-report">
+            <li>
+              <strong>Cloudflare</strong>
+              <small>
+                {data.cloudflare?.connected
+                  ? `Connected · token ${data.cloudflare.hint ?? ""} · Worker ${data.cloudflare.worker ?? ""}. Used to set up mail domains.`
+                  : "Not connected. A token lets the app set up Email Routing, delivery, Email Sending and DMARC for your domains."}
+              </small>
+              <form className="admin-domain-add" onSubmit={event => { event.preventDefault(); void cloudflare("PUT"); }}>
+                <label>
+                  {data.cloudflare?.connected ? "Replace token" : "API token"}
+                  <input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" maxLength={256}
+                    className="mailbox-entry-input" placeholder="Cloudflare API token" value={cloudflareToken}
+                    onChange={event => setCloudflareToken(event.target.value)} />
+                </label>
+                <div className="admin-domain-actions">
+                  <button type="submit" className="auth-secondary" disabled={busy || !cloudflareToken.trim()}>Connect</button>
+                  {data.cloudflare?.connected && (
+                    <button type="button" className="auth-secondary" disabled={busy}
+                      onClick={() => window.confirm("Remove the Cloudflare token? Domains keep working; new ones need manual setup.") && void cloudflare("DELETE")}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </form>
+              {!data.cloudflare?.connected && <CloudflareTokenHelp />}
+            </li>
             {data.keys.filter(key => key.name in LABELS).map(key => {
               const name = key.name as EditableKey;
               const meta = LABELS[name];

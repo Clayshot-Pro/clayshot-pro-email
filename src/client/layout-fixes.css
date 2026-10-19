@@ -128,3 +128,24 @@
     white-space: nowrap;
   }
 }
+
+/* v3.12 first-run setup and Cloudflare connection */
+.cf-token-help { display: grid; gap: 6px; margin: 2px 0 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.cf-token-help p { margin: 0; }
+.cf-token-help strong { color: var(--text); font-weight: 650; }
+.cf-token-help details summary { cursor: pointer; }
+.cf-token-help ul { margin: 6px 0 0; padding-left: 18px; }
+.cf-token-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.auth-link { justify-self: start; padding: 2px 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
+.setup-key { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; margin: 4px 0; }
+.setup-key label, .setup-key p { grid-column: 1 / -1; margin: 0; }
+.setup-key p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.setup-key input { min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.setup-key .auth-secondary { width: auto; }
+.connect-report { display: grid; gap: 6px; margin: 4px 0; padding: 0; list-style: none; }
+.connect-step { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.connect-step strong { color: var(--text); font-weight: 650; }
+.connect-step-mark { font-weight: 700; color: var(--accent); text-align: center; }
+.connect-step.is-failed, .connect-step.is-action { border-color: var(--ui-error-border); }
+.connect-step.is-failed .connect-step-mark, .connect-step.is-action .connect-step-mark { color: var(--ui-error-text); }

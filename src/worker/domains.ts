@@ -1,4 +1,6 @@
 import { appConfig, isValidDomain } from "./appConfig";
+import { connectDomain } from "./cloudflare/domainConnect";
+import { cloudflareConnection } from "./storedKeys";
 import { appOrigin } from "./config";
 import { THEMES, type ThemeId } from "./customization";
 import { evaluateDns, CLOUDFLARE_DKIM_SELECTORS, RESEND_DKIM_SELECTORS, type DnsAnswers, type OutboundTransportKind } from "./domainDns";
@@ -173,11 +175,13 @@ export async function listDomainsResponse(request: Request, env: Env): Promise<R
       resend: { available: config.features.resend, webhookConfigured: config.features.resendWebhook },
     },
     webhookUrl: `${appOrigin(request)}/api/webhooks/resend`,
+    // Domains can be wired automatically with the stored Cloudflare token.
+    cloudflareConnected: Boolean(await cloudflareConnection(env)),
   });
 }
 
 export async function createDomain(request: Request, env: Env): Promise<Response> {
-  const body = await request.json<{ domain?: unknown }>().catch(() => null);
+  const body = await request.json<{ domain?: unknown; connect?: unknown }>().catch(() => null);
   const domain = typeof body?.domain === "string" ? body.domain.trim().toLowerCase().replace(/\.$/, "") : "";
   if (!isValidDomain(domain)) return jsonError("Enter a valid ASCII or punycode domain such as example.org", 400);
   if (domain === new URL(request.url).hostname.toLowerCase()) return jsonError("Use the mail domain, not the web app host", 400);
@@ -185,6 +189,14 @@ export async function createDomain(request: Request, env: Env): Promise<Response
   if ((count?.n ?? 0) >= 50) return jsonError("Domain limit reached", 409);
   const inserted = await env.DB.prepare("INSERT OR IGNORE INTO domains (domain, status) VALUES (?1, 'pending')").bind(domain).run();
   if (!inserted.meta.changes) return jsonError("Domain already exists", 409);
+  // With a Cloudflare connection, adding also wires the domain (one approval).
+  const connection = body && "connect" in body && body.connect === true ? await cloudflareConnection(env) : null;
+  if (connection) {
+    const row = (await domainRow(env, domain))!;
+    const report = await connectDomain(connection, domain, { sending: row.outbound_transport === "cloudflare" });
+    await activateIfReady(env, row, report.routingReady);
+    return Response.json({ domain: present((await domainRow(env, domain))!), report }, { status: 201 });
+  }
   return Response.json({ domain: present((await domainRow(env, domain))!) }, { status: 201 });
 }
 
@@ -262,6 +274,39 @@ async function lookup(name: string, type: "MX" | "TXT"): Promise<string[]> {
 export async function checkDomainDns(env: Env, domain: string): Promise<Response> {
   const row = await domainRow(env, domain);
   if (!row) return jsonError("Domain not found", 404);
+  await refreshDnsReport(env, row);
+  return Response.json({ domain: present((await domainRow(env, row.domain))!) });
+}
+
+/**
+ * POST /api/admin/domains/:domain/connect { replaceMx? } (administrator
+ * step-up): wire the domain with the stored Cloudflare token, then check DNS.
+ * The domain is activated when Cloudflare confirms its mail reaches this app.
+ */
+export async function connectDomainRoute(request: Request, env: Env, domain: string): Promise<Response> {
+  const row = await domainRow(env, domain);
+  if (!row) return jsonError("Domain not found", 404);
+  const connection = await cloudflareConnection(env);
+  if (!connection) return jsonError("Connect Cloudflare first (Admin → Keys), or set the domain up in the Cloudflare dashboard.", 409);
+  const body = await request.json<{ replaceMx?: unknown }>().catch(() => null);
+  const report = await connectDomain(connection, row.domain, {
+    replaceMx: body?.replaceMx === true,
+    sending: row.outbound_transport === "cloudflare",
+  });
+  await activateIfReady(env, row, report.routingReady);
+  return Response.json({ report, domain: present((await domainRow(env, row.domain))!) });
+}
+
+/** Refresh the DNS report; activate a pending domain whose routing Cloudflare confirmed. */
+export async function activateIfReady(env: Env, row: DomainRow, routingReady: boolean): Promise<void> {
+  await refreshDnsReport(env, row).catch(() => undefined);
+  if (routingReady && row.status === "pending") {
+    await env.DB.prepare("UPDATE domains SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE domain = ?1 AND status = 'pending'")
+      .bind(row.domain).run();
+  }
+}
+
+async function refreshDnsReport(env: Env, row: DomainRow): Promise<void> {
   const selectors = [...CLOUDFLARE_DKIM_SELECTORS, ...RESEND_DKIM_SELECTORS];
   const [mx, rootTxt, dmarcTxt, sendSubdomainTxt, sendSubdomainMx, ...dkim] = await Promise.all([
     lookup(row.domain, "MX"),
@@ -278,5 +323,4 @@ export async function checkDomainDns(env: Env, domain: string): Promise<Response
   const report = evaluateDns(answers, row.outbound_transport);
   await env.DB.prepare("UPDATE domains SET dns_checked_at = ?2, dns_report = ?3 WHERE domain = ?1")
     .bind(row.domain, report.checkedAt, JSON.stringify(report)).run();
-  return Response.json({ domain: present((await domainRow(env, row.domain))!) });
 }

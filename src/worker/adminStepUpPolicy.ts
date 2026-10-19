@@ -29,6 +29,8 @@ export function isApprovedAdminMutation(method: string, path: string): boolean {
   if (method === "DELETE" && /^\/api\/admin\/suppressions\/[^/]+$/.test(path)) return true;
   if (method === "PUT" && path === "/api/admin/instance") return true;
   if ((method === "PUT" || method === "DELETE") && /^\/api\/admin\/keys\/[A-Z_]+$/.test(path)) return true;
+  if ((method === "PUT" || method === "DELETE") && path === "/api/admin/cloudflare") return true;
+  if (method === "POST" && /^\/api\/admin\/domains\/[^/]+\/connect$/.test(path)) return true;
   if ((method === "PUT" || method === "DELETE") && path === LOGO_PATH) return true;
   return method === "POST" && /^\/api\/mailboxes\/[^/]+\/(reset-password|restore|purge|reconcile)$/.test(path);
 }
