@@ -4,7 +4,7 @@ export type VapidPair = { publicKey: string; privateKey: string };
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 /** Tolerate quotes, whitespace and padding pasted around a base64url key. */
-export function normalizeVapidKey(value: unknown): string {
+function normalizeVapidKey(value: unknown): string {
   let normalized = (typeof value === "string" ? value : "").trim();
   for (const [open, close] of [["\"", "\""], ["'", "'"], ["“", "”"], ["‘", "’"]]) {
     if (normalized.startsWith(open) && normalized.endsWith(close)) {

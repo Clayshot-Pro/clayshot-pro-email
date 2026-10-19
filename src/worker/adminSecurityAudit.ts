@@ -27,7 +27,7 @@ const SAFE_EVENT = /^[a-z][a-z0-9_.-]{0,79}$/;
 const MAX_AGE_DAYS = 90;
 
 /** Event names and outcomes are predefined codes, never user-supplied content. */
-export async function recordAdminSecurityEvent(
+async function recordAdminSecurityEvent(
   env: Env,
   event: string,
   outcome: AdminSecurityOutcome,

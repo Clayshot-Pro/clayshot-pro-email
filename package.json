@@ -16,9 +16,6 @@
     "config:example": "node scripts/config-example.mjs",
     "secrets:push": "node scripts/secrets-push.mjs",
     "test": "node scripts/run-tests.mjs",
-    "cf-typegen": "wrangler types",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "test:e2e": "node scripts/e2e/run.mjs"
   },
   "dependencies": {

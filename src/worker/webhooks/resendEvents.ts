@@ -4,7 +4,7 @@
  */
 import { constantTimeEqual } from "../constantTime.ts";
 
-export const MAX_TIMESTAMP_SKEW_SECONDS = 5 * 60;
+const MAX_TIMESTAMP_SKEW_SECONDS = 5 * 60;
 
 function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value);

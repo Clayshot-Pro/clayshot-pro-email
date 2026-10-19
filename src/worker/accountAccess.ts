@@ -1,6 +1,6 @@
 /** Profile photo routes; each photo belongs to one mailbox (?accountId=). */
 export const primaryProfilePath = (pathname: string): boolean =>
-  pathname === "/api/profile" || pathname === "/api/profile/photo";
+  pathname === "/api/profile/photo";
 
 /** Resolve the account a protected mail API request ACTUALLY operates on.
  *

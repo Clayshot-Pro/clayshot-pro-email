@@ -6,9 +6,9 @@ import { THEME_LABELS } from "./AppearanceSettings";
 import { ConnectReportView } from "./CloudflareSetup";
 import type { ConnectReport } from "../cloudflareToken";
 
-export type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
-export type Transport = "cloudflare" | "resend" | "none";
-export type Domain = {
+type DnsCheck = { id: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
+type Transport = "cloudflare" | "resend" | "none";
+type Domain = {
   domain: string;
   status: "pending" | "active" | "disabled";
   isPrimary: boolean;

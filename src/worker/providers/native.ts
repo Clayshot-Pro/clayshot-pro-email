@@ -65,7 +65,7 @@ function toListItem(row: NativeMessageRow): ProviderMessage {
   };
 }
 
-export class NativeMailProvider implements MailProvider {
+class NativeMailProvider implements MailProvider {
   readonly kind = "native" as const;
   constructor(private readonly env: Env, readonly accountId: string, readonly address: string, readonly senderName: string) {}
 

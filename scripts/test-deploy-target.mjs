@@ -52,7 +52,7 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
 // A fresh fork's first deploy creates its database and bucket; an existing
 // Worker never gets a new database. Cloudflare is faked behind fetch.
 {
-  const { deployedWorkerDatabase, provisionFirstDeploy, workerExists } = await import("./config-lib.mjs");
+  const { deployedWorkerDatabase, provisionFirstDeploy } = await import("./config-lib.mjs");
   const values = { CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef", CLOUDFLARE_API_TOKEN: "token-123456789",
     WORKER_NAME: "fresh-mail", D1_DATABASE_NAME: "fresh-mail", R2_BUCKET_NAME: "fresh-mail-mail" };
   const fake = (state, { r2Disabled = false, scriptsForbidden = false, unbound = false } = {}) => {
@@ -86,7 +86,7 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
   try {
     const fresh = { worker: false, databases: [], buckets: [] };
     const calls = fake(fresh);
-    assert.equal(await workerExists(values), false);
+    assert.deepEqual(await deployedWorkerDatabase(values), { state: "missing" });
     const logs = [];
     assert.equal(await provisionFirstDeploy(values, line => logs.push(line)), "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     assert.deepEqual(fresh.buckets, ["fresh-mail-mail"]);
@@ -99,7 +99,6 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
     assert.equal(fresh.databases.length, 1);
 
     fake({ worker: true, databases: [{ uuid: "x", name: "fresh-mail" }], buckets: [] });
-    assert.equal(await workerExists(values), true, "an existing Worker is detected");
     assert.deepEqual(await deployedWorkerDatabase(values), { state: "bound", id: "x" }, "a Worker keeps its own database");
     fake({ worker: true, databases: [], buckets: [] }, { unbound: true });
     assert.deepEqual(await deployedWorkerDatabase(values), { state: "unbound" }, "a Worker without a database (an earlier failed setup) has nothing to lose");
@@ -107,8 +106,6 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
     assert.equal((await deployedWorkerDatabase(values)).state, "unknown");
     assert.match((await deployedWorkerDatabase(values)).detail, /HTTP 403: Authentication error/);
     assert.ok(!forbidden.some(call => call.startsWith("POST")), "nothing is created when the Worker cannot be read");
-    fake({ worker: false, databases: [], buckets: [] }, { scriptsForbidden: true });
-    assert.equal(await workerExists(values), null, "a token without access is not mistaken for a new instance");
     fake({ worker: false, databases: [], buckets: [] }, { r2Disabled: true });
     await assert.rejects(provisionFirstDeploy(values, () => {}), /enable|R2 Storage: Edit/, "a disabled R2 is explained");
   } finally {

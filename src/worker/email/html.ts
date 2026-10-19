@@ -24,14 +24,14 @@ const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=(?:["']\\s*)?https?:)(${VA
 export const HTML_VERSION = 2;
 const IMAGE_SRCSET = new RegExp(`${SEP}srcset\\s*=\\s*${VALUE}`, "gi");
 /** HTML beyond this is not processed; the stored copy is capped at 2 MB anyway. */
-export const MAX_SANITIZE_CHARS = 2 * 1024 * 1024;
+const MAX_SANITIZE_CHARS = 2 * 1024 * 1024;
 
 /**
  * Remove whole elements (opening tag through matching closing tag) in one
  * linear pass. An element without a closing tag loses only its opening tag,
  * and once a closing tag is known to be absent it is never searched again.
  */
-export function removeElements(html: string, tags: string[], replacement = ""): string {
+function removeElements(html: string, tags: string[], replacement = ""): string {
   const lower = html.toLowerCase();
   const opener = new RegExp(`<\\s*(${tags.join("|")})\\b[^>]{0,8192}>?`, "gi");
   const noCloseAfter = new Map<string, number>();

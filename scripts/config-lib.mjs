@@ -36,7 +36,7 @@ export function renderWrangler(base, values, databaseId) {
   return output;
 }
 
-export function assertNoSecrets(text, values) {
+function assertNoSecrets(text, values) {
   for (const key of keysOf("secret").concat("CLOUDFLARE_API_TOKEN")) {
     const value = String(values[key] ?? "");
     if (value.length >= 8 && text.includes(value)) {
@@ -116,12 +116,6 @@ export async function deployedWorkerDatabase(values) {
   if (!bindings.length) return { state: "unbound" };
   const id = bindings.length === 1 ? bindings[0].database_id ?? bindings[0].id : null;
   return typeof id === "string" && id ? { state: "bound", id } : { state: "unknown", detail: "the Worker's DB binding has no database ID" };
-}
-
-/** Whether the Worker is already deployed: true, false, or null when that cannot be told. */
-export async function workerExists(values) {
-  const { state } = await deployedWorkerDatabase(values);
-  return state === "missing" ? false : state === "unknown" ? null : true;
 }
 
 /**

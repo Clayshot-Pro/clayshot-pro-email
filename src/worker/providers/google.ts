@@ -305,7 +305,7 @@ export async function disconnectGoogleIfUnused(accountId: string, env: Env): Pro
   if (!inUse) await disconnectGoogle(accountId, env);
 }
 
-export async function disconnectGoogle(accountId: string, env: Env): Promise<Response> {
+async function disconnectGoogle(accountId: string, env: Env): Promise<Response> {
   if (!accountId.startsWith("gmail:")) {
     return Response.json({ error: "Gmail account not found" }, { status: 404 });
   }

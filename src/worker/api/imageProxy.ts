@@ -4,7 +4,7 @@
  * signed-in users can use it (the route sits behind the session check).
  * Responses are images only, size-capped, and sandboxed if opened directly.
  */
-export const MAX_PROXIED_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_PROXIED_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const TIMEOUT_MS = 10_000;
 

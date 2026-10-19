@@ -45,7 +45,7 @@ async function run(m) {
   assert.equal(db.prepare("SELECT photo_version FROM native_mailboxes WHERE id = 'native:admin'").get().photo_version, "2026-01-01T00:00:00Z");
 
   // A mailbox user sets, reads and removes their own photo.
-  assert.equal((await (await m.getProfile(env, url("native:work", "/api/profile"))).json()).hasPhoto, false);
+  assert.equal((await m.listConnectedAccounts(env)).find(a => a.id === "native:work").avatarUrl, null, "no photo yet");
   assert.equal((await m.saveProfilePhoto(upload("image/gif"), env, url("native:work"))).status, 415);
   const saved = await (await m.saveProfilePhoto(upload(), env, url("native:work"))).json();
   assert.ok(saved.version);

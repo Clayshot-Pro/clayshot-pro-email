@@ -69,7 +69,7 @@ export function loadConfigValues(envFile = new URL("../.env", import.meta.url)) 
   for (const entry of CONFIG) {
     const fromProcess = process.env[entry.key];
     const value = (fromProcess !== undefined && fromProcess !== "" ? fromProcess : file[entry.key]) ?? "";
-    values[entry.key] = value === "" ? defaults[entry.key] ?? entry.default ?? "" : value;
+    values[entry.key] = value === "" ? defaults[entry.key] ?? "" : value;
   }
   return { values, hasFile: existsSync(envFile) };
 }

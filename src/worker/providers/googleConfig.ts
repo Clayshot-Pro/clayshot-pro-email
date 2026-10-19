@@ -1,8 +1,8 @@
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
-export const GOOGLE_PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
-export const GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+const GOOGLE_PROFILE_SCOPE = "https://www.googleapis.com/auth/userinfo.profile";
+const GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts.readonly";
 export const GOOGLE_SCOPE = [GMAIL_SCOPE, GOOGLE_PROFILE_SCOPE, GOOGLE_CONTACTS_SCOPE].join(" ");
 
 type ConfiguredGoogleEnv = Env & {
@@ -25,7 +25,7 @@ export function requireGoogleConfig(env: Env): asserts env is ConfiguredGoogleEn
   }
 }
 
-export function hasGoogleScope(scope: string, required: string): boolean {
+function hasGoogleScope(scope: string, required: string): boolean {
   return new Set(scope.split(/\s+/).filter(Boolean)).has(required);
 }
 

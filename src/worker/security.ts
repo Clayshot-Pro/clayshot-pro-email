@@ -46,7 +46,7 @@ export function authRateLimitBucket(request: Request, route: string): string {
  * many addresses doesn't help. A success clears the count, so the owner
  * signing in never uses up the allowance.
  */
-export const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
+const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
 export const ACCOUNT_LOGIN_MAX_ATTEMPTS = 30;
 export const accountRateLimitBucket = (route: string, address: string) => `${route}:account:${address.trim().toLowerCase()}`;
 

@@ -2,11 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { IconSetId, Lock, ThemeId } from "../worker/customization";
 
 /** Public instance identity from GET /api/instance (no addresses or secrets). */
-export type InstanceInfo = {
+type InstanceInfo = {
   brandName: string;
   brandShortName: string;
   primaryDomain: string;
-  features: { gmail: boolean; push: boolean };
+  features: { gmail: boolean };
   /** False on a fresh install until first-run setup chooses the mail domain. */
   initialized?: boolean;
   setupAvailable?: boolean;
@@ -27,7 +27,7 @@ function initialInstance(): InstanceInfo {
     brandName: document.title || "Mail",
     brandShortName: shortName || document.title || "Mail",
     primaryDomain: "",
-    features: { gmail: true, push: true },
+    features: { gmail: true },
     loaded: false,
   };
 }

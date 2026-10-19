@@ -40,7 +40,6 @@ export async function hashPassword(password: string, salt: string, iterations = 
   }
   return encode(pbkdf2Sync(encoder.encode(password), saltBytes, iterations, 32, "sha256"));
 }
-export { constantTimeEqual } from "./constantTime.ts";
 import { constantTimeEqual } from "./constantTime.ts";
 export type PasswordHash = { salt: string; hash: string; iterations: number };
 export async function preparePassword(

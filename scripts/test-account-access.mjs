@@ -50,7 +50,6 @@ assert.equal(protectedAccountPath("/api/attachment-previews/one"),true);
 assert.equal(protectedAccountPath("/api/send"),true);
 assert.equal(protectedAccountPath("/api/mailboxes"),false);
 assert.equal(protectedAccountPath("/api/accounts"),false);
-assert.equal(primaryProfilePath("/api/profile"),true,"primary profile metadata requires a primary mailbox grant");
 assert.equal(primaryProfilePath("/api/profile/photo"),true,"primary photo reads and writes require a primary mailbox grant");
 assert.equal(primaryProfilePath("/api/accounts"),false,"normal account listing is not profile scoped");
 assert.equal(primaryProfilePath("/api/accounts/gmail:one/avatar"),false,"a Gmail avatar must not use the primary profile grant");

@@ -11,7 +11,7 @@ declare global {
 }
 
 /** Apply through theme-boot.js (same attributes it sets on load) and cache for the next cold start. */
-export function applyAppearance(appearance: EffectiveAppearance): void {
+function applyAppearance(appearance: EffectiveAppearance): void {
   try { window.__ltmApplyAppearance?.(appearance); } catch { /* theme-boot is optional */ }
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance)); } catch { /* storage may be blocked */ }
 }

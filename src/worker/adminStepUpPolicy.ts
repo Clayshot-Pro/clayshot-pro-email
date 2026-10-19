@@ -3,7 +3,7 @@ const MAX_MUTATION_BYTES = 64 * 1024;
 const LOGO_PATH = "/api/admin/instance/logo";
 const MAX_LOGO_BYTES = 6 * 1024 * 1024;
 
-export function mutationBodyLimit(path: string): number {
+function mutationBodyLimit(path: string): number {
   return path === LOGO_PATH ? MAX_LOGO_BYTES : MAX_MUTATION_BYTES;
 }
 

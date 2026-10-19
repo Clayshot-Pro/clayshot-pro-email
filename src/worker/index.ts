@@ -20,7 +20,7 @@ import { deleteDraft, getDraft, saveDraft } from "./api/drafts";
 import { healthResponse } from "./api/health";
 import { downloadAttachment, getMessage, listMessages, patchMessage } from "./api/mail";
 import { bulkMailAction, permanentlyDeleteMessage } from "./api/mailActions";
-import { deleteProfilePhoto, getProfile, getProfilePhoto, profileMailboxId, saveProfilePhoto } from "./api/profile";
+import { deleteProfilePhoto, getProfilePhoto, profileMailboxId, saveProfilePhoto } from "./api/profile";
 import {
   authenticationOptions,
   authStatus,
@@ -355,7 +355,6 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/blocked-senders" && request.method === "DELETE") return removeBlockedSender(env, url);
   if (url.pathname === "/api/send" && request.method === "POST") return sendEmail(request, env);
   if (url.pathname === "/api/drafts" && request.method === "POST") return saveDraft(request, env);
-  if (url.pathname === "/api/profile" && request.method === "GET") return getProfile(env, url);
 
   if (url.pathname === "/api/profile/photo") {
     if (request.method === "GET") return getProfilePhoto(env, url);

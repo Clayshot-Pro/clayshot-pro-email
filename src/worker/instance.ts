@@ -13,7 +13,7 @@ export type InstanceBranding = {
 
 const DEFAULT_THEME_COLOR = "#0d0c0b";
 
-export async function instanceBranding(env: Env): Promise<InstanceBranding> {
+async function instanceBranding(env: Env): Promise<InstanceBranding> {
   const settings = await instanceSettings(env);
   const names = brandNames(settings);
   return {
@@ -37,7 +37,7 @@ export async function instanceResponse(env: Env): Promise<Response> {
     primaryDomain: domain ?? "",
     initialized: Boolean(domain),
     setupAvailable: !domain && features.setup,
-    features: { gmail: features.gmail, push: features.push },
+    features: { gmail: features.gmail },
     logoVersion: settings.logoVersion,
     accent: settings.accent,
     defaultTheme: settings.defaultTheme,

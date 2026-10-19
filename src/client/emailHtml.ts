@@ -24,7 +24,7 @@ export function remoteImageCount(html: string): number {
   return (html.match(/\bdata-remote-src\s*=/gi) ?? []).length;
 }
 
-export type EmailDocumentOptions = {
+type EmailDocumentOptions = {
   /** Load remote images through the app's image proxy. */
   remoteImages?: boolean;
   origin?: string;
