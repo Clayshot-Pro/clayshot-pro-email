@@ -36,7 +36,6 @@
   --p-white-a72: rgba(255,255,255,.72);
   --p-white-a92: rgba(255,255,255,.92);
   --p-white-a94: rgba(255,255,255,.94);
-  --p-white-a98: rgba(255,255,255,.98);
   --p-gray-16-a92: rgba(250,250,252,.92);
   --p-gray-20: #fafafa;
   --p-gray-35: #f5f5f7;
@@ -865,7 +864,6 @@
   --tone-surface-0-a72: var(--p-white-a72);
   --tone-surface-0-a92: var(--p-white-a92);
   --tone-surface-0-a94: var(--p-white-a94);
-  --tone-surface-0-a98: var(--p-white-a98);
   --tone-surface-916: var(--p-gray-916);
   --tone-surface-920: var(--p-gray-920);
   --tone-surface-924: var(--p-stone-924);

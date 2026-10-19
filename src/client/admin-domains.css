@@ -59,16 +59,6 @@
 .admin-domain-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .admin-domain-note p { margin: 0 0 6px; }
 .admin-domain-note code { display: block; overflow-wrap: anywhere; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
-.admin-config-warning {
-  margin: 0 0 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--ui-error-border);
-  border-radius: 12px;
-  background: var(--ui-error-bg);
-  color: var(--ui-error-text);
-  font-size: 12px;
-  line-height: 1.6;
-}
 @media (max-width: 520px) {
   .admin-domain-add { flex-direction: column; align-items: stretch; }
   .admin-domain-fields { grid-template-columns: 1fr; }
