@@ -4,6 +4,9 @@ name: Deploy production
 # Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets.
 # Forks deploy with Workers Builds by default; a fork that prefers this
 # workflow sets the repository variable DEPLOY_WITH_ACTIONS to true.
+# Optional repository variables WORKER_NAME, D1_DATABASE_NAME, R2_BUCKET_NAME
+# and D1_DATABASE_ID override the names in wrangler.jsonc, so an instance with
+# other names keeps the committed file (and its fork) unmodified.
 # Only main deploys: the triggers, the job condition and `npm run deploy`'s
 # guard all refuse other branches and pull requests.
 on:
@@ -48,9 +51,17 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ vars.WORKER_NAME }}
+          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
 
       - name: Apply D1 migrations and deploy
         run: npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ vars.WORKER_NAME }}
+          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}

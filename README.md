@@ -27,7 +27,7 @@ Keep your fork unmodified: every setting lives in the app, and an unmodified for
 
 **Deploy button** (a private copy that does not receive updates): [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LiamTheMo/LTM-Email-Service). Then make the GitHub copy private (**Settings → Danger Zone → Change visibility**).
 
-**GitHub Actions** instead of Cloudflare's builds: in your fork, enable Actions, set the repository variable `DEPLOY_WITH_ACTIONS` to `true`, create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, and add the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* token template plus **D1: Edit**). Every push to `main` deploys.
+**GitHub Actions** instead of Cloudflare's builds: in your fork, enable Actions, set the repository variable `DEPLOY_WITH_ACTIONS` to `true`, create a D1 database `ltm-email-service` and an R2 bucket `ltm-email-service-mail`, and add the repository secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* token template plus **D1: Edit**). Every push to `main` deploys. If your Worker, database or bucket has another name, set it in the repository variables `WORKER_NAME`, `D1_DATABASE_NAME` or `R2_BUCKET_NAME` instead of editing `wrangler.jsonc`.
 
 **From your computer** (Node.js 22+):
 
@@ -89,7 +89,7 @@ Without a token, also add `PROVIDER_CREDENTIAL_KEY` (32 random bytes, base64url)
 | `PROVIDER_CREDENTIAL_KEY` | Worker secret, created at setup. **Keep a copy:** losing it makes stored keys and Gmail connections unreadable (mail is unaffected) |
 | Push notification keys | Automatic |
 | Deploy token and account ID | Not needed for a fork deployed by Cloudflare; GitHub secrets or `.env` otherwise |
-| Worker, database and bucket names | `wrangler.jsonc` |
+| Worker, database and bucket names | `wrangler.jsonc`; other names go in `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME` (build or repository variables, or `.env`) |
 
 ## Features
 

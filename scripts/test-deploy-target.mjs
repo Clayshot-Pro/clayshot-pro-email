@@ -47,6 +47,13 @@ assert.match(workflow, /github\.repository == 'LiamTheMo\/LTM-Email-Service' \|\
     write(file, committed);
   }
 }
+// Repository variables override the committed names in both the build and the deploy.
+for (const step of ["Type-check and build", "Apply D1 migrations and deploy"]) {
+  const body = workflow.slice(workflow.indexOf(`- name: ${step}`)).split(/\n\s+- name:/)[0];
+  for (const key of ["WORKER_NAME", "D1_DATABASE_NAME", "R2_BUCKET_NAME", "D1_DATABASE_ID"]) {
+    assert.match(body, new RegExp(`${key}: \\$\\{\\{ vars\\.${key} \\}\\}`), `${step} reads the ${key} repository variable`);
+  }
+}
 const install = workflow.slice(workflow.indexOf("Install dependencies"), workflow.indexOf("Generate browser favicon"));
 assert.doesNotMatch(install, /CLOUDFLARE_API_TOKEN/, "the token is not exposed to npm ci");
 assert.doesNotMatch(workflow, /^\s{4}env:/m, "no job-wide secrets");
