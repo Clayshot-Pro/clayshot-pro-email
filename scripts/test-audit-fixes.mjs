@@ -110,6 +110,16 @@ async function run(m) {
     assert.equal(m.sanitizeEmailHtml(link), link, "a URL path is not mistaken for attributes");
   }
   assert.deepEqual(m.htmlToText("<p>a</p><style>p{}</style><p>b</p>").split(/\s+/), ["a", "b"], "style content is not text");
+  // Entities decode once, numeric and named: "&amp;lt;" is the text "&lt;", not "<".
+  assert.equal(m.htmlToText("<p>Don&#8217;t miss our caf&eacute; sale &ndash; 20&#37; off &euro;5 &#x1F600;</p>"), "Don\u2019t miss our caf\u00e9 sale \u2013 20% off \u20ac5 \u{1F600}");
+  assert.equal(m.htmlToText("Literal: &amp;lt;b&amp;gt; &amp;amp; &lt;b&gt; &quot;q&quot; &apos;a&#39; &AMP; a&nbsp;b"), "Literal: &lt;b&gt; &amp; <b> \"q\" 'a' & a b");
+  assert.equal(m.htmlToText("&#0; &#xD800; &#1114112; &#9999999;"), "\uFFFD \uFFFD \uFFFD \uFFFD", "invalid code points become U+FFFD");
+  assert.equal(m.htmlToText("&unknown; &amp &#; &#x; AT&T"), "&unknown; &amp &#; &#x; AT&T", "anything that is not a complete known entity stays as written");
+  assert.equal(m.htmlToText("&Eacute;quipe &Uuml;ber &szlig; &hellip;"), "\u00c9quipe \u00dcber \u00df \u2026", "named entities are case-sensitive");
+  {
+    const [, ms] = timed(() => m.htmlToText("&#".repeat(500_000) + "&a".repeat(500_000)));
+    assert.ok(ms < 5000, `entity decoding is linear (${ms.toFixed(0)} ms)`);
+  }
   {
     const footer = `<a href="https://news.example.org/unsubscribe?u=1">Unsubscribe</a>`;
     const [url, ms] = timed(() => m.messageUnsubscribeUrl(`${"<a href=x>".repeat(45_000)}${footer}`, ""));

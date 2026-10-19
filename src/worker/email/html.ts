@@ -81,7 +81,34 @@ export function sanitizeEmailHtml(html: string): string {
     .trim();
 }
 
+// Named entities common in mail: the Latin-1 set (U+00A0 to U+00FF, in order) and
+// typographic punctuation. Unknown names are left as written.
+const LATIN1_ENTITIES = "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml";
+const NAMED_ENTITIES = new Map<string, string>([
+  ...LATIN1_ENTITIES.split(" ").map((name, index): [string, string] => [name, String.fromCharCode(0xa0 + index)]),
+  ["nbsp", " "], ["amp", "&"], ["lt", "<"], ["gt", ">"], ["quot", '"'], ["apos", "'"],
+  ...Object.entries({
+    OElig: 338, oelig: 339, Scaron: 352, scaron: 353, Yuml: 376, circ: 710, tilde: 732, ensp: 8194, emsp: 8195, thinsp: 8201,
+    zwnj: 8204, zwj: 8205, lrm: 8206, rlm: 8207, ndash: 8211, mdash: 8212, lsquo: 8216, rsquo: 8217, sbquo: 8218, ldquo: 8220,
+    rdquo: 8221, bdquo: 8222, dagger: 8224, Dagger: 8225, bull: 8226, hellip: 8230, permil: 8240, lsaquo: 8249, rsaquo: 8250,
+    euro: 8364, trade: 8482,
+  }).map(([name, code]): [string, string] => [name, String.fromCharCode(code)]),
+]);
+const ENTITY = /&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g;
+
+function decodeEntity(entity: string, body: string): string {
+  if (body.startsWith("#")) {
+    const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+    return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "\uFFFD" : String.fromCodePoint(code);
+  }
+  // The few names HTML also accepts in capitals (&AMP;, &LT;, ...).
+  return NAMED_ENTITIES.get(body) ?? (/^(?:amp|lt|gt|quot|nbsp)$/i.test(body) ? NAMED_ENTITIES.get(body.toLowerCase())! : entity);
+}
+
 /** Readable text from HTML (when a message has no text part). Linear for any input. */
 export function htmlToText(html: string): string {
-  return removeElements(html.slice(0, MAX_SANITIZE_CHARS), ["script", "style"], " ").replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, "\n").replace(/<[^<>]{0,8192}>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/[ \t]+/g, " ").replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+  return removeElements(html.slice(0, MAX_SANITIZE_CHARS), ["script", "style"], " ").replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, "\n").replace(/<[^<>]{0,8192}>/g, " ")
+    // One pass, so decoded text is never decoded again ("&amp;lt;" is "&lt;", not "<").
+    .replace(ENTITY, decodeEntity)
+    .replace(/[ \t]+/g, " ").replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
 }
