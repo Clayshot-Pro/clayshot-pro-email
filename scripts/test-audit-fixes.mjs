@@ -70,6 +70,10 @@ async function run(m) {
   });
   assert.equal(await m.limitedRequest(stream("x".repeat(100)), 100).text(), "x".repeat(100), "a body with no length is read up to the limit");
   await assert.rejects(m.limitedRequest(stream("x".repeat(101)), 100).text(), "and no further");
+  // The Resend webhook reads chunked bodies the same way instead of refusing them.
+  const chunked = text => new Request("https://mail.example.org/api/x", { method: "POST", headers: { "Transfer-Encoding": "chunked" }, body: text });
+  assert.equal(await m.limitedRequest(chunked("{}"), 100, { streamChunked: true }).text(), "{}");
+  await assert.rejects(m.limitedRequest(chunked("x".repeat(101)), 100, { streamChunked: true }).text());
 
   // Linear-time HTML handling: crafted input finishes quickly (quadratic code took minutes).
   const MB = 1024 * 1024;

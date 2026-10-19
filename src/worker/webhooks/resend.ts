@@ -10,7 +10,8 @@ const reply = (body: Record<string, unknown>, status = 200) => Response.json(bod
 export async function resendWebhook(request: Request, env: Env): Promise<Response> {
   const secret = env.RESEND_WEBHOOK_SECRET?.trim();
   if (!secret || !appConfig(env).features.resendWebhook) return reply({ error: "Unauthorized" }, 401);
-  const body = await limitedRequest(request, MAX_BODY_BYTES)?.text().catch(() => null);
+  // Webhook senders may stream: a chunked body is read up to the limit, not refused.
+  const body = await limitedRequest(request, MAX_BODY_BYTES, { streamChunked: true })?.text().catch(() => null);
   if (body == null) return reply({ error: "Payload too large" }, 413);
 
   const headers = {

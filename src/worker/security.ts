@@ -62,18 +62,18 @@ export const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
  * The request with its body capped at maxBytes, or null when it is already
  * known to be too large, so handlers that parse JSON before authentication
  * never read unbounded input. A declared length over the limit (or invalid)
- * and a chunked body are refused up front; a body with no length at all
- * (HTTP/2 and HTTP/3 may send neither header) is counted while it is read
- * and fails once it passes the limit.
+ * is refused up front, and so is a chunked body unless `streamChunked` is set;
+ * a body with no length at all (HTTP/2 and HTTP/3 may send neither header) is
+ * counted while it is read and fails once it passes the limit.
  */
-export function limitedRequest(request: Request, maxBytes: number): Request | null {
+export function limitedRequest(request: Request, maxBytes: number, { streamChunked = false } = {}): Request | null {
   if (!request.body) return request;
   const raw = request.headers.get("Content-Length");
   if (raw !== null) {
     const length = Number(raw);
     return Number.isSafeInteger(length) && length >= 0 && length <= maxBytes ? request : null;
   }
-  if (request.headers.has("Transfer-Encoding")) return null;
+  if (request.headers.has("Transfer-Encoding") && !streamChunked) return null;
   let seen = 0;
   const body = request.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
