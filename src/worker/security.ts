@@ -42,23 +42,17 @@ export function authRateLimitBucket(request: Request, route: string): string {
 }
 
 /**
- * Failed sign-ins on one account from anywhere, so spreading guesses over
- * many addresses doesn't help. Only failures count and a success clears them,
- * so the account's owner signing in never uses up the allowance.
+ * Sign-in attempts on one account from anywhere, so spreading guesses over
+ * many addresses doesn't help. A success clears the count, so the owner
+ * signing in never uses up the allowance.
  */
 export const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
 export const ACCOUNT_LOGIN_MAX_ATTEMPTS = 30;
 export const accountRateLimitBucket = (route: string, address: string) => `${route}:account:${address.trim().toLowerCase()}`;
 
-export async function accountLoginBlocked(env: Env, bucket: string): Promise<boolean> {
-  const row = await env.DB.prepare(`SELECT attempts FROM auth_rate_limits
-    WHERE bucket = ?1 AND window_started_at > datetime('now', ?2)`)
-    .bind(await sha256Hex(bucket), `-${ACCOUNT_LOGIN_WINDOW_SECONDS} seconds`).first<{ attempts: number }>();
-  return (row?.attempts ?? 0) >= ACCOUNT_LOGIN_MAX_ATTEMPTS;
-}
-
-export async function recordAccountLoginFailure(env: Env, bucket: string): Promise<void> {
-  await checkAuthRateLimit(env, bucket, ACCOUNT_LOGIN_WINDOW_SECONDS, ACCOUNT_LOGIN_MAX_ATTEMPTS);
+/** Count one attempt; false once the account's allowance for the window is used up. */
+export function countAccountLoginAttempt(env: Env, bucket: string): Promise<boolean> {
+  return checkAuthRateLimit(env, bucket, ACCOUNT_LOGIN_WINDOW_SECONDS, ACCOUNT_LOGIN_MAX_ATTEMPTS);
 }
 
 export async function clearAccountLoginFailures(env: Env, bucket: string): Promise<void> {

@@ -4,7 +4,7 @@ import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
 import { adminLoginAddress, adminMailboxAddress, isAdministratorEmail } from "./config";
 import { ADMIN_MAILBOX_ID } from "./mailboxIds";
-import { accountLoginBlocked, accountRateLimitBucket, authRateLimitBucket, checkAuthRateLimit, clearAccountLoginFailures, recordAccountLoginFailure } from "./security";
+import { accountRateLimitBucket, authRateLimitBucket, checkAuthRateLimit, clearAccountLoginFailures, countAccountLoginAttempt } from "./security";
 
 import { addressRules, primaryDomain } from "./domains";
 import { beginAdminLogin } from "./adminAuth";
@@ -154,15 +154,14 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
     }), env);
   }
   const accountBucket = accountRateLimitBucket("native-login", email);
+  // The account counter is incremented before the password check (one atomic
+  // upsert), so parallel guesses cannot all pass; a success clears it.
   if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))
-    || await accountLoginBlocked(env, accountBucket)) {
+    || !(await countAccountLoginAttempt(env, accountBucket))) {
     return jsonError("Too many attempts. Try again later.", 429);
   }
   const mailboxId = await checkNativePassword(env,email,password);
-  if (!mailboxId) {
-    await recordAccountLoginFailure(env, accountBucket);
-    return jsonError("Invalid credentials", 401);
-  }
+  if (!mailboxId) return jsonError("Invalid credentials", 401);
   await clearAccountLoginFailures(env, accountBucket);
   const setCookie = await establishDeviceGrant(request, env, mailboxId, "native");
   const headers = new Headers({ "Cache-Control": "no-store" });

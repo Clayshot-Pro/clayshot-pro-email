@@ -8,7 +8,7 @@ type ComposeModalProps = {
   files: File[];
   sending: boolean;
   sendError: string | null;
-  draftStatus: "saving" | "saved" | null;
+  draftStatus: "saving" | "saved" | "failed" | null;
   accounts: ConnectedAccount[];
   senderAccountId: string;
   onSenderAccountChange: (accountId: string) => void;
@@ -113,7 +113,7 @@ export function ComposeModal({
         {sendError ? <p className="compose-send-error" role="alert">{sendError}</p> : null}
         <footer className="compose-footer">
           <label className="attach-control"><Icon name="paperclip" size={16} /><span>Attach</span><input type="file" multiple onChange={(event) => onFilesChange(Array.from(event.target.files ?? []))} /></label>
-          <span className="compose-from">{draftStatus === "saving" ? "Saving draft…" : draftStatus === "saved" ? "Draft saved" : currentSender.status === "active" ? `Sending as ${currentSender.emailAddress}` : "Reconnect this sender to send"}</span>
+          <span className="compose-from">{draftStatus === "saving" ? "Saving draft…" : draftStatus === "saved" ? "Draft saved" : draftStatus === "failed" ? "Draft not saved" : currentSender.status === "active" ? `Sending as ${currentSender.emailAddress}` : "Reconnect this sender to send"}</span>
           <button className="send-control" type="submit" disabled={sending || senderDisabled}><Icon name="send" size={15} />{sending ? "Sending…" : "Send"}</button>
         </footer>
       </form>

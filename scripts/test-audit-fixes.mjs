@@ -61,7 +61,8 @@ async function run(m) {
     db.exec("UPDATE auth_rate_limits SET window_started_at = datetime('now', '-901 seconds')");
     assert.equal(await m.checkAuthRateLimit(env, "b", 900, 3), true, "a new window starts after it ends");
   }
-  assert.match(source("worker/deviceAuth.ts"), /accountRateLimitBucket\("native-login", email\)/, "mailbox sign-in is limited per account too");
+  assert.match(source("worker/deviceAuth.ts"), /countAccountLoginAttempt\(env, accountBucket\)[\s\S]{0,200}checkNativePassword[\s\S]{0,200}clearAccountLoginFailures/,
+    "the account is counted before the password check and cleared after a success");
 
   assert.equal(m.clientNetwork(request("::ffff:198.51.100.7")), "198.51.100.7", "an IPv4-mapped address is that IPv4 client");
   {
@@ -69,15 +70,13 @@ async function run(m) {
     const db = database();
     const env = { DB: d1(db) };
     const bucket = m.accountRateLimitBucket("native-login", "alice@example.org");
-    for (let i = 0; i < m.ACCOUNT_LOGIN_MAX_ATTEMPTS - 1; i++) await m.recordAccountLoginFailure(env, bucket);
-    assert.equal(await m.accountLoginBlocked(env, bucket), false);
-    await m.recordAccountLoginFailure(env, bucket);
-    assert.equal(await m.accountLoginBlocked(env, bucket), true);
+    // Counted atomically before the password check, so parallel guesses cannot all pass.
+    const parallel = await Promise.all(Array.from({ length: m.ACCOUNT_LOGIN_MAX_ATTEMPTS + 10 }, () => m.countAccountLoginAttempt(env, bucket)));
+    assert.equal(parallel.filter(Boolean).length, m.ACCOUNT_LOGIN_MAX_ATTEMPTS);
     db.exec("UPDATE auth_rate_limits SET window_started_at = datetime('now', '-901 seconds')");
-    assert.equal(await m.accountLoginBlocked(env, bucket), false, "the block ends with the window");
-    await m.recordAccountLoginFailure(env, bucket);
+    assert.equal(await m.countAccountLoginAttempt(env, bucket), true, "the block ends with the window");
     await m.clearAccountLoginFailures(env, bucket);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM auth_rate_limits").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM auth_rate_limits").get().n, 0, "a successful sign-in clears the count");
   }
 
   // Request bodies: streamed bodies without a length are refused.
@@ -96,12 +95,16 @@ async function run(m) {
     ["attribute whitespace", `<img${" ".repeat(2 * MB)}`],
     ["blank lines", "\n \n".repeat(MB / 3)],
     ["image tags", "<img src=".repeat(MB / 9)],
+    ["spaces after src=", `<img src=${" ".repeat(2 * MB)}x>`],
+    ["spaces after href=", `<a href=${" ".repeat(2 * MB)}x>`],
+    ["unclosed handler quotes", `<a onx="`.repeat(MB / 8)],
+    ["slashes", `<img${"/".repeat(2 * MB)}`],
   ]) {
     const [, sanitize] = timed(() => m.sanitizeEmailHtml(html));
     const [, text] = timed(() => m.htmlToText(html));
     assert.ok(sanitize < 5000 && text < 5000, `${label}: sanitize ${sanitize.toFixed(0)} ms, text ${text.toFixed(0)} ms`);
   }
-  assert.equal(m.sanitizeEmailHtml("<p>ok</p><script>x</script><b onclick=\"y\">b</b>"), "<p>ok</p><b>b</b>");
+  assert.equal(m.sanitizeEmailHtml("<p>ok</p><script>x</script><b onclick=\"y\">b</b>"), "<p>ok</p><b >b</b>");
   // Quoting, spacing, length and "/" separators do not get a handler or script URL through.
   const spaces = " ".repeat(40);
   for (const html of [`<a href="javascript:alert('x')">a</a>`, `<a href='javascript:alert("x")'>a</a>`, `<a href=${spaces}javascript:alert(1)>a</a>`,
@@ -111,8 +114,16 @@ async function run(m) {
   for (const html of [`<img src=x onerror${spaces}=alert(1)>`, `<img src=x onerror=${spaces}alert(1)>`, `<img src="x"/onerror=alert(1)>`, `<svg/onload=alert(1)>`]) {
     assert.doesNotMatch(m.sanitizeEmailHtml(html), /onerror|onload/i, html.slice(0, 60));
   }
-  for (const html of [`<img ${"a".repeat(9000)} src="https://t.test/p.png">`, `<img src='https://t.test/a"b.png'>`, `<img src=https://t.test/p.png>`]) {
+  for (const html of [`<img ${"a".repeat(9000)} src="https://t.test/p.png">`, `<img src='https://t.test/a"b.png'>`, `<img src=https://t.test/p.png>`,
+    `<img src=${spaces}"https://t.test/p.png">`]) {
     assert.doesNotMatch(m.sanitizeEmailHtml(html), /[\s/]src\s*=/i, "remote images are never left loadable");
+  }
+  assert.match(m.sanitizeEmailHtml(`<img src="cid:logo">`), /src="cid:logo"/, "inline images are kept");
+  assert.doesNotMatch(m.sanitizeEmailHtml(`<scr<scr<script>ipt>ipt>alert(1)</script>`), /<script/i, "removed tags cannot reassemble");
+  assert.doesNotMatch(m.sanitizeEmailHtml(`<img src="x"onerror=alert(1)>`), /onerror/i, "a handler right after a quoted value is removed");
+  assert.doesNotMatch(m.sanitizeEmailHtml(`<img o/onx="1"nerror=alert(1)>`), /\bonerror\b/i, "removing an attribute cannot join a new one");
+  for (const link of [`<a href="https://x.test/onboarding=1">x</a>`, `<a href="https://x.test/a/action=2/ping=3">x</a>`]) {
+    assert.equal(m.sanitizeEmailHtml(link), link, "a URL path is not mistaken for attributes");
   }
   assert.deepEqual(m.htmlToText("<p>a</p><style>p{}</style><p>b</p>").split(/\s+/), ["a", "b"], "style content is not text");
   {
@@ -139,19 +150,14 @@ async function run(m) {
   assert.equal(m.rfcMessageId("<abc@mail.example.org>"), "<abc@mail.example.org>");
   for (const bad of ["56761188-7520-42d8-8898-ff6fc54ce618", "", null, "a b@c", "<x@y>\r\nBcc: z"]) assert.equal(m.rfcMessageId(bad), null, String(bad));
   {
+    // One API call per Resend send (its rate limit is low); the Message-ID comes from its webhooks.
     const calls = [];
-    const fetcher = async (url, init = {}) => {
-      calls.push(`${init.method ?? "GET"} ${url}`);
-      return String(url).endsWith("/emails") ? Response.json({ id: "re_1" }) : Response.json({ id: "re_1", message_id: "<111@mail.example.org>" });
-    };
-    const transport = new m.ResendTransport("re_key", fetcher);
+    const transport = new m.ResendTransport("re_key", async (url, init = {}) => { calls.push(`${init.method ?? "GET"} ${url}`); return Response.json({ id: "re_1" }); });
     const message = { from: { email: "a@example.org", name: "A" }, replyTo: "a@example.org", to: ["b@example.net"], cc: [], bcc: [], subject: "s", text: "t", html: "<p>t</p>", attachments: [] };
-    assert.deepEqual(await transport.send(message), { providerMessageId: "re_1", messageIdHeader: "<111@mail.example.org>" });
-    assert.deepEqual(calls, ["POST https://api.resend.com/emails", "GET https://api.resend.com/emails/re_1"]);
-    const offline = new m.ResendTransport("re_key", async url => String(url).endsWith("/emails") ? Response.json({ id: "re_2" }) : Promise.reject(new Error("down")));
-    assert.deepEqual(await offline.send(message), { providerMessageId: "re_2", messageIdHeader: null }, "a failed lookup never fails the send");
+    assert.deepEqual(await transport.send(message), { providerMessageId: "re_1", messageIdHeader: null });
+    assert.deepEqual(calls, ["POST https://api.resend.com/emails"]);
   }
-  assert.match(source("worker/webhooks/resend.ts"), /UPDATE messages SET message_id = \?3 WHERE id = \?1 AND mailbox_id = \?2 AND message_id IS NULL/);
+  assert.match(source("worker/webhooks/resend.ts"), /UPDATE OR IGNORE messages SET message_id = \?3 WHERE id = \?1 AND mailbox_id = \?2 AND message_id IS NULL/);
   assert.match(source("worker/email/send.ts"), /\/\/ The RFC Message-ID, never a provider's own id[^\n]*\n\s*messageIdHeader,/);
 
   // A reply to sent mail whose Message-ID was never reported joins its conversation and teaches the ID.
@@ -172,6 +178,11 @@ async function run(m) {
     assert.equal((await m.resolveThreadId(env, "native:work", "<other@cf.example>", null, "bob@example.net", "Re: Plans")).learned, null,
       "only sent mail whose ID is unknown is matched by subject");
     assert.deepEqual(await m.resolveThreadId(env, "native:work", "<known@x>", null, "x@y.z", "anything"), { threadId: "t9", learned: null });
+    db.exec("UPDATE messages SET message_id = NULL WHERE id = 'o1'");
+    assert.equal((await m.resolveThreadId(env, "native:work", "<forged@x>", null, "bob@example.net", "Re: Plans", false)).learned, null,
+      "junk or unauthenticated mail never teaches an ID");
+    assert.match(source("worker/email/receive.ts"), /!isJunk && senderAuthenticated\(authenticationHeaders, fromAddress\)/);
+    assert.match(source("worker/email/receive.ts"), /UPDATE OR IGNORE messages SET message_id=\?3/);
   }
 
   // Drafts: a late save of a sent draft, another mailbox's id, or a malformed reply target is refused.
@@ -184,7 +195,9 @@ async function run(m) {
     assert.equal((await save("native:work", { id: "draft-0001", subject: "Hello" })).status, 200);
     assert.equal((await save("native:other", { id: "draft-0001", subject: "Takeover" })).status, 409, "another mailbox's draft id");
     assert.equal(db.prepare("SELECT subject FROM drafts WHERE id = 'draft-0001'").get().subject, "Hello");
-    db.exec("INSERT INTO outbound_attempts (mailbox_id, client_key, message_id, state) VALUES ('native:work', 'draft-0001', 'm', 'accepted')");
+    db.exec("INSERT INTO outbound_attempts (mailbox_id, client_key, message_id, state) VALUES ('native:work', 'draft-0001', 'm', 'pending')");
+    assert.equal((await save("native:work", { id: "draft-0001", subject: "Edited" })).status, 200, "a send left pending never blocks editing");
+    db.exec("UPDATE outbound_attempts SET state = 'accepted' WHERE client_key = 'draft-0001'");
     db.exec("DELETE FROM drafts WHERE id = 'draft-0001'");
     assert.equal((await save("native:work", { id: "draft-0001", subject: "late" })).status, 409, "a sent draft is not recreated");
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM drafts").get().n, 0);
@@ -216,6 +229,10 @@ async function run(m) {
     assert.equal(await provider.patchThread("m1", { isDeleted: true }), true);
     assert.deepEqual(flags(), { m1: "111", m2: "111", m3: "000", s1: "001" }, "deleting a conversation takes all of it");
     db.exec("UPDATE messages SET is_archived = 0, is_junk = 0, is_deleted = 0");
+    assert.equal(await provider.patchThread("s1", { isArchived: true }), true, "the opened sent message itself is archived");
+    assert.deepEqual(flags(), { m1: "100", m2: "100", m3: "000", s1: "100" });
+    assert.equal(await provider.patchThread("m1", { isArchived: false }), true);
+    assert.deepEqual(flags(), { m1: "000", m2: "000", m3: "000", s1: "000" }, "unarchiving restores the whole conversation");
     const bulk = (ids, action) => m.bulkMailAction(new Request("https://mail.example.org/api/messages/bulk?accountId=native:work",
       { method: "POST", body: JSON.stringify({ ids, action }) }), env, { waitUntil() {} });
     assert.equal((await bulk(["m1"], "archive")).status, 200);
@@ -247,6 +264,7 @@ async function run(m) {
   const receive = source("worker/email/receive.ts");
   assert.match(receive, /releaseClaim\(\)/);
   assert.match(receive, /Delivery of this message is already in progress/);
+  assert.match(send, /existing\.state === "accepted"\) \{[\s\S]{0,200}DELETE FROM drafts/, "a retried, already accepted send removes its draft");
   // Drafts are bounded per mailbox.
   assert.match(source("worker/api/drafts.ts"), /MAX_DRAFTS_PER_MAILBOX = 200/);
   // Contact photos never send the Google token to a redirect target.

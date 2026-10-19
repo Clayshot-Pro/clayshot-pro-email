@@ -126,11 +126,12 @@ export class NativeMailProvider implements MailProvider {
     const [key, value] = Object.entries(mutation)[0] ?? [];
     const column = key === "isDeleted" ? "is_deleted" : key === "isArchived" ? "is_archived" : key === "isJunk" ? "is_junk" : null;
     if (!column || typeof value !== "boolean") return false;
-    // Archive and Junk move received mail; your own replies stay in Sent.
-    const scope = column === "is_deleted" ? "" : " AND direction='inbound'";
+    // Archiving or junking moves the received mail and the opened message, so
+    // your own replies stay in Sent; undoing it, and deleting, take everything.
+    const scope = column === "is_deleted" || !value ? "" : " AND (direction='inbound' OR id=?4)";
     const result = await this.env.DB.prepare(
       `UPDATE messages SET ${column}=?1 WHERE mailbox_id=?2 AND thread_id=?3${scope}`
-    ).bind(value ? 1 : 0, this.accountId, message.thread_id).run();
+    ).bind(...[value ? 1 : 0, this.accountId, message.thread_id], ...(scope ? [id] : [])).run();
     return Boolean(result.meta.changes);
   }
 

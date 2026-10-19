@@ -78,7 +78,7 @@ export function App() {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
-  const [draftStatus, setDraftStatus] = useState<"saving" | "saved" | null>(null);
+  const [draftStatus, setDraftStatus] = useState<"saving" | "saved" | "failed" | null>(null);
   const [notificationState, setNotificationState] = useState<NotificationState>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
@@ -384,7 +384,8 @@ export function App() {
         if (!known) setDraftCount((count) => count + 1);
         setDraftStatus("saved");
       } catch {
-        setDraftStatus(null);
+        // Shown in the compose window: a draft that cannot be saved is never silent.
+        if (!closedDraftIds.current.has(current.draftId)) setDraftStatus("failed");
       }
     };
     draftSaves.current = draftSaves.current.then(save, save);
@@ -558,7 +559,9 @@ export function App() {
           draftId: draft.id,
         });
         // An opened draft is already saved: editing it must not count it again.
+        // It may have been closed earlier in this tab (a failed discard): reopen it.
         persistedDraftIds.current.add(draft.id);
+        closedDraftIds.current.delete(draft.id);
         setComposeAccountId(draftSenderId);
         setComposeOpen(true);
       } catch {
@@ -654,18 +657,26 @@ export function App() {
     // resurface an older message of the conversation after the next refresh).
     const conversationMutation = Object.keys(patch).length === 1 &&
       ["isDeleted", "isArchived", "isJunk"].some((key) => typeof patch[key] === "boolean");
-    // Archive and Junk leave your own replies in Sent; delete takes everything.
-    const inThread = (message: { threadId: string; direction: string }) => message.threadId === target.threadId
-      && (typeof patch.isDeleted === "boolean" || message.direction === "inbound");
+    // Same rule as the server: archiving or junking moves the received mail
+    // and the opened message, so your own replies stay in Sent; undoing it,
+    // and deleting, take the whole conversation.
+    const wholeThread = typeof patch.isDeleted === "boolean" || Object.values(patch).every(value => value === false);
+    const inThread = (message: { id: string; threadId: string; direction: string }) => message.id === target.id
+      || (message.threadId === target.threadId && (wholeThread || message.direction === "inbound"));
     const matchesTarget = (message: MessageListItem) => (message.accountId ?? activeAccountId) === accountId
-      && (conversationMutation ? inThread(message) || message.id === target.id : message.id === target.id);
-    const shieldKey = mailMutationKey(accountId,
-      conversationMutation ? target.threadId : target.id,
-      conversationMutation ? "thread" : "message");
-    mutationShields.current.set(shieldKey, {
-      flags: patch as MailMutationFlags,
-      updatedAt: Date.now(),
-    });
+      && (conversationMutation ? inThread(message) : message.id === target.id);
+    // A thread shield covers every message of the conversation; archive and
+    // junk shield exactly the messages they move.
+    const shieldKeys = conversationMutation && wholeThread
+      ? [mailMutationKey(accountId, target.threadId, "thread")]
+      : messages.filter(matchesTarget).map(message => mailMutationKey(accountId, message.id))
+        .concat(mailMutationKey(accountId, target.id));
+    for (const key of shieldKeys) {
+      mutationShields.current.set(key, {
+        flags: patch as MailMutationFlags,
+        updatedAt: Date.now(),
+      });
+    }
     // Reject all GETs started before this write, including focus/pull refreshes.
     listRequest.current += 1;
     const keepInCurrentFolder = belongsInFolder(folder, nextSelected);
@@ -722,7 +733,7 @@ export function App() {
       }
     } catch {
       if (mailViewRef.current.accountId !== activeAccountId || mailViewRef.current.folder !== folder) return;
-      mutationShields.current.delete(shieldKey);
+      for (const key of shieldKeys) mutationShields.current.delete(key);
       setMessages(previousMessages);
       setSelected(previousSelected);
       setThread(previousThread);

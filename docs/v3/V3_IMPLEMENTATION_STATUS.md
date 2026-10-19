@@ -20,7 +20,7 @@
 | `v3.11` | Native HTML email reader: full reader width, app-themed rendering for ordinary mail, a light card only for designed mail |
 | `v3.12` | Easier setup: Deploy to Cloudflare button, in-app migrations, one-page setup with a Cloudflare token, automatic domain wiring (migration 0023) |
 | `v3.13` | Forks: deploy a GitHub fork with Cloudflare and update with Sync fork; app version and update notice; licence allows unmodified forks |
-| `v3.14` | End-to-end and unit tests; fixes from a security and bug review |
+| `v3.14` | End-to-end and unit tests; fixes from a security and bug review; real outbound Message-IDs (migration 0024) |
 
 ## Decisions applied in v3.05
 
@@ -120,16 +120,17 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 ## v3.14: tests and review fixes
 
 - **Tests:** `npm run test:e2e` runs the real Worker locally (`wrangler dev`) with Chromium and a virtual passkey: setup, mailbox creation, inbound mail, safe reading of hostile HTML, attachments, access control, junk and blocking, sending, conversations, redelivery, drafts, All inboxes, sign-out, disabling a mailbox, and draft saves racing a discard or send. A second suite renders 27 XSS payloads in the reader frame. CI runs both (`e2e` job). `scripts/test-unit-core.mjs` and `scripts/test-audit-fixes.mjs` add unit and regression tests.
-- **Sign-in:** rate limits group IPv6 clients by /64 and also limit each mailbox (30 failed attempts per 15 minutes; a success clears them); disabling or deleting a mailbox signs out its devices at once; the first passkey is registered atomically; bodies without a length are refused.
-- **Receiving:** HTML handling is linear-time (crafted mail can no longer stall the Worker); a failed store releases its delivery claim so Email Routing's retry is kept; attachment names lose bidi controls; HTML is capped at 2 MB.
-- **Junk:** only the receiving server's result counts (the topmost Cloudflare `Authentication-Results` or `ARC-Authentication-Results`, else the topmost), so a forged `dkim=pass` no longer rescues failing mail; `List-Id` excuses a DMARC failure only with `arc=pass`; a contact skips content checks only with DMARC or aligned DKIM.
+- **Sign-in:** rate limits group IPv6 clients by /64 and also limit each mailbox (30 attempts per 15 minutes, counted before the password check; a success clears them); disabling or deleting a mailbox signs out its devices at once; the first passkey is registered atomically; bodies without a length are refused.
+- **Receiving:** HTML handling is linear-time (crafted mail can no longer stall the Worker), and the first sanitizer pass is no longer fooled by quoting, spacing, length, `/` separators or tags that reassemble; a failed store releases its delivery claim so Email Routing's retry is kept; attachment names lose bidi controls; HTML is capped at 2 MB.
+- **Junk:** only the receiving server's result counts (the topmost Cloudflare `Authentication-Results` or `ARC-Authentication-Results`, else the topmost), so a forged `dkim=pass` no longer rescues failing mail; `List-Id` excuses a DMARC failure only when the list's own domain signed the message; a contact skips content checks only with DMARC or aligned DKIM.
 - **Sending:** a failed send can be retried with the same message; Gmail replies join their thread and Gmail forwards keep attachments; subjects lose line breaks; stricter address check; only reply headers reach the Cloudflare binding.
-- **Message-IDs:** sent mail stores its real RFC Message-ID, never a provider's own ID, so replies thread. The Cloudflare binding reports it; for Resend it is read back after sending and from webhooks; the Cloudflare REST API cannot report or set one, so it is learned from the first reply (same recipient, same subject, sent in the last 30 days).
-- **Drafts:** saves run one at a time in order; discarding, sending or changing the sender waits for a save in flight, so a slow autosave never brings a draft back; the server refuses to recreate a sent draft or reuse another mailbox's draft id; Gmail drafts are deleted when sent; up to 200 drafts per mailbox.
-- **Mail list:** in the reader, archive, junk and delete apply to the whole conversation (archive and junk leave your own replies in Sent); bulk actions apply to the selected messages; opening a conversation updates the unread count by every message it reads; sending from another account switches to it cleanly.
+- **Message-IDs:** sent mail stores its real RFC Message-ID, never a provider's own ID, so replies thread. The Cloudflare binding reports it; Resend sends it with its webhooks; the Cloudflare REST API cannot report or set one, so it is learned from the first authenticated, non-junk reply (same recipient, same subject, sent in the last 30 days). Migration 0024 brackets older IDs and clears provider IDs stored before.
+- **Drafts:** saves run one at a time in order; discarding, sending or changing the sender waits for a save in flight, so a slow autosave never brings a draft back; the server refuses to recreate a sent draft or reuse another mailbox's draft id; a draft that cannot be saved says so; Gmail drafts are deleted when sent; up to 200 drafts per mailbox.
+- **Mail list:** in the reader, archive, junk and delete apply to the whole conversation (archive and junk leave your own replies in Sent; undoing restores all of it); bulk actions apply to the selected messages; opening a conversation updates the unread count by every message it reads; sending from another account switches to it cleanly.
 - **Domains:** a subdomain gets its own Email Routing MX records even when the zone already has routing; a catch-all that already forwards elsewhere is only replaced after confirmation.
 - **Migrations:** the in-app runner keeps `CASE … END` inside triggers together.
-- **Requires manual validation:** Gmail reply and forward with an attachment, the junk verdict on real Cloudflare-delivered mail, and the Message-ID of mail sent through Resend.
+- **Requires manual validation:** Gmail reply and forward with an attachment, the junk verdict on real Cloudflare-delivered mail, the Message-ID of mail sent through Resend (needs its webhook), and that the Cloudflare binding's `messageId` is the header recipients see.
+- **Known limits (low):** a late autosave from a second tab can recreate a Gmail draft after sending; text typed while Send waits for a draft save is not sent; signing a device out does not revoke its Gmail token (removing the account does).
 - **Kept by decision:** mailbox passwords stay 4–32 characters; Google sign-in stays open to any Google account.
 
 ## Production rollout (LTM instance)

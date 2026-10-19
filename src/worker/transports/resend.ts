@@ -1,4 +1,4 @@
-import { TransportError, rfcMessageId, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types.ts";
+import { TransportError, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types.ts";
 
 const ENDPOINT = "https://api.resend.com/emails";
 const ALLOWED_HEADERS = new Set(["in-reply-to", "references"]);
@@ -79,25 +79,8 @@ export class ResendTransport implements OutboundTransport {
     }
     const body = await response.json().catch(() => null) as { id?: unknown; name?: unknown } | null;
     if (!response.ok) throw new TransportError(mapResendError(response.status, body?.name));
-    const id = typeof body?.id === "string" ? body.id : null;
-    return { providerMessageId: id, messageIdHeader: id ? await this.messageIdOf(id) : null };
-  }
-
-  /**
-   * The Message-ID Resend gave the email (its send response only has its own
-   * id). Best effort: the email is already sent, and Resend webhooks fill it
-   * in later when this lookup fails.
-   */
-  private async messageIdOf(id: string): Promise<string | null> {
-    try {
-      const response = await this.fetcher(`${ENDPOINT}/${encodeURIComponent(id)}`, {
-        headers: { Authorization: `Bearer ${this.apiKey}` }, signal: AbortSignal.timeout(5_000),
-      });
-      if (!response.ok) return null;
-      const body = await response.json().catch(() => null) as { message_id?: unknown } | null;
-      return rfcMessageId(body?.message_id);
-    } catch {
-      return null;
-    }
+    // Resend's response has only its own id; the Message-ID arrives with its
+    // webhooks (or is learned from the first reply, see receive.ts).
+    return { providerMessageId: typeof body?.id === "string" ? body.id : null, messageIdHeader: null };
   }
 }

@@ -60,7 +60,7 @@ export { belongsInFolder, hasDraftContent, base64UrlToArrayBuffer, EMPTY_COMPOSE
     <form action="https://e.test"><input></form><svg onload=bad()></svg>`);
   assert.doesNotMatch(clean, /<script|<iframe|<form|<input|<svg|onclick|onload|=["']?\s*javascript:|srcset|track\.test/i);
   assert.match(clean, /data-remote-image-blocked="true"/);
-  assert.match(clean, /<p>hi<\/p>/);
+  assert.match(clean, /<p\s*>hi<\/p>/);
 
   assert.equal(m.adminMailboxAddressFor("Example.ORG"), "admin@example.org");
 

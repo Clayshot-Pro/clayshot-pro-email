@@ -115,8 +115,10 @@ export async function saveDraft(request: Request, env: Env): Promise<Response> {
   }
 
   // A save that arrives after its draft was sent (a slow autosave, another
-  // tab) must not bring the draft back. A native send keys its attempt by the draft id.
-  const sent = await env.DB.prepare("SELECT 1 AS yes FROM outbound_attempts WHERE mailbox_id = ?1 AND client_key = ?2 AND state IN ('pending','accepted','uncertain')")
+  // tab) must not bring the draft back. A native send keys its attempt by the
+  // draft id. Only an accepted send counts: a pending one can be left behind
+  // by an interrupted request and must not block editing.
+  const sent = await env.DB.prepare("SELECT 1 AS yes FROM outbound_attempts WHERE mailbox_id = ?1 AND client_key = ?2 AND state = 'accepted'")
     .bind(provider.accountId, id).first();
   if (sent) return Response.json({ error: "This draft was already sent" }, { status: 409 });
   const known = await env.DB.prepare("SELECT 1 AS yes FROM drafts WHERE id = ?1 AND mailbox_id = ?2").bind(id, provider.accountId).first();

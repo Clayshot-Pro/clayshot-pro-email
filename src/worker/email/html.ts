@@ -2,8 +2,11 @@ const BLOCKED_CONTAINERS = ["script", "iframe", "object", "embed", "form", "svg"
 // Crafted input (thousands of unclosed tags or quotes, long whitespace runs)
 // must cost linear time: every pattern is anchored by a literal name and has
 // no two adjacent unbounded runs that could trade characters while backtracking.
-// Attributes may be separated by whitespace or "/" (`<img src=x/onerror=...>`).
-const SEP = `[\\s/]`;
+// Attributes are separated by whitespace, by nothing right after a quoted
+// value (`src="x"onerror=...`), or by "/" after a quoted value or the tag name
+// (`<img/onerror=...>`); a "/" inside a URL (`href="https://x.test/onboarding=1"`)
+// is not a separator.
+const SEP = `(?:\\s|(?<=["'])/?|(?<=<[a-z][a-z0-9]{0,15})/)`;
 const VALUE = `(?:"[^"]*"|'[^']*'|[^\\s>]+)`;
 const BLOCKED_TAGS = /<\/?(?:script|iframe|object|embed|form|input|button|textarea|select|option|meta|base|link|svg|math|video|audio|source|track|template)\b[^>]{0,8192}>?/gi;
 const EVENT_ATTRIBUTES = new RegExp(`${SEP}on[a-z0-9_-]{1,64}\\s*=\\s*${VALUE}`, "gi");
@@ -13,7 +16,8 @@ const DANGEROUS_ATTRIBUTES = new RegExp(`${SEP}(?:srcdoc|formaction|action|ping)
 const DANGEROUS_URL = new RegExp(`(${SEP}(?:href|src|xlink:href)\\s*=\\s*(?:["']\\s*)?)(?=javascript|vbscript|file|data:text\\/html)`, "gi");
 // Each <img …> tag is matched once (matches never overlap), then its remote src is removed inside it.
 const IMAGE_TAG = /<img\b[^>]*>?/gi;
-const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=["']?\\s*https?:)${VALUE}`, "gi");
+// No two unbounded whitespace runs may meet: `\\s*(?=["']?\\s*…)` was quadratic.
+const REMOTE_SRC = new RegExp(`(${SEP})src\\s*=\\s*(?=(?:["']\\s*)?https?:)${VALUE}`, "gi");
 const IMAGE_SRCSET = new RegExp(`${SEP}srcset\\s*=\\s*${VALUE}`, "gi");
 /** HTML beyond this is not processed; the stored copy is capped at 2 MB anyway. */
 export const MAX_SANITIZE_CHARS = 2 * 1024 * 1024;
@@ -54,13 +58,22 @@ export function removeElements(html: string, tags: string[], replacement = ""): 
  * first layer of a defense-in-depth model rather than the only protection.
  */
 export function sanitizeEmailHtml(html: string): string {
-  return removeElements(html.slice(0, MAX_SANITIZE_CHARS), BLOCKED_CONTAINERS)
-    .replace(BLOCKED_TAGS, "")
-    .replace(EVENT_ATTRIBUTES, "")
-    .replace(DANGEROUS_ATTRIBUTES, "")
+  // Removing a tag can join its neighbours into a new one (`<scr<script>ipt>`):
+  // repeat until nothing changes. Every pass is linear and only shrinks the input.
+  let stripped = html.slice(0, MAX_SANITIZE_CHARS);
+  for (let pass = 0; pass < 8; pass++) {
+    const next = removeElements(stripped, BLOCKED_CONTAINERS).replace(BLOCKED_TAGS, "");
+    if (next === stripped) break;
+    stripped = next;
+  }
+  return stripped
+    // Removed attributes leave a space, so the text around them cannot join
+    // into a new attribute (`o/onx="1"nerror=` must not become `onerror=`).
+    .replace(EVENT_ATTRIBUTES, " ")
+    .replace(DANGEROUS_ATTRIBUTES, " ")
     .replace(DANGEROUS_URL, "$1blocked:")
     .replace(IMAGE_TAG, tag => tag.replace(REMOTE_SRC, "$1data-remote-image-blocked=\"true\""))
-    .replace(IMAGE_SRCSET, "")
+    .replace(IMAGE_SRCSET, " ")
     .trim();
 }
 

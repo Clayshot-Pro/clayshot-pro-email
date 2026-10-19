@@ -82,11 +82,26 @@ function authenticatedSender(results: string, senderDomain: string): boolean {
     });
 }
 
+/** `List-Id: Name <news.lists.example.org>` signed with DKIM by lists.example.org or example.org. */
+function listSigned(listId: string | null, results: string): boolean {
+  const id = /<([a-z0-9.-]{1,253})>/i.exec(listId ?? "")?.[1]?.toLowerCase();
+  if (!id) return false;
+  return [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
+    .some(match => {
+      const signer = match[1].toLowerCase().replace(/\.$/, "");
+      return signer.includes(".") && id.endsWith(`.${signer}`);
+    });
+}
+
+/** The receiving server authenticated the From domain (DMARC, or aligned DKIM). */
+export const senderAuthenticated = (headers: Array<{ key: string; value: string }>, sender: string) =>
+  authenticatedSender(trustedResult(headers), domainOf(sender));
+
 function authenticationFailure(headers: HeaderSource, results: string): string | null {
   // Mailing lists and forwarders legitimately break SPF/DMARC alignment. A
-  // List-Id header is easy to add, so it only counts when the receiving
-  // server validated the list's ARC chain.
-  if (headers.get("list-id") && /\barc=pass\b/i.test(results)) return null;
+  // List-Id header is easy to add, so it only counts when the list domain
+  // itself signed the message (a passing DKIM signature aligned with it).
+  if (listSigned(headers.get("list-id"), results)) return null;
   if (/\bdmarc=fail\b/i.test(results)) return "DMARC failed";
   if (/\bspf=fail\b/i.test(results) && !/\bdkim=pass\b/i.test(results)) return "SPF failed without a valid DKIM signature";
   return null;

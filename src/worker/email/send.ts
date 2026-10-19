@@ -343,6 +343,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     ).bind(provider.accountId,clientKey).first<{state:string;message_id:string|null;provider_message_id:string|null}>();
     if (existing) {
       if (existing.state === "accepted") {
+        // The first request sent it but may have failed before removing the draft.
+        if (draftId) await env.DB.prepare("DELETE FROM drafts WHERE id = ?1 AND mailbox_id = ?2").bind(draftId, provider.accountId).run();
         return Response.json({ ok: true, alreadyAccepted: true, messageId: existing.message_id, providerMessageId: existing.provider_message_id, accountId: provider.accountId });
       }
       // A failed attempt was definitely not accepted by the transport, so it

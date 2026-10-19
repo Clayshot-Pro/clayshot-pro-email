@@ -19,6 +19,16 @@ for (const name of migrations) {
     // Keys stored before v3.12 must survive the table rebuild.
     db.exec("INSERT INTO instance_keys (name, value, hint) VALUES ('RESEND_API_KEY', 'v1.enc.data', '…abcd')");
   }
+  if (name === "0024_outbound_message_ids.sql") {
+    // Sent mail stored before v3.14: a Resend id, a bare id, a real id, and received mail (untouched).
+    db.exec(`INSERT INTO threads (id, mailbox_id, latest_message_at) VALUES ('tm', 'native:work', '2026-10-01T00:00:00Z')`);
+    const row = (id, direction, messageId) => db.prepare(`INSERT INTO messages (id, mailbox_id, thread_id, direction, from_address, to_addresses, subject, preview, received_at, message_id)
+      VALUES (?, 'native:work', 'tm', ?, 'a@example.com', '[]', 's', '', '2026-10-01T00:00:00Z', ?)`).run(id, direction, messageId);
+    row("resend", "outbound", "56761188-7520-42d8-8898-ff6fc54ce618");
+    row("bare", "outbound", "abc@mail.example.com");
+    row("real", "outbound", "<def@mail.example.com>");
+    row("inbound", "inbound", "no-brackets-inbound");
+  }
   db.exec(readFileSync(new URL(name, dir), "utf8"));
 }
 
@@ -92,6 +102,12 @@ if (migrations.includes("0023_setup_grants.sql")) {
   db.exec("INSERT INTO instance_keys (name, value) VALUES ('CLOUDFLARE', 'v1.x.y')");
   assert.throws(() => db.exec("INSERT INTO instance_keys (name, value) VALUES ('PROVIDER_CREDENTIAL_KEY', 'x')"), /CHECK/,
     "the encryption key itself still can never be stored in D1");
+}
+
+if (migrations.includes("0024_outbound_message_ids.sql")) {
+  assert.deepEqual(Object.fromEntries(db.prepare("SELECT id, message_id FROM messages WHERE thread_id = 'tm' ORDER BY id").all().map(r => [r.id, r.message_id])),
+    { bare: "<abc@mail.example.com>", inbound: "no-brackets-inbound", real: "<def@mail.example.com>", resend: null },
+    "sent mail keeps only RFC Message-IDs; received mail is untouched");
 }
 
 console.log(`PASS: ${migrations.length} migrations apply cleanly with v3 schema checks`);

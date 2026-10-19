@@ -38,10 +38,12 @@ assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudfla
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=none" }) }).junk, true);
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=pass header.d=x.com" }) }).junk, false,
   "forwarded mail with a valid DKIM signature is fine");
-assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudflare.net; arc=pass; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, false,
-  "mailing lists with a validated ARC chain break DMARC alignment legitimately");
-assert.equal(verdict({ headers: headers({ "authentication-results": "dkim=pass header.d=attacker.test; dmarc=fail", "list-id": "<x.attacker.test>" }) }).junk, true,
-  "the attacker's own DKIM signature plus a List-Id does not excuse a DMARC failure");
+assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudflare.net; dkim=pass header.d=lists.example.org; dmarc=fail", "list-id": "News <news.lists.example.org>" }) }).junk, false,
+  "mailing lists signed by the list domain break DMARC alignment legitimately");
+assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudflare.net; arc=pass; dkim=pass header.d=attacker.test; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, true,
+  "a List-Id not signed by its own domain does not excuse a DMARC failure");
+assert.equal(verdict({ headers: headers({ "authentication-results": "dkim=pass header.d=attacker.test; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, true,
+  "a signature from another domain plus a List-Id does not excuse a DMARC failure");
 assert.equal(verdict({ headers: headers({ "authentication-results": "dmarc=fail", "list-id": "<forged>" }) }).junk, true,
   "a List-Id header alone does not excuse a DMARC failure");
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=pass; dkim=pass; dmarc=pass" }) }).junk, false);
@@ -84,7 +86,7 @@ assert.equal(suspectedJunk("Lottery winner!!!", "unknown@contest.test", "Click h
 const receive = readFileSync(new URL("../src/worker/email/receive.ts", import.meta.url), "utf8");
 assert.match(receive, /mailbox\.spam_filter_enabled === 1 && junkVerdict\(\{/);
 assert.match(receive, /headers: message\.headers/);
-assert.match(receive, /authenticationHeaders: parsed\.headers\.filter/);
+assert.match(receive, /const authenticationHeaders = parsed\.headers\.filter[\s\S]{0,400}junkVerdict\(\{[\s\S]{0,300}authenticationHeaders,/);
 assert.match(receive, /knownSender: await hasWrittenTo\(env, mailbox\.id, fromAddress\)/);
 const migration = readFileSync(new URL("../migrations/0022_photos_and_junk_filter.sql", import.meta.url), "utf8");
 assert.match(migration, /UPDATE native_mailboxes SET spam_filter_enabled = 1;/, "the filter is on for existing mailboxes");

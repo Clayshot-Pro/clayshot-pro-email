@@ -44,7 +44,8 @@ export async function resendWebhook(request: Request, env: Env): Promise<Respons
   // Every email.* event carries the RFC Message-ID; record it if sending could not.
   const messageIdHeader = rfcMessageId(event.data?.message_id);
   if (attempt?.message_id && messageIdHeader) {
-    await env.DB.prepare("UPDATE messages SET message_id = ?3 WHERE id = ?1 AND mailbox_id = ?2 AND message_id IS NULL")
+    // OR IGNORE: message_id is unique; a clash must not fail the status update below.
+    await env.DB.prepare("UPDATE OR IGNORE messages SET message_id = ?3 WHERE id = ?1 AND mailbox_id = ?2 AND message_id IS NULL")
       .bind(attempt.message_id, attempt.mailbox_id, messageIdHeader).run();
   }
   if (!effect) return reply({ ok: true, ignored: "event" });
