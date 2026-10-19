@@ -52,7 +52,11 @@ const TESTS = [
 let failed = 0;
 for (const name of TESTS) {
   const path = `scripts/${name}.mjs`;
-  if (!existsSync(path)) continue;
+  if (!existsSync(path)) {
+    failed++;
+    console.error(`FAIL: ${name} (missing ${path})`);
+    continue;
+  }
   const result = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", path], { stdio: "inherit" });
   if (result.status !== 0) {
     failed++;
