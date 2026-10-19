@@ -10,7 +10,6 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { adminLoginAddress, appOrigin, passkeyRpId } from "./config";
@@ -59,12 +58,12 @@ function expiredSessionCookie(): string {
   return `${OWNER_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
-export function parseTransports(value: string | null): AuthenticatorTransportFuture[] | undefined {
+export function parseTransports(value: string | null): string[] | undefined {
   if (!value) return undefined;
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item): item is AuthenticatorTransportFuture => typeof item === "string")
+      ? parsed.filter((item): item is string => typeof item === "string")
       : undefined;
   } catch {
     return undefined;
