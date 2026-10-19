@@ -36,6 +36,8 @@ async function vapidSubject(env: Env): Promise<string> {
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const MAX_ENDPOINT_LENGTH = 2048;
 const PUSH_HOSTS = ["web.push.apple.com", "fcm.googleapis.com", "updates.push.services.mozilla.com", "push.services.mozilla.com"];
+// Edge on Windows: Windows Push Notification Services, whose host names under notify.windows.com vary.
+const PUSH_HOST_SUFFIXES = [".notify.windows.com"];
 
 function vapidKeys(env: Env): VapidPair | null {
   return vapidPair(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
@@ -45,7 +47,9 @@ function validEndpoint(value: string): boolean {
   if (!value || value.length > MAX_ENDPOINT_LENGTH) return false;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.username === "" && url.password === "" && url.port === "" && PUSH_HOSTS.includes(url.hostname.toLowerCase());
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && url.username === "" && url.password === "" && url.port === ""
+      && (PUSH_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some(suffix => host.endsWith(suffix)));
   } catch {
     return false;
   }

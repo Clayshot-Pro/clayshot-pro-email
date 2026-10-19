@@ -99,6 +99,18 @@ async function run(m) {
       body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
     }), env);
     assert.equal(enable.status, 201);
+
+    // Edge on Windows subscribes through Windows Push Notification Services (any *.notify.windows.com host).
+    const subscribe = endpoint => m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
+      method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` },
+      body: JSON.stringify({ endpoint, keys: { p256dh: k.p256dh, auth: k.auth } }),
+    }), env);
+    assert.equal((await subscribe("https://wns2-sg2p.notify.windows.com/w/?token=BQYAAAB")).status, 201, "an Edge (WNS) endpoint is accepted");
+    for (const endpoint of ["https://notify.windows.com.attacker.test/w/", "https://evilnotify.windows.com/w/", "https://notify.windows.com/w/",
+      "http://wns2-sg2p.notify.windows.com/w/", "https://wns2-sg2p.notify.windows.com:8443/w/", "https://user:pw@wns2-sg2p.notify.windows.com/w/"]) {
+      assert.equal((await subscribe(endpoint)).status, 400, `refused: ${endpoint}`);
+    }
+    db.prepare("DELETE FROM push_subscriptions WHERE endpoint LIKE '%notify.windows.com%'").run();
     const until = db.prepare("SELECT julianday(all_mail_until) - julianday('now') AS d FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().d;
     assert.ok(until > 29.9 && until < 30.1, `all-mail alerts for 30 days (${until})`);
     db.prepare("DELETE FROM auth_sessions WHERE session_id = 'admin-1'").run();
