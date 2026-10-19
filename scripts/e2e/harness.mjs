@@ -109,7 +109,7 @@ export function mime({ from, to, subject, text = "", html, headers = {}, attachm
 
 /** Deliver a message through the Worker's email() handler, as Email Routing would. */
 export async function deliver(origin, message) {
-  const { raw, messageId } = mime(message);
+  const { raw, messageId } = message.raw ? { raw: message.raw, messageId: message.messageId } : mime(message);
   const envelopeFrom = message.from.replace(/^.*<|>.*$/g, "");
   const response = await fetch(`${origin}/cdn-cgi/handler/email?from=${encodeURIComponent(envelopeFrom)}&to=${encodeURIComponent(message.to)}`, {
     method: "POST", body: raw,

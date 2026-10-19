@@ -4,7 +4,7 @@
  * Mail goes to Junk when an upstream filter already flagged it, when sender
  * authentication failed (DMARC, or SPF without a passing DKIM signature), or
  * when content signals add up to JUNK_SCORE. Content scoring is skipped for
- * senders the mailbox has written to. Junk is never deleted, so a false
+ * authenticated senders the mailbox has written to. Junk is never deleted, so a false
  * positive is one "Not junk" away; each weight below is tuned so ordinary
  * newsletters, receipts and account notices stay under the threshold.
  */
@@ -23,6 +23,12 @@ export type JunkInput = {
   headers?: HeaderSource;
   /** The mailbox has sent mail to this sender before. */
   knownSender?: boolean;
+  /**
+   * Every Authentication-Results and ARC-Authentication-Results header, top
+   * first (postal-mime `headers` order). When given, only the receiving
+   * server's result is trusted (see trustedResult).
+   */
+  authenticationHeaders?: Array<{ key: string; value: string }>;
 };
 
 export type JunkVerdict = { junk: boolean; score: number; reasons: string[] };
@@ -50,11 +56,33 @@ function upstreamFlag(headers: HeaderSource): boolean {
     || /^\s*(?:yes|true|spam)\b/i.test(headers.get("x-spam") ?? "");
 }
 
-/** Only failures are used: a forged header can make mail look worse, never better. */
-function authenticationFailure(headers: HeaderSource): string | null {
-  // Mailing lists and forwarders legitimately break SPF/DMARC alignment.
-  if (headers.get("list-id")) return null;
-  const results = headers.get("authentication-results") ?? "";
+const authservId = (value: string) => value.replace(/^\s*i=\d+\s*;/i, "").split(";")[0].trim().toLowerCase();
+const isCloudflare = (value: string) => /(?:^|\.)cloudflare\.(?:net|com)$/.test(authservId(value));
+
+/**
+ * The authentication result written by the server that received the mail.
+ * Receiving servers add theirs above everything the sender wrote, so a
+ * forged result can never sit above the real one. Prefer the topmost
+ * Cloudflare result (plain, then ARC); otherwise the topmost result.
+ */
+export function trustedResult(headers: Array<{ key: string; value: string }>): string {
+  const plain = headers.filter(header => header.key.toLowerCase() === "authentication-results").map(header => header.value);
+  const arc = headers.filter(header => header.key.toLowerCase() === "arc-authentication-results").map(header => header.value);
+  return plain.find(isCloudflare) ?? arc.find(isCloudflare) ?? plain[0] ?? "";
+}
+
+/** DKIM passed for the sender's own domain (or DMARC passed). */
+function authenticatedSender(results: string, senderDomain: string): boolean {
+  if (/\bdmarc=pass\b/i.test(results)) return true;
+  const base = baseDomain(senderDomain);
+  return Boolean(base) && [...results.matchAll(/\bdkim=pass\b[^;]{0,200}?header\.d=([a-z0-9.-]{1,253})/gi)]
+    .some(match => baseDomain(match[1].toLowerCase()) === base);
+}
+
+function authenticationFailure(headers: HeaderSource, results: string): string | null {
+  // Mailing lists and forwarders legitimately break SPF/DMARC alignment, but a
+  // List-Id header alone (anyone can add one) only counts with a DKIM pass.
+  if (headers.get("list-id") && /\bdkim=pass\b/i.test(results)) return null;
   if (/\bdmarc=fail\b/i.test(results)) return "DMARC failed";
   if (/\bspf=fail\b/i.test(results) && !/\bdkim=pass\b/i.test(results)) return "SPF failed without a valid DKIM signature";
   return null;
@@ -63,10 +91,15 @@ function authenticationFailure(headers: HeaderSource): string | null {
 export function junkVerdict(input: JunkInput): JunkVerdict {
   const reasons: string[] = [];
   if (input.headers && upstreamFlag(input.headers)) reasons.push("Flagged as spam by an upstream filter");
-  const auth = input.headers ? authenticationFailure(input.headers) : null;
+  const results = input.authenticationHeaders
+    ? trustedResult(input.authenticationHeaders)
+    : input.headers?.get("authentication-results") ?? "";
+  const auth = input.headers ? authenticationFailure(input.headers, results) : null;
   if (auth) reasons.push(auth);
   if (reasons.length) return { junk: true, score: JUNK_SCORE, reasons };
-  if (input.knownSender) return { junk: false, score: 0, reasons };
+  // A From address is easy to forge: a contact skips content checks only
+  // when the receiving server authenticated that sender.
+  if (input.knownSender && authenticatedSender(results, domainOf(input.sender))) return { junk: false, score: 0, reasons };
 
   const subject = input.subject.slice(0, 500);
   const text = input.text.slice(0, 8000);

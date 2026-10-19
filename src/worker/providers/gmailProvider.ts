@@ -1,8 +1,8 @@
-import { sanitizeEmailHtml } from "../email/html";
+import { htmlToText, sanitizeEmailHtml } from "../email/html";
 import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { getGoogleAccessToken } from "./googleCredentials";
 import { gmailMatchesFolder } from "./gmailFolder";
-import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult } from "./types";
+import type { MailProvider, ProviderListOptions, ProviderMessage, ProviderMutation, ProviderSendInput, ProviderSendResult, ThreadMutation } from "./types";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const MAX_PARTS = 100;
@@ -66,23 +66,6 @@ function parts(part: Part | undefined, out: Part[] = [], depth = 0) {
   return out;
 }
 
-function htmlToText(html: string) {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n\s*\n+/g, "\n\n")
-    .trim();
-}
 
 function truncateText(value: string, max = MAX_BODY_BYTES) {
   if (enc.encode(value).byteLength <= max) return value;
@@ -417,7 +400,7 @@ export function gmailProvider(env: Env, accountId: string, email: string): MailP
       return true;
     },
 
-    async patchThread(id, isDeleted: boolean) {
+    async patchThread(id, mutation: ThreadMutation) {
       // The message lookup happens under this provider's already authorized
       // Gmail account. Never accept an unchecked thread ID from a request.
       const message = await (await call(
@@ -425,11 +408,22 @@ export function gmailProvider(env: Env, accountId: string, email: string): MailP
         "/messages/" + encodeURIComponent(id) + "?format=minimal",
       )).json<GmailMessage>();
       if (!message.threadId) return false;
-      await call(
-        env, accountId,
-        "/threads/" + encodeURIComponent(message.threadId) + "/" + (isDeleted ? "trash" : "untrash"),
-        { method: "POST" },
-      );
+      const thread = "/threads/" + encodeURIComponent(message.threadId);
+      if (mutation.isDeleted !== undefined) {
+        await call(env, accountId, thread + "/" + (mutation.isDeleted ? "trash" : "untrash"), { method: "POST" });
+        return true;
+      }
+      const labels = mutation.isJunk !== undefined
+        ? { addLabelIds: [mutation.isJunk ? "SPAM" : "INBOX"], removeLabelIds: [mutation.isJunk ? "INBOX" : "SPAM"] }
+        : mutation.isArchived !== undefined
+          ? { addLabelIds: mutation.isArchived ? [] : ["INBOX"], removeLabelIds: mutation.isArchived ? ["INBOX"] : [] }
+          : null;
+      if (!labels) return false;
+      await call(env, accountId, thread + "/modify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(labels),
+      });
       return true;
     },
 

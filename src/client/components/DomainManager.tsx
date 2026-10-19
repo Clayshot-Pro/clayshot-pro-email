@@ -81,6 +81,7 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
   };
   const outcome = (report: ConnectReport | undefined, domain: string) => !report ? `${domain} added.`
     : report.mxConflict ? `${domain} still receives mail elsewhere. Review the MX records below.`
+    : report.catchAllConflict ? `The catch-all for ${domain} delivers somewhere else. Review it below.`
     : report.steps.some(step => step.status === "failed") ? `${domain} is partly set up. See the steps below.`
     : report.routingReady ? `${domain} is set up and active.` : `${domain} is set up. Run a DNS check in a few minutes.`;
 
@@ -96,11 +97,12 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
     if (ok && connected) setNotice(outcome(report, domain));
   }
 
-  async function connect(domain: Domain, replaceMx = false) {
-    if (replaceMx && !window.confirm(`Delete the MX records that send ${domain.domain} mail to another service? Mail will come here instead.`)) return;
+  async function connect(domain: Domain, replace: { replaceMx?: boolean; replaceCatchAll?: boolean } = {}) {
+    if (replace.replaceMx && !window.confirm(`Delete the MX records that send ${domain.domain} mail to another service? Mail will come here instead.`)) return;
+    if (replace.replaceCatchAll && !window.confirm(`Replace the catch-all that sends unmatched mail to ${reports[domain.domain]?.catchAllConflict ?? "another destination"}? Unmatched mail will come here instead.`)) return;
     let report: ConnectReport | undefined;
     const ok = await run(domain.domain, async () => {
-      report = keepReport(await call(`${domainPath(domain.domain)}/connect`, "POST", { replaceMx }));
+      report = keepReport(await call(`${domainPath(domain.domain)}/connect`, "POST", replace));
     }, "");
     if (ok) setNotice(outcome(report, domain.domain));
   }
@@ -164,8 +166,13 @@ export function DomainManager({ onChanged }: { onChanged?: () => void }) {
               <div className="admin-domain-details">
                 {reports[domain.domain] && <ConnectReportView report={reports[domain.domain]} />}
                 {reports[domain.domain]?.mxConflict && (
-                  <button type="button" className="auth-secondary danger" disabled={busy !== null} onClick={() => void connect(domain, true)}>
+                  <button type="button" className="auth-secondary danger" disabled={busy !== null} onClick={() => void connect(domain, { replaceMx: true })}>
                     Replace the MX records and connect
+                  </button>
+                )}
+                {reports[domain.domain]?.catchAllConflict && (
+                  <button type="button" className="auth-secondary danger" disabled={busy !== null} onClick={() => void connect(domain, { replaceCatchAll: true })}>
+                    Replace the catch-all and connect
                   </button>
                 )}
                 {domain.status === "pending" && !connected && (

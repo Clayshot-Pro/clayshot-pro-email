@@ -6,20 +6,53 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function checkAuthRateLimit(env: Env, bucket: string): Promise<boolean> {
+export async function checkAuthRateLimit(env: Env, bucket: string, windowSeconds = WINDOW_SECONDS, maxAttempts = MAX_ATTEMPTS): Promise<boolean> {
   const key = await sha256Hex(bucket);
+  const window = `-${Math.max(1, Math.floor(windowSeconds))} seconds`;
   await env.DB.prepare(`
     INSERT INTO auth_rate_limits (bucket, attempts, window_started_at) VALUES (?1, 1, datetime('now'))
     ON CONFLICT(bucket) DO UPDATE SET
-      attempts = CASE WHEN window_started_at <= datetime('now', '-${WINDOW_SECONDS} seconds') THEN 1 ELSE attempts + 1 END,
-      window_started_at = CASE WHEN window_started_at <= datetime('now', '-${WINDOW_SECONDS} seconds') THEN datetime('now') ELSE window_started_at END
-  `).bind(key).run();
+      attempts = CASE WHEN window_started_at <= datetime('now', ?2) THEN 1 ELSE attempts + 1 END,
+      window_started_at = CASE WHEN window_started_at <= datetime('now', ?2) THEN datetime('now') ELSE window_started_at END
+  `).bind(key, window).run();
   const row = await env.DB.prepare("SELECT attempts FROM auth_rate_limits WHERE bucket = ?1").bind(key).first<{ attempts: number }>();
-  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM auth_rate_limits WHERE window_started_at <= datetime('now', '-10 minutes')").run();
-  return (row?.attempts ?? MAX_ATTEMPTS + 1) <= MAX_ATTEMPTS;
+  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM auth_rate_limits WHERE window_started_at <= datetime('now', '-1 day')").run();
+  return (row?.attempts ?? maxAttempts + 1) <= maxAttempts;
+}
+
+/**
+ * The client's network for rate limiting: the IPv4 address, or the /64 an
+ * IPv6 client is given (one subscriber usually controls a whole /64).
+ */
+export function clientNetwork(request: Request): string {
+  const ip = (request.headers.get("CF-Connecting-IP") ?? "unknown").trim().toLowerCase();
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
+  return `${groups.slice(0, 4).map(group => group.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 export function authRateLimitBucket(request: Request, route: string): string {
-  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-  return `${route}:${ip}`;
+  return `${route}:${clientNetwork(request)}`;
+}
+
+/** Attempts on one account from anywhere, so spreading guesses over many addresses doesn't help. */
+export const ACCOUNT_LOGIN_WINDOW_SECONDS = 15 * 60;
+export const ACCOUNT_LOGIN_MAX_ATTEMPTS = 30;
+export const accountRateLimitBucket = (route: string, address: string) => `${route}:account:${address.trim().toLowerCase()}`;
+
+export const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * A declared length over the limit, or a streamed (chunked) body with no
+ * length to check up front: refuse it, so handlers that parse JSON before
+ * authentication never read unbounded input.
+ */
+export function requestTooLarge(request: Request, maxBytes: number): boolean {
+  const raw = request.headers.get("Content-Length");
+  if (!raw) return request.body !== null && request.headers.has("Transfer-Encoding");
+  const length = Number(raw);
+  return !Number.isFinite(length) || length > maxBytes;
 }

@@ -4,7 +4,7 @@ import { isAuthenticated, logout as ownerLogout } from "./auth";
 import { normalizeMailboxAddress } from "./mailboxRules";
 import { adminLoginAddress, adminMailboxAddress, isAdministratorEmail } from "./config";
 import { ADMIN_MAILBOX_ID } from "./mailboxIds";
-import { checkAuthRateLimit, authRateLimitBucket } from "./security";
+import { ACCOUNT_LOGIN_MAX_ATTEMPTS, ACCOUNT_LOGIN_WINDOW_SECONDS, accountRateLimitBucket, checkAuthRateLimit, authRateLimitBucket } from "./security";
 
 import { addressRules, primaryDomain } from "./domains";
 import { beginAdminLogin } from "./adminAuth";
@@ -153,7 +153,8 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
     }), env);
   }
-  if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))) {
+  if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))
+    || !(await checkAuthRateLimit(env, accountRateLimitBucket("native-login", email), ACCOUNT_LOGIN_WINDOW_SECONDS, ACCOUNT_LOGIN_MAX_ATTEMPTS))) {
     return jsonError("Too many attempts. Try again later.", 429);
   }
   const mailboxId = await checkNativePassword(env,email,password);

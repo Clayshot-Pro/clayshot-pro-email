@@ -130,19 +130,30 @@ export async function updateNativeMailbox(request: Request, env: Env, id: string
   const accent = body.accentColor === undefined ? old.accent_color : normalizeHex(body.accentColor);
   const senderName = typeof body.senderName === "string" ? safeDisplayName(body.senderName) || null
     : body.senderName === null ? null : old.sender_name;
-  await env.DB.prepare("UPDATE native_mailboxes SET status=?2, display_name=?3, quota_bytes=?4, spam_filter_enabled=?5, accent_color=?6, sender_name=?7, updated_at=CURRENT_TIMESTAMP WHERE id=?1")
-    .bind(id, status, displayName, quota, spam, accent, senderName).run();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE native_mailboxes SET status=?2, display_name=?3, quota_bytes=?4, spam_filter_enabled=?5, accent_color=?6, sender_name=?7, updated_at=CURRENT_TIMESTAMP WHERE id=?1")
+      .bind(id, status, displayName, quota, spam, accent, senderName),
+    // Disabling signs every device out of the mailbox; re-enabling never revives old sessions.
+    ...(status === "disabled" ? [revokeDeviceGrants(env, id)] : []),
+  ]);
   await audit(env, id, "update");
   return Response.json({ mailbox: await mailboxById(env, id) });
 }
+
+/** Sign every device out of a native mailbox. */
+const revokeDeviceGrants = (env: Env, id: string) =>
+  env.DB.prepare("DELETE FROM device_session_accounts WHERE account_id=?1 AND provider='native'").bind(id);
 
 export async function scheduleNativeMailboxDeletion(env: Env, id: string): Promise<Response> {
   if (id === ADMIN_MAILBOX_ID) return Response.json({ error: "The admin mailbox cannot be deleted" }, { status: 403 });
   const old = await mailboxById(env, id);
   if (!old) return Response.json({ error: "Mailbox not found" }, { status: 404 });
   if (!old.deleted_at) {
-    await env.DB.prepare("UPDATE native_mailboxes SET status='disabled', deleted_at=CURRENT_TIMESTAMP, purge_after=datetime('now','+30 days'), updated_at=CURRENT_TIMESTAMP WHERE id=?1")
-      .bind(id).run();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE native_mailboxes SET status='disabled', deleted_at=CURRENT_TIMESTAMP, purge_after=datetime('now','+30 days'), updated_at=CURRENT_TIMESTAMP WHERE id=?1")
+        .bind(id),
+      revokeDeviceGrants(env, id),
+    ]);
     await audit(env, id, "schedule_deletion");
   }
   return Response.json({ mailbox: await mailboxById(env, id), retentionDays: 30 });

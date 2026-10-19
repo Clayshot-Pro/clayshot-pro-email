@@ -279,7 +279,7 @@ export async function checkDomainDns(env: Env, domain: string): Promise<Response
 }
 
 /**
- * POST /api/admin/domains/:domain/connect { replaceMx? } (administrator
+ * POST /api/admin/domains/:domain/connect { replaceMx?, replaceCatchAll? } (administrator
  * step-up): wire the domain with the stored Cloudflare token, then check DNS.
  * The domain is activated when Cloudflare confirms its mail reaches this app.
  */
@@ -288,9 +288,10 @@ export async function connectDomainRoute(request: Request, env: Env, domain: str
   if (!row) return jsonError("Domain not found", 404);
   const connection = await cloudflareConnection(env);
   if (!connection) return jsonError("Connect Cloudflare first (Admin → Keys), or set the domain up in the Cloudflare dashboard.", 409);
-  const body = await request.json<{ replaceMx?: unknown }>().catch(() => null);
+  const body = await request.json<{ replaceMx?: unknown; replaceCatchAll?: unknown }>().catch(() => null);
   const report = await connectDomain(connection, row.domain, {
     replaceMx: body?.replaceMx === true,
+    replaceCatchAll: body?.replaceCatchAll === true,
     sending: row.outbound_transport === "cloudflare",
   });
   await activateIfReady(env, row, report.routingReady);

@@ -29,6 +29,11 @@ assert.deepEqual(splitStatements("CREATE TABLE a (x TEXT DEFAULT 'a;b'); -- c;d\
   ["CREATE TABLE a (x TEXT DEFAULT 'a;b')", "INSERT INTO a VALUES (\"q;\")", "SELECT 1"]);
 assert.equal(splitStatements("CREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET x = 1; DELETE FROM a; END; SELECT 2").length, 2);
 assert.equal(splitStatements("SELECT 'it''s; fine'; SELECT 3").length, 2);
+// CASE … END inside a trigger body does not close the trigger early.
+const caseTrigger = splitStatements("CREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET x = CASE WHEN y THEN 1 ELSE 0 END; DELETE FROM a; END; SELECT 4");
+assert.equal(caseTrigger.length, 2);
+assert.match(caseTrigger[0], /DELETE FROM a; END$/);
+assert.equal(splitStatements("SELECT CASE WHEN 1 THEN 2 END; SELECT 5").length, 2, "CASE outside a trigger is a plain expression");
 for (const migration of MIGRATIONS) assert.ok(splitStatements(migration.sql).length > 0, `${migration.name} has statements`);
 
 // A fresh database ends up exactly as applying the files directly would leave it.

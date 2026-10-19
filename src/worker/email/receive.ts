@@ -2,7 +2,7 @@ import { junkVerdict } from "./junk";
 import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
 import { sendNewMailPush } from "../push";
-import { sanitizeEmailHtml } from "./html";
+import { htmlToText, sanitizeEmailHtml } from "./html";
 import { domainOf } from "../appConfig";
 import { instanceSettings } from "../branding";
 import { isBlockedSender } from "../blockedSenders";
@@ -11,6 +11,8 @@ const MAX_RAW_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENTS = 30;
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const MAX_STORED_TEXT = 2 * 1024 * 1024;
+/** HTML beyond this is cut before any parsing (the stored copy is capped at 2 MB anyway). */
+const MAX_HTML_CHARS = 2 * 1024 * 1024;
 const MAX_HEADER_BYTES = 256 * 1024;
 const MAX_MIME_DEPTH = 30;
 
@@ -25,12 +27,13 @@ async function hasWrittenTo(env: Env, mailboxId: string, address: string): Promi
   return Boolean(row);
 }
 const safePreview = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 240);
-const safeFilename = (value: string | null | undefined, fallback: string) => (value || fallback).replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 255);
+// Control characters and path separators become "_"; Unicode direction
+// overrides are dropped so "invoice\u202Efdp.exe" cannot pose as a PDF.
+export const safeFilename = (value: string | null | undefined, fallback: string) => (value || fallback)
+  .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+  .replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 255) || fallback;
 const addresses = (items: Array<{ address?: string }> | undefined) => (items ?? []).map(item => item.address?.trim()).filter((value): value is string => Boolean(value)).slice(0, 100);
 
-function htmlToText(html: string): string {
-  return html.replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, " ").replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
-}
 
 function contentBytes(content: string | ArrayBuffer | Uint8Array<ArrayBufferLike>): Uint8Array {
   if (typeof content === "string") return encoder.encode(content);
@@ -116,25 +119,16 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
     "SHA-256", encoder.encode(`${message.to.trim().toLowerCase()}:${contentHex}`),
   );
   const fingerprint = Array.from(new Uint8Array(envelopeDigest), b => b.toString(16).padStart(2, "0")).join("");
-  const claim = await env.DB.prepare(
-    "INSERT OR IGNORE INTO inbound_receipts(mailbox_id,fingerprint,state) VALUES (?1,?2,'pending')"
-  ).bind(mailbox.id, fingerprint).run();
-  if (!claim.meta.changes) {
-    const recovered = await env.DB.prepare(
-      "UPDATE inbound_receipts SET first_seen_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending' AND first_seen_at<=datetime('now','-15 minutes')"
-    ).bind(mailbox.id,fingerprint).run();
-    if (!recovered.meta.changes) return;
-  }
-  // The legacy message_id column is globally unique. Always store newly
-  // received RFC IDs in original_message_id so concurrent multi-recipient
-  // deliveries cannot collide on the old unique constraint.
-  const storedMessageId = null;
+  // Everything that only reads or computes happens before the delivery is
+  // claimed, so a slow or failing step can never leave a claim behind.
+  const storedMessageId = null; // RFC IDs go to original_message_id (the legacy column is globally unique).
   const inReplyTo = (parsed.inReplyTo?.trim() || message.headers.get("in-reply-to")?.trim() || null)?.slice(0, 998) || null;
   const references = (parsed.references?.trim() || message.headers.get("references")?.trim() || null)?.slice(0, 8192) || null;
   const sender = parsed.from;
   const to = addresses(parsed.to);
   const cc = addresses(parsed.cc);
-  const bodyText = truncateUtf8(parsed.text?.trim() || (parsed.html ? htmlToText(parsed.html) : ""), MAX_STORED_TEXT);
+  const html = parsed.html ? parsed.html.slice(0, MAX_HTML_CHARS) : null;
+  const bodyText = truncateUtf8(parsed.text?.trim() || (html ? htmlToText(html) : ""), MAX_STORED_TEXT);
   // Blocked senders (header From or envelope) and likely spam go to Junk.
   const fromAddress = sender?.address || message.from;
   const isJunk = await isBlockedSender(env, mailbox.id, [sender?.address, message.from])
@@ -144,24 +138,50 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
       senderName: sender?.name,
       replyTo: parsed.replyTo?.[0]?.address,
       text: bodyText,
-      html: parsed.html,
+      html,
       headers: message.headers,
+      authenticationHeaders: parsed.headers.filter(header => /^(?:arc-)?authentication-results$/.test(header.key)),
       knownSender: await hasWrittenTo(env, mailbox.id, fromAddress),
     }).junk);
-  const bodyHtml = parsed.html ? truncateUtf8(sanitizeEmailHtml(parsed.html), MAX_STORED_TEXT) || null : null;
+  const bodyHtml = html ? truncateUtf8(sanitizeEmailHtml(html), MAX_STORED_TEXT) || null : null;
   const threadId = await resolveThreadId(env, mailbox.id, inReplyTo, references);
+
+  const claim = await env.DB.prepare(
+    "INSERT OR IGNORE INTO inbound_receipts(mailbox_id,fingerprint,state) VALUES (?1,?2,'pending')"
+  ).bind(mailbox.id, fingerprint).run();
+  if (!claim.meta.changes) {
+    const recovered = await env.DB.prepare(
+      "UPDATE inbound_receipts SET first_seen_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending' AND first_seen_at<=datetime('now','-15 minutes')"
+    ).bind(mailbox.id,fingerprint).run();
+    if (!recovered.meta.changes) {
+      const existing = await env.DB.prepare("SELECT state FROM inbound_receipts WHERE mailbox_id=?1 AND fingerprint=?2")
+        .bind(mailbox.id, fingerprint).first<{ state: string }>();
+      // Already stored: a duplicate delivery is accepted and dropped.
+      if (existing?.state === "accepted") return;
+      // Another delivery of this message is still in progress: fail
+      // temporarily so the sender retries, never report success unstored.
+      throw new Error("Delivery of this message is already in progress");
+    }
+  }
+  const releaseClaim = () => env.DB.prepare("DELETE FROM inbound_receipts WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'")
+    .bind(mailbox.id, fingerprint).run();
   const key = `emails/${mailbox.id.replace(":", "_")}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${String(now.getUTCDate()).padStart(2, "0")}/${id}/raw.eml`;
   const rows: Array<{ id: string; filename: string; mimeType: string; size: number; key: string }> = [];
 
   // Reserve the raw MIME plus extracted attachment bytes before writing to
   // R2. A conditional D1 update is atomic across concurrent deliveries.
   const storageBytes = raw.byteLength + parsedAttachments.reduce((sum, part) => sum + part.bytes.byteLength, 0);
-  const quotaReservation = await env.DB.prepare(
-    "UPDATE native_mailboxes SET used_bytes = used_bytes + ?1, usage_version = usage_version + 1 WHERE id = ?2 AND status = 'active' AND used_bytes + ?1 <= quota_bytes"
-  ).bind(storageBytes, mailbox.id).run();
+  let quotaReservation;
+  try {
+    quotaReservation = await env.DB.prepare(
+      "UPDATE native_mailboxes SET used_bytes = used_bytes + ?1, usage_version = usage_version + 1 WHERE id = ?2 AND status = 'active' AND used_bytes + ?1 <= quota_bytes"
+    ).bind(storageBytes, mailbox.id).run();
+  } catch (error) {
+    await releaseClaim().catch(() => undefined);
+    throw error;
+  }
   if (!quotaReservation.meta.changes) {
-    await env.DB.prepare("DELETE FROM inbound_receipts WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'")
-      .bind(mailbox.id,fingerprint).run();
+    await releaseClaim();
     reject(message, "Mailbox storage quota exceeded");
     return;
   }
@@ -188,7 +208,7 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
       ...rows.map(row => env.MAIL.delete(row.key)),
       env.DB.prepare("UPDATE native_mailboxes SET used_bytes = MAX(0, used_bytes - ?1), usage_version = usage_version + 1 WHERE id = ?2")
         .bind(storageBytes, mailbox.id).run(),
-      env.DB.prepare("DELETE FROM inbound_receipts WHERE mailbox_id=?1 AND fingerprint=?2 AND state='pending'").bind(mailbox.id,fingerprint).run(),
+      releaseClaim(),
     ]);
     reject(message, "Message could not be stored");
     return;

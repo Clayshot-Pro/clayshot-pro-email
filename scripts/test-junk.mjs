@@ -1,7 +1,7 @@
 // v3.10 junk filter: spam and phishing land in Junk; ordinary mail does not.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { JUNK_SCORE, junkVerdict, suspectedJunk } from "../src/worker/email/junk.ts";
+import { JUNK_SCORE, junkVerdict, suspectedJunk, trustedResult } from "../src/worker/email/junk.ts";
 
 const headers = values => ({ get: name => values[name.toLowerCase()] ?? null });
 const verdict = input => junkVerdict({ subject: "", sender: "someone@example.com", text: "", ...input });
@@ -38,12 +38,32 @@ assert.equal(verdict({ headers: headers({ "authentication-results": "mx.cloudfla
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=none" }) }).junk, true);
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=fail smtp.mailfrom=x.com; dkim=pass header.d=x.com" }) }).junk, false,
   "forwarded mail with a valid DKIM signature is fine");
-assert.equal(verdict({ headers: headers({ "authentication-results": "dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, false,
-  "mailing lists break DMARC alignment legitimately");
+assert.equal(verdict({ headers: headers({ "authentication-results": "dkim=pass header.d=lists.example.org; dmarc=fail", "list-id": "<news.lists.example.org>" }) }).junk, false,
+  "mailing lists (re-signed by the list) break DMARC alignment legitimately");
+assert.equal(verdict({ headers: headers({ "authentication-results": "dmarc=fail", "list-id": "<forged>" }) }).junk, true,
+  "a List-Id header alone does not excuse a DMARC failure");
 assert.equal(verdict({ headers: headers({ "authentication-results": "spf=pass; dkim=pass; dmarc=pass" }) }).junk, false);
 
-// Senders the mailbox has written to skip content scoring, but not spoofing checks.
-assert.equal(verdict({ ...spam.lottery, knownSender: true }).junk, false);
+// Senders the mailbox has written to skip content scoring when authenticated, never spoofing checks.
+const pass = headers({ "authentication-results": "mx.cloudflare.net; dkim=pass header.d=example.com; dmarc=pass" });
+assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true, headers: pass }).junk, false);
+assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true }).junk, true,
+  "a forged From of a contact without authentication is still scored");
+assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true,
+  headers: headers({ "authentication-results": "dkim=pass header.d=mail.example.com" }) }).junk, false, "aligned DKIM counts");
+assert.equal(verdict({ ...spam.lottery, sender: "friend@example.com", knownSender: true,
+  headers: headers({ "authentication-results": "dkim=pass header.d=attacker.test" }) }).junk, true, "unaligned DKIM does not");
+
+// Only the receiving server's result is trusted; forged results sit below it.
+const ar = (value, key = "authentication-results") => ({ key, value });
+assert.equal(trustedResult([ar("mx.cloudflare.net; spf=fail; dkim=none"), ar("evil.test; dkim=pass")]), "mx.cloudflare.net; spf=fail; dkim=none");
+assert.equal(trustedResult([ar("relay.example; dkim=pass"), ar("i=1; mx.cloudflare.net; dkim=fail", "arc-authentication-results")]),
+  "i=1; mx.cloudflare.net; dkim=fail", "the Cloudflare ARC result wins over an unlabelled one");
+assert.equal(trustedResult([ar("first.example; dmarc=fail"), ar("second.example; dmarc=pass")]), "first.example; dmarc=fail", "otherwise the topmost");
+assert.equal(trustedResult([]), "");
+const forged = verdict({ headers: headers({ "authentication-results": "ignored" }),
+  authenticationHeaders: [ar("mx.cloudflare.net; spf=fail smtp.mailfrom=x.com; dkim=none"), ar("mx.cloudflare.net; dkim=pass")] });
+assert.equal(forged.junk, true, "a forged dkim=pass below the real result does not rescue an SPF failure");
 assert.equal(verdict({ knownSender: true, headers: headers({ "authentication-results": "dmarc=fail" }) }).junk, true);
 assert.equal(verdict(spam.lottery).score >= JUNK_SCORE, true);
 
@@ -54,6 +74,7 @@ assert.equal(suspectedJunk("Lottery winner!!!", "unknown@contest.test", "Click h
 const receive = readFileSync(new URL("../src/worker/email/receive.ts", import.meta.url), "utf8");
 assert.match(receive, /mailbox\.spam_filter_enabled === 1 && junkVerdict\(\{/);
 assert.match(receive, /headers: message\.headers/);
+assert.match(receive, /authenticationHeaders: parsed\.headers\.filter/);
 assert.match(receive, /knownSender: await hasWrittenTo\(env, mailbox\.id, fromAddress\)/);
 const migration = readFileSync(new URL("../migrations/0022_photos_and_junk_filter.sql", import.meta.url), "utf8");
 assert.match(migration, /UPDATE native_mailboxes SET spam_filter_enabled = 1;/, "the filter is on for existing mailboxes");

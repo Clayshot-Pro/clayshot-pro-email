@@ -1,7 +1,7 @@
 // End-to-end: first-run setup, administration, receiving, reading, sending,
 // junk and blocking, All inboxes and access control, against the real Worker.
 import assert from "node:assert/strict";
-import { SETUP_SECRET, api, contextWithPasskey, deliver, launchBrowser, startWorker, steps } from "./harness.mjs";
+import { SETUP_SECRET, api, contextWithPasskey, deliver, launchBrowser, mime, startWorker, steps } from "./harness.mjs";
 
 const DOMAIN = "e2e.test";
 const ADMIN_PASSWORD = "correct horse";
@@ -187,13 +187,66 @@ export async function run() {
         }
       }],
 
+      ["a conversation is read, archived and moved to Junk as a whole", async () => {
+        const aliceApi = api(alice.context, worker.origin);
+        const account = `accountId=${encodeURIComponent(state.aliceId)}`;
+        const first = await deliver(worker.origin, { from: "carol@partner.test", to: `alice@${DOMAIN}`, subject: "Planning", text: "Shall we plan?" });
+        assert.equal(first.status, 200, first.body);
+        const reply = await deliver(worker.origin, { from: "carol@partner.test", to: `alice@${DOMAIN}`, subject: "Re: Planning", text: "Any news?",
+          headers: { "In-Reply-To": first.messageId, References: first.messageId } });
+        assert.equal(reply.status, 200, reply.body);
+        const before = await aliceApi(`/api/messages?${account}&folder=inbox`);
+        const thread = before.json.messages.filter(m => /Planning/.test(m.subject));
+        assert.equal(thread.length, 2);
+        assert.equal(new Set(thread.map(m => m.threadId)).size, 1, "the reply joins the conversation");
+        const opened = await aliceApi(`/api/messages/${encodeURIComponent(thread[0].id)}?${account}`);
+        assert.equal(opened.json.newlyReadCount, 2, "opening reads every unread message of the conversation");
+        const after = await aliceApi(`/api/messages?${account}&folder=inbox`);
+        assert.equal(after.json.unreadCount, before.json.unreadCount - 2, "the unread count drops by the whole conversation");
+
+        const patch = body => aliceApi(`/api/messages/${encodeURIComponent(thread[0].id)}?${account}`, { method: "PATCH", body: { ...body, scope: "thread" } });
+        const subjects = async folder => (await aliceApi(`/api/messages?${account}&folder=${folder}`)).json.messages
+          .filter(m => /Planning/.test(m.subject)).length;
+        assert.equal((await patch({ isArchived: true })).status, 200);
+        assert.deepEqual([await subjects("inbox"), await subjects("archive")], [0, 2], "archiving moves the whole conversation");
+        assert.equal((await patch({ isArchived: false })).status, 200);
+        assert.equal((await patch({ isJunk: true })).status, 200);
+        assert.deepEqual([await subjects("inbox"), await subjects("junk")], [0, 2], "junk moves the whole conversation");
+        assert.equal((await patch({ isJunk: false })).status, 200);
+        assert.equal(await subjects("inbox"), 2);
+        assert.equal((await patch({ isStarred: true })).status, 400, "other changes stay per message");
+      }],
+
+      ["a redelivered message is stored once", async () => {
+        const aliceApi = api(alice.context, worker.origin);
+        // Email Routing retries with the identical message (same bytes).
+        const fields = { from: "dave@partner.test", to: `alice@${DOMAIN}`, subject: "Delivered twice", text: "once" };
+        const message = { ...fields, ...mime(fields) };
+        assert.equal((await deliver(worker.origin, message)).status, 200);
+        assert.equal((await deliver(worker.origin, message)).status, 200, "a retry of an accepted delivery succeeds quietly");
+        const inbox = await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox`);
+        assert.equal(inbox.json.messages.filter(m => m.subject === "Delivered twice").length, 1);
+      }],
+
+      ["drafts reject malformed ids and oversized recipients", async () => {
+        const aliceApi = api(alice.context, worker.origin);
+        const save = body => aliceApi("/api/drafts", { method: "POST", body: { accountId: state.aliceId, ...body } });
+        assert.equal((await save({ id: "../../etc", subject: "x" })).status, 400);
+        const saved = await save({ subject: "Draft", to: `bob@partner.test, ${"a".repeat(400)}@partner.test` });
+        assert.ok([200, 201].includes(saved.status), saved.text);
+        const draft = await aliceApi(`/api/drafts/${encodeURIComponent(saved.json.draft.id)}?accountId=${encodeURIComponent(state.aliceId)}`);
+        const to = JSON.stringify(draft.json);
+        assert.ok(!to.includes("a".repeat(400)), "an address over 320 characters is not kept");
+      }],
+
       ["the administrator opens on All inboxes, with every mailbox's mail", async () => {
         // A new tab: the open mailbox is remembered per tab, a fresh start opens All inboxes.
         const page = await admin.context.newPage();
         state.page = page;
         await page.goto(worker.origin);
         await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
-        assert.match(await page.locator(".mail-list-header").innerText(), /All inboxes/i);
+        // The (mobile) header shows a placeholder until the account list has loaded.
+        await page.locator(".mail-list-header").filter({ hasText: /All inboxes/i }).waitFor({ state: "attached", timeout: 20_000 });
         await page.locator(".mail-row").filter({ hasText: "Quarterly report" }).first().waitFor({ timeout: 15_000 });
         const accounts = await adminApi("/api/accounts");
         assert.ok(accounts.json.accounts.some(a => a.emailAddress === `alice@${DOMAIN}`));
@@ -204,6 +257,38 @@ export async function run() {
         const aliceApi = api(alice.context, worker.origin);
         assert.equal((await aliceApi("/api/device/logout", { method: "POST" })).status, 200);
         assert.equal((await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox`)).status, 401);
+      }],
+      ["disabling a mailbox ends its sessions at once", async () => {
+        const session = await contextWithPasskey(browser);
+        try {
+          const aliceApi = api(session.context, worker.origin);
+          const login = await aliceApi("/api/device/login", { method: "POST", body: { email: `alice@${DOMAIN}`, password: state.alicePassword } });
+          assert.equal(login.status, 200, login.text);
+          const inbox = `/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox`;
+          assert.equal((await aliceApi(inbox)).status, 200);
+          // The administrator disables alice@ in the admin panel (passkey approval).
+          const page = admin.page;
+          state.page = page;
+          await page.bringToFront();
+          await page.goto(`${worker.origin}/#admin`);
+          await page.reload();
+          const row = page.locator(".admin-mailbox-item").filter({ hasText: `alice@${DOMAIN}` });
+          const status = row.locator(".admin-mailbox-status");
+          const toggle = async (label, expected) => {
+            await row.locator("details.admin-mailbox-more").evaluate(el => { el.open = true; });
+            await row.getByRole("button", { name: label, exact: true }).click();
+            await page.waitForFunction(([selector, text]) => [...document.querySelectorAll(selector)]
+              .some(el => el.textContent.includes(text[0]) && el.querySelector(".admin-mailbox-status")?.textContent === text[1]),
+            [".admin-mailbox-item", [`alice@${DOMAIN}`, expected]], { timeout: 20_000 });
+          };
+          await status.waitFor({ timeout: 20_000 });
+          await toggle("Disable", "Disabled");
+          assert.ok([401, 403].includes((await aliceApi(inbox)).status), "the signed-in session lost access");
+          await toggle("Enable", "Active");
+          assert.ok([401, 403].includes((await aliceApi(inbox)).status), "re-enabling does not revive the old session");
+        } finally {
+          await session.context.close();
+        }
       }],
     ], () => state.page ?? admin?.page);
     return failed;

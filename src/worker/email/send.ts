@@ -1,5 +1,6 @@
 import { checkAuthRateLimit } from "../security";
 import { resolveProvider } from "../providers/registry";
+import { gmailAttachment, gmailFullMessage } from "../providers/gmailProvider";
 import { textToHtml } from "./textHtml";
 import { fitsCloudflareApi } from "../transports/cloudflareApi";
 import { transportChoice } from "../transports";
@@ -34,7 +35,9 @@ const MAX_ATTACHMENT_BYTES = 4_000_000;
 const MAX_BODY_CHARS = 500_000;
 const MAX_SUBJECT_CHARS = 500;
 const MAX_RECIPIENTS = 50;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// A bare address only (no display name, brackets, quotes or trailing dot), so
+// suppression checks always compare the address the transport will use.
+export const EMAIL_PATTERN = /^[^\s@<>"'(),;:\\]+@[^\s@<>"'(),;:\\]+\.[^\s@<>"'(),;:\\.]+$/;
 
 function splitRecipients(value: FormDataEntryValue | null): string[] {
   if (typeof value !== "string") return [];
@@ -179,7 +182,8 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   const to = splitRecipients(form.get("to"));
   const cc = splitRecipients(form.get("cc"));
   const bcc = splitRecipients(form.get("bcc"));
-  let subject = String(form.get("subject") ?? "").trim().slice(0, MAX_SUBJECT_CHARS);
+  // Line breaks never reach a header, whatever the transport does with them.
+  let subject = String(form.get("subject") ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_SUBJECT_CHARS);
   const text = String(form.get("text") ?? "").slice(0, MAX_BODY_CHARS);
   const replyToMessageId = String(form.get("replyToMessageId") ?? "").trim() || null;
   const forwardMessageId = String(form.get("forwardMessageId") ?? "").trim() || null;
@@ -232,20 +236,30 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   }
 
   let replyTarget: ReplyTarget | null = null;
+  // Connected (Gmail) accounts: reply and forward targets are read from the
+  // provider, the reply joins the Gmail thread, forwards carry the attachments.
+  const gmailTarget = async (id: string) => provider.kind === "gmail"
+    ? gmailFullMessage(env, provider.accountId, id).catch(() => null)
+    : null;
   if (replyToMessageId) {
-    if (provider.kind !== "native" || !(await provider.getMessage(replyToMessageId))) {
-      return Response.json({ error: "Reply target was not found" }, { status: 404 });
-    }
-
-    replyTarget = await env.DB.prepare(`
-      SELECT id, COALESCE(original_message_id, message_id) AS message_id, thread_id, reference_ids, subject
-      FROM messages
-      WHERE id = ?1 AND mailbox_id = ?2
-    `)
-      .bind(replyToMessageId, provider.accountId)
-      .first<ReplyTarget>();
-    if (!replyTarget) {
-      return Response.json({ error: "Reply target was not found" }, { status: 404 });
+    if (provider.kind === "gmail") {
+      const target = await gmailTarget(replyToMessageId);
+      if (!target) return Response.json({ error: "Reply target was not found" }, { status: 404 });
+      replyTarget = { id: target.id, message_id: target.messageId, thread_id: target.threadId, reference_ids: target.references, subject: target.subject };
+    } else {
+      if (!(await provider.getMessage(replyToMessageId))) {
+        return Response.json({ error: "Reply target was not found" }, { status: 404 });
+      }
+      replyTarget = await env.DB.prepare(`
+        SELECT id, COALESCE(original_message_id, message_id) AS message_id, thread_id, reference_ids, subject
+        FROM messages
+        WHERE id = ?1 AND mailbox_id = ?2
+      `)
+        .bind(replyToMessageId, provider.accountId)
+        .first<ReplyTarget>();
+      if (!replyTarget) {
+        return Response.json({ error: "Reply target was not found" }, { status: 404 });
+      }
     }
     if (!subject) subject = replySubject(replyTarget.subject);
   }
@@ -253,30 +267,45 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
   let forwardTarget: ForwardTarget | null = null;
   let inheritedUploads: Upload[] = [];
   if (forwardMessageId) {
-    if (provider.kind !== "native" || !(await provider.getMessage(forwardMessageId))) {
-      return Response.json({ error: "Forward target was not found" }, { status: 404 });
-    }
-
-    forwardTarget = await env.DB.prepare(`
-      SELECT id, subject
-      FROM messages
-      WHERE id = ?1 AND mailbox_id = ?2
-    `)
-      .bind(forwardMessageId, provider.accountId)
-      .first<ForwardTarget>();
-    if (!forwardTarget) {
-      return Response.json({ error: "Forward target was not found" }, { status: 404 });
+    if (provider.kind === "gmail") {
+      const target = await gmailTarget(forwardMessageId);
+      if (!target) return Response.json({ error: "Forward target was not found" }, { status: 404 });
+      forwardTarget = { id: target.id, subject: target.subject };
+      try {
+        if (target.attachments.reduce((total, attachment) => total + attachment.size, 0) > MAX_ATTACHMENT_BYTES) {
+          return Response.json({ error: "Attachments must total less than 4 MB" }, { status: 400 });
+        }
+        for (const attachment of target.attachments) {
+          const file = await gmailAttachment(env, provider.accountId, target.id, attachment.id);
+          inheritedUploads.push({ filename: file.filename, type: file.contentType, content: file.data.slice().buffer });
+        }
+      } catch {
+        return Response.json({ error: "Forwarded attachment is unavailable" }, { status: 400 });
+      }
+    } else {
+      if (!(await provider.getMessage(forwardMessageId))) {
+        return Response.json({ error: "Forward target was not found" }, { status: 404 });
+      }
+      forwardTarget = await env.DB.prepare(`
+        SELECT id, subject
+        FROM messages
+        WHERE id = ?1 AND mailbox_id = ?2
+      `)
+        .bind(forwardMessageId, provider.accountId)
+        .first<ForwardTarget>();
+      if (!forwardTarget) {
+        return Response.json({ error: "Forward target was not found" }, { status: 404 });
+      }
+      try {
+        inheritedUploads = await forwardedUploads(forwardTarget.id, env);
+      } catch {
+        return Response.json(
+          { error: "Forwarded attachment is unavailable" },
+          { status: 400 },
+        );
+      }
     }
     if (!subject) subject = forwardSubject(forwardTarget.subject);
-
-    try {
-      inheritedUploads = await forwardedUploads(forwardTarget.id, env);
-    } catch {
-      return Response.json(
-        { error: "Forwarded attachment is unavailable" },
-        { status: 400 },
-      );
-    }
   }
 
   const allUploads = [...inheritedUploads, ...uploads];
@@ -314,7 +343,11 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       if (existing.state === "accepted") {
         return Response.json({ ok: true, alreadyAccepted: true, messageId: existing.message_id, providerMessageId: existing.provider_message_id, accountId: provider.accountId });
       }
-      return Response.json({ error: "Previous send attempt is pending or failed; review its status before trying again" }, { status: 409 });
+      // A failed attempt was definitely not accepted by the transport, so it
+      // may be retried; pending or uncertain ones may already have been sent.
+      if (existing.state !== "failed") {
+        return Response.json({ error: "Previous send attempt is pending or its result is uncertain; review it before trying again" }, { status: 409 });
+      }
     }
     if (!(await checkAuthRateLimit(env, `outbound:${provider.accountId}`))) {
       return Response.json({ error: "Mailbox sending rate limit exceeded" }, { status: 429 });
@@ -324,9 +357,13 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
     if ((today?.n ?? 0) >= 200) {
       return Response.json({ error: "Daily mailbox send limit exceeded" }, { status: 429 });
     }
-    const reserved = await env.DB.prepare(
-      "INSERT OR IGNORE INTO outbound_attempts (mailbox_id,client_key,message_id,state) VALUES (?1,?2,?3,'pending')"
-    ).bind(provider.accountId,clientKey,id).run();
+    const reserved = existing
+      ? await env.DB.prepare(
+        "UPDATE outbound_attempts SET state='pending', message_id=?3, error_code=NULL, provider_message_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE mailbox_id=?1 AND client_key=?2 AND state='failed'"
+      ).bind(provider.accountId,clientKey,id).run()
+      : await env.DB.prepare(
+        "INSERT OR IGNORE INTO outbound_attempts (mailbox_id,client_key,message_id,state) VALUES (?1,?2,?3,'pending')"
+      ).bind(provider.accountId,clientKey,id).run();
     if (!reserved.meta.changes) {
       return Response.json({ error: "This send request is already being processed" }, { status: 409 });
     }
@@ -371,6 +408,7 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
       text,
       headers,
       attachments: allUploads,
+      threadId: provider.kind === "gmail" ? replyTarget?.thread_id ?? null : null,
       idempotencyKey: provider.kind === "native" ? `${provider.accountId}:${clientKey}` : undefined,
     });
     providerMessageId = result.providerMessageId;
@@ -510,9 +548,10 @@ export async function sendEmail(request: Request, env: Env): Promise<Response> {
 
   } catch {
     await Promise.allSettled(attachmentRows.map(row => env.MAIL.delete(row.key)));
+    // Attachment bytes of a failed send were already released above.
     await env.DB.prepare(
       "UPDATE native_mailboxes SET used_bytes=MAX(0,used_bytes-?1),usage_version=usage_version+1 WHERE id=?2"
-    ).bind(countedBytes, provider.accountId).run().catch(() => undefined);
+    ).bind(status === "sent" ? countedBytes : countedBytes - attachmentBytes, provider.accountId).run().catch(() => undefined);
     // Sending may already have been accepted. Never automatically retry it.
     return Response.json({ error: "Mail transport finished, but storing its local sent record failed. Do not retry until checked." }, { status: 502 });
   }

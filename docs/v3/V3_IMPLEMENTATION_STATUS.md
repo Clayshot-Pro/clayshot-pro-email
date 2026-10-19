@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.13 are released; production (`main`) runs v3.13, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.14 are released; production (`main`) runs v3.14, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -20,6 +20,7 @@
 | `v3.11` | Native HTML email reader: full reader width, app-themed rendering for ordinary mail, a light card only for designed mail |
 | `v3.12` | Easier setup: Deploy to Cloudflare button, in-app migrations, one-page setup with a Cloudflare token, automatic domain wiring (migration 0023) |
 | `v3.13` | Forks: deploy a GitHub fork with Cloudflare and update with Sync fork; app version and update notice; licence allows unmodified forks |
+| `v3.14` | End-to-end and unit tests; fixes from a security and bug review |
 
 ## Decisions applied in v3.05
 
@@ -116,9 +117,22 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **GitHub Actions deploy** runs only in `LiamTheMo/LTM-Email-Service`, or in a fork with the variable `DEPLOY_WITH_ACTIONS=true`.
 - **Requires manual validation:** a fork imported into a fresh Cloudflare account end to end.
 
+## v3.14: tests and review fixes
+
+- **Tests:** `npm run test:e2e` runs the real Worker locally (`wrangler dev`) with Chromium and a virtual passkey: setup, mailbox creation, inbound mail, safe reading of hostile HTML, attachments, access control, junk and blocking, sending, conversations, redelivery, drafts, All inboxes, sign-out and disabling a mailbox. A second suite renders 27 XSS payloads in the reader frame. CI runs both (`e2e` job). `scripts/test-unit-core.mjs` and `scripts/test-audit-fixes.mjs` add unit and regression tests.
+- **Sign-in:** rate limits group IPv6 clients by /64 and also limit each mailbox (30 attempts per 15 minutes); disabling or deleting a mailbox signs out its devices at once; the first passkey is registered atomically; bodies without a length are refused.
+- **Receiving:** HTML handling is linear-time (crafted mail can no longer stall the Worker); a failed store releases its delivery claim so Email Routing's retry is kept; attachment names lose bidi controls; HTML is capped at 2 MB.
+- **Junk:** only the receiving server's (topmost, preferably Cloudflare's) authentication result counts, so a forged `dkim=pass` or `List-Id` no longer rescues failing mail, and a contact skips content checks only when authenticated.
+- **Sending:** a failed send can be retried with the same message; Gmail replies join their thread and Gmail forwards keep attachments; subjects lose line breaks; stricter address check; only reply headers reach the Cloudflare binding; up to 200 drafts per mailbox.
+- **Mail list:** archive, junk and delete apply to the whole conversation (reader and bulk); opening a conversation updates the unread count by every message it reads; sending from another account switches to it cleanly.
+- **Domains:** a subdomain gets its own Email Routing MX records even when the zone already has routing; a catch-all that already forwards elsewhere is only replaced after confirmation.
+- **Migrations:** the in-app runner keeps `CASE … END` inside triggers together.
+- **Requires manual validation:** Gmail reply and forward with an attachment, and the junk verdict on real Cloudflare-delivered mail.
+- **Open decisions:** mailbox password minimum (4 now; 12+ recommended), a Google sign-in allowlist, a Message-ID on mail sent through the API/Resend transports, and threading by `References` without a subject check.
+
 ## Production rollout (LTM instance)
 
-**Done:** v3.13 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
+**Done:** v3.14 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
 Remaining, by hand:
 

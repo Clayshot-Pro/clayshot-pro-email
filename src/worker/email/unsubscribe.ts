@@ -41,13 +41,23 @@ function validatedCandidate(candidate: string): string | null {
 export function messageUnsubscribeUrl(bodyHtml: string | null | undefined, bodyText: string | null | undefined): string | null {
   if (bodyHtml) {
     const html = bodyHtml.slice(0, 512 * 1024);
-    const anchors = /<a\b([^>]{0,4096})>([\s\S]{0,4096}?)<\/a\s*>/gi;
+    const lower = html.toLowerCase();
+    // One forward pass: each anchor's closing tag is found by a search that
+    // never revisits text, so link-heavy or unclosed HTML stays linear.
+    const anchors = /<a\b([^<>]{0,4096})>/gi;
+    let close = -1;
     for (const match of html.matchAll(anchors)) {
-      const label = match[2].replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ");
+      const start = match.index + match[0].length;
+      if (close !== Infinity && close < start) {
+        const found = lower.indexOf("</a", start);
+        close = found < 0 ? Infinity : found;
+      }
+      if (close === Infinity || close - start > 4096) continue;
+      const label = html.slice(start, close).replace(/<[^<>]{0,4096}>/g, " ").replace(/&nbsp;/gi, " ");
       // Permit a "click here" anchor when an immediately adjacent sentence
       // identifies it as an unsubscribe action.
       const context = html.slice(Math.max(0, match.index - 130), match.index)
-        .replace(/<[^>]*>/g, " ");
+        .replace(/<[^<>]*>/g, " ");
       if (!UNSUBSCRIBE_WORDING.test(label) && !UNSUBSCRIBE_WORDING.test(context)) continue;
       const href = /\bhref\s*=\s*(?:"([^"]{1,2048})"|'([^']{1,2048})')/i.exec(match[1]);
       const url = href && validatedCandidate(href[1] || href[2]);

@@ -43,6 +43,7 @@ import {
   groupByAccount,
   startingAccountId,
   mergeAccountLists,
+  threadKey,
   unifiedAccounts,
   type AccountListResult,
 } from "./allInboxes";
@@ -595,11 +596,13 @@ export function App() {
       setSelected(message);
       setThread(nextThread);
       setOpeningMessageId(null);
+      // Opening reads the whole conversation; the optimistic -1 above
+      // already covered the opened item.
       setMessages((current) => current.map((item) =>
-        item.id === id ? { ...item, isRead: true } : item));
-      if (!wasUnread && data.newlyReadCount) {
-        setUnreadCount((count) => Math.max(0, count - data.newlyReadCount));
-      }
+        item.id === id || (listItem && threadKey(item) === threadKey(listItem))
+          ? { ...item, isRead: true } : item));
+      const furtherRead = data.newlyReadCount - (wasUnread ? 1 : 0);
+      if (furtherRead) setUnreadCount((count) => Math.max(0, count - furtherRead));
     } catch {
       if (requestId !== openRequest.current) return;
       setOpeningMessageId(null);
@@ -623,10 +626,11 @@ export function App() {
     const previousThread = thread;
     const previousUnreadCount = unreadCount;
     const nextSelected = { ...target, ...patch } as MessageDetail;
-    // The reader displays a collapsed conversation. Delete/restore that whole
-    // conversation, not only its representative item (which would resurface
-    // an older message with the same subject after the next refresh).
-    const conversationMutation = typeof patch.isDeleted === "boolean";
+    // The reader displays a collapsed conversation. Delete, archive or junk
+    // that whole conversation, not only its representative item (which would
+    // resurface an older message of the conversation after the next refresh).
+    const conversationMutation = Object.keys(patch).length === 1 &&
+      ["isDeleted", "isArchived", "isJunk"].some((key) => typeof patch[key] === "boolean");
     const matchesTarget = (message: MessageListItem) => (message.accountId ?? activeAccountId) === accountId
       && (conversationMutation ? message.threadId === target.threadId : message.id === target.id);
     const shieldKey = mailMutationKey(accountId,
@@ -649,7 +653,7 @@ export function App() {
       .filter((message) =>
         !matchesTarget(message) || belongsInFolder(folder, message)));
     setThread((current) => current.map((message) =>
-      message.id === target.id
+      conversationMutation || message.id === target.id
         ? { ...message, ...patch } as MessageDetail
         : message));
 
@@ -997,8 +1001,9 @@ export function App() {
       setCompose(EMPTY_COMPOSE);
       setFiles([]);
       // All inboxes stays open and shows the sent message among the others.
+      // switchAccount also clears the old mailbox's list, counts and tab memory.
       if (!unified && composeAccountId !== activeAccountId) {
-        setActiveAccountId(composeAccountId);
+        switchAccount(composeAccountId);
       }
       setFolder("sent");
       if (folder === "sent" && (unified || composeAccountId === activeAccountId)) void loadMessages("sent", search, true);

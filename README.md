@@ -129,6 +129,7 @@ The admin panel shows when a new version is out. To update, open your fork on Gi
 npm ci
 npm run dev    # Vite + Worker; the app migrates its local database
 npm test       # all regression checks
+npm run test:e2e  # real Worker + Chromium end-to-end suites
 ```
 
 Branches: `main` deploys to production; work happens on version branches `vX.XX`. Visual changes to the original layout go in `src/client/layout-fixes.css`. Setup with a Cloudflare token needs the deployed app.

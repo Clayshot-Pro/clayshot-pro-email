@@ -48,9 +48,9 @@ import {
 } from "./branding";
 import { receiveEmail } from "./email/receive";
 import { sendEmail } from "./email/send";
-import { googleOAuthCallback, startGoogleOAuth } from "./providers/google";
+import { disconnectGoogleIfUnused, googleOAuthCallback, startGoogleOAuth } from "./providers/google";
 import { pushConfig, subscribePush, unsubscribePush } from "./push";
-import { authRateLimitBucket, checkAuthRateLimit } from "./security";
+import { MAX_API_BODY_BYTES, authRateLimitBucket, checkAuthRateLimit, requestTooLarge } from "./security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_POSTS = new Set([
@@ -64,7 +64,6 @@ const AUTH_POSTS = new Set([
   "/api/admin/step-up/verify",
   "/api/accounts/gmail/connect",
 ]);
-const MAX_API_BODY_BYTES = 8 * 1024 * 1024;
 
 const jsonError = (message: string, status: number, headers?: HeadersInit) =>
   Response.json({ error: message }, { status, headers });
@@ -77,14 +76,6 @@ const sameOrigin = (request: Request): boolean => {
     return false;
   }
 };
-
-function requestTooLarge(request: Request): boolean {
-  const raw = request.headers.get("Content-Length");
-  if (!raw) return false;
-
-  const length = Number(raw);
-  return Number.isFinite(length) && length > MAX_API_BODY_BYTES;
-}
 
 function secureApiResponse(response: Response): Response {
   const headers = new Headers(response.headers);
@@ -126,7 +117,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   // session checks for this exact path only, authenticated by signature.
   if (url.pathname === "/api/webhooks/resend" && request.method === "POST") return resendWebhook(request, env);
   if (!sameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
-  if (!SAFE_METHODS.has(request.method) && requestTooLarge(request)) {
+  if (!SAFE_METHODS.has(request.method) && requestTooLarge(request, MAX_API_BODY_BYTES)) {
     return jsonError("Request body too large", 413);
   }
 
@@ -304,7 +295,14 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (accountRoute && request.method === "DELETE") {
     const accountId = decodedRouteId(accountRoute);
     if (!accountId) return jsonError("Invalid account id", 400);
-    if (accountId.startsWith("gmail:")) return deviceRemoveAccount(request, env, accountId);
+    if (accountId.startsWith("gmail:")) {
+      const removed = await deviceRemoveAccount(request, env, accountId);
+      if (removed.ok) {
+        await disconnectGoogleIfUnused(accountId, env)
+          .catch(error => console.error("gmail_disconnect_failed", error instanceof Error ? error.name : "unknown"));
+      }
+      return removed;
+    }
   }
 
   const avatarRoute = url.pathname.match(/^\/api\/accounts\/([^/]+)\/avatar$/);
