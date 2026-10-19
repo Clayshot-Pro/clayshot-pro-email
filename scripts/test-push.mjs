@@ -9,26 +9,15 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const b64url = bytes => Buffer.from(bytes).toString("base64url");
 const sha256Hex = async value => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))).toString("hex");
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    sql, args,
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return { prepare: sql => statement(sql), batch: async list => Promise.all(list.map(item => item.run())) };
-}
 
 function database() {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec("INSERT OR IGNORE INTO domains (domain, status, is_primary) VALUES ('example.org', 'active', 1)");
   db.exec("UPDATE domains SET status = 'active' WHERE domain = 'example.org'");
   db.exec("INSERT INTO native_mailboxes (id, email_address, display_name, domain) VALUES ('native:friend', 'friend@example.org', 'Friend', 'example.org')");

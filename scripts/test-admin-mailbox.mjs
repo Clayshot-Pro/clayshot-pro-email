@@ -8,24 +8,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    bind: (...values) => statement(sql, values),
-    run: async () => { db.prepare(sql).run(...args); return { success: true, meta: {} }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return {
-    prepare: sql => statement(sql),
-    batch: async statements => { db.exec("BEGIN"); try { for (const s of statements) await s.run(); db.exec("COMMIT"); } catch (e) { db.exec("ROLLBACK"); throw e; } return []; },
-  };
-}
 function database() {
-  const db = new DatabaseSync(":memory:");
-  db.exec("PRAGMA foreign_keys = ON");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase({ foreignKeys: true });
   return db;
 }
 const mailboxes = db => db.prepare("SELECT id, email_address FROM native_mailboxes ORDER BY id").all().map(row => `${row.id}=${row.email_address}`);

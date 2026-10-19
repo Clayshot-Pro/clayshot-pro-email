@@ -4,19 +4,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { applyMigrations, pendingMigrations, splitStatements } from "../src/worker/migrationRunner.ts";
+import { d1 } from "./test-harness.mjs";
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    bind: (...values) => statement(sql, values),
-    run: async () => { db.prepare(sql).run(...args); return { success: true, meta: {} }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return {
-    prepare: sql => statement(sql),
-    batch: async statements => { db.exec("BEGIN"); try { for (const s of statements) await s.run(); db.exec("COMMIT"); } catch (e) { db.exec("ROLLBACK"); throw e; } return []; },
-  };
-}
 const dir = new URL("../migrations/", import.meta.url);
 const MIGRATIONS = readdirSync(dir).filter(file => file.endsWith(".sql")).sort()
   .map(name => ({ name, sql: readFileSync(new URL(name, dir), "utf8") }));

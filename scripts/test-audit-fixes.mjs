@@ -7,36 +7,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const source = path => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    sql, args,
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return {
-    prepare: sql => statement(sql),
-    batch: async list => {
-      db.exec("BEGIN");
-      try {
-        const results = list.map(item => ({ meta: { changes: Number(db.prepare(item.sql).run(...item.args).changes) } }));
-        db.exec("COMMIT");
-        return results;
-      } catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-      }
-    },
-  };
-}
 function database() {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec("INSERT INTO native_mailboxes (id, email_address, display_name) VALUES ('native:work', 'work@example.org', 'Work')");
   return db;
 }

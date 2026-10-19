@@ -8,16 +8,8 @@ import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { build } from "esbuild";
 import { primaryProfilePath } from "../src/worker/accountAccess.ts";
+import { d1, migratedDatabase } from "./test-harness.mjs";
 
-function d1(db) {
-  const statement = (sql, args = []) => ({
-    bind: (...values) => statement(sql, values),
-    run: async () => { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
-    all: async () => ({ results: db.prepare(sql).all(...args).map(row => ({ ...row })) }),
-    first: async () => { const row = db.prepare(sql).get(...args); return row ? { ...row } : null; },
-  });
-  return { prepare: sql => statement(sql), batch: async list => { for (const s of list) await s.run(); return []; } };
-}
 function r2() {
   const objects = new Map();
   return {
@@ -30,9 +22,7 @@ function r2() {
 }
 
 async function run(m) {
-  const db = new DatabaseSync(":memory:");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const name of readdirSync(dir).filter(file => file.endsWith(".sql")).sort()) db.exec(readFileSync(new URL(name, dir), "utf8"));
+  const db = migratedDatabase();
   db.exec(`INSERT INTO native_mailboxes (id, email_address, display_name) VALUES ('native:admin', 'admin@example.com', 'Admin'), ('native:work', 'work@example.com', 'Work')`);
   const bucket = r2();
   const env = { DB: d1(db), MAIL: bucket, EMAIL: { send: async () => undefined } };
