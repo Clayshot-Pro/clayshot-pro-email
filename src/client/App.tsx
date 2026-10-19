@@ -10,6 +10,7 @@ import {
   draftSenderKey,
   forwardedBody,
   hasDraftContent,
+  needsHomeScreenInstall,
   notificationControlsDisabled,
   type DetailCacheEntry,
 } from "./appModel";
@@ -155,6 +156,10 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      if (needsHomeScreenInstall(navigator, matchMedia("(display-mode: standalone)").matches)) {
+        setNotificationState("install");
+        return;
+      }
       if (
         !("serviceWorker" in navigator)
         || !("PushManager" in window)
@@ -180,6 +185,15 @@ export function App() {
           scope: "/",
         });
         const subscription = await registration.pushManager.getSubscription();
+        // A subscription belongs to the sign-in it was made in. Re-register it on
+        // every start, so a new sign-in (or an expired one) keeps receiving alerts.
+        if (subscription && Notification.permission === "granted") {
+          await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(subscription.toJSON()),
+          }).catch(() => undefined);
+        }
         if (!cancelled) {
           setNotificationState(
             Notification.permission === "denied"

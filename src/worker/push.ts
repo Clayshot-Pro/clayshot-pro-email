@@ -136,7 +136,9 @@ async function sendToSubscription(env: Env, row: StoredSubscription, notificatio
       tag: `message-${notification.id}`,
       url: "/",
     }),
-    options: { ttl: 3600 },
+    // High urgency: Android otherwise holds normal pushes while the phone is
+    // idle (Doze). A day of TTL still delivers to a phone that was offline.
+    options: { ttl: 86_400, urgency: "high" },
   }, subscription, {
     subject: await vapidSubject(env),
     publicKey: keys.publicKey,
@@ -147,7 +149,11 @@ async function sendToSubscription(env: Env, row: StoredSubscription, notificatio
     await env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?1").bind(row.endpoint).run();
     return;
   }
-  if (!response.ok) console.warn("Push delivery failed", response.status);
+  if (!response.ok) {
+    // The push service's reason (e.g. Apple's BadJwtToken) says what to fix; never the endpoint itself.
+    const reason = (await response.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
+    console.warn("Push delivery failed", new URL(row.endpoint).hostname, response.status, reason);
+  }
 }
 
 export async function sendNewMailPush(env: Env, notification: NewMailPush): Promise<void> {

@@ -44,6 +44,7 @@ export function notificationLabel(state: NotificationState): string {
     case "off": return "Enable notifications";
     case "blocked": return "Notifications blocked";
     case "unsupported": return "Notifications unavailable";
+    case "install": return "Add to Home Screen for notifications";
     case "unconfigured": return "Notification setup needed";
     case "working": return "Updating notifications";
     default: return "Checking notifications";

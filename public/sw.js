@@ -17,6 +17,25 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// The browser can replace a subscription (expiry, key rotation). Register the
+// new one at once, or alerts would silently stop until the app is opened.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    const options = event.oldSubscription?.options;
+    const subscription = event.newSubscription
+      ?? (options?.applicationServerKey
+        ? await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: options.applicationServerKey })
+        : null);
+    if (!subscription) return;
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+  })());
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = new URL(event.notification.data?.url || "/", self.location.origin).href;

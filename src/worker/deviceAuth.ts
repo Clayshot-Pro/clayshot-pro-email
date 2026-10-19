@@ -131,12 +131,29 @@ export async function deviceAccountIds(request: Request, env: Env): Promise<stri
     )`).bind(session.id, adminLoginAddress(request), adminMailboxAddress(await primaryDomain(env)) ?? "").all<{account_id:string}>();
   return items.results.map(i => i.account_id);
 }
+/**
+ * A device stays signed in while it is used: once a session is more than a
+ * week old, opening the app renews it for another 30 days with the same token.
+ * A fixed lifetime signed phones out silently, and their push alerts stopped.
+ */
+async function renewDeviceSession(request: Request, env: Env): Promise<string | null> {
+  const t = readCookie(request, DEVICE_COOKIE);
+  if (!t || !/^[\w-]{30,100}$/.test(t)) return null;
+  const renewed = await env.DB.prepare(`UPDATE device_sessions
+    SET expires_at=datetime('now','+30 days'), last_seen_at=CURRENT_TIMESTAMP
+    WHERE token_hash=?1 AND expires_at>datetime('now') AND expires_at<datetime('now','+23 days')`)
+    .bind(await tokenHash(t)).run();
+  return renewed.meta.changes ? deviceCookie(t) : null;
+}
 export async function deviceStatus(request: Request, env: Env): Promise<Response> {
   const [ids, admin] = await Promise.all([deviceAccountIds(request, env), isAuthenticated(request, env)]);
   // Passkey sessions are privileged admin sessions and may open native mailboxes.
   const native = admin ? await env.DB.prepare("SELECT COUNT(*) AS count FROM native_mailboxes WHERE status='active' AND deleted_at IS NULL")
     .first<{count:number}>() : null;
-  return Response.json({ authenticated: admin || ids.length > 0, isAdmin: admin, accountCount: ids.length + (native?.count ?? 0) });
+  const renewal = ids.length ? await renewDeviceSession(request, env) : null;
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  if (renewal) headers.append("Set-Cookie", renewal);
+  return Response.json({ authenticated: admin || ids.length > 0, isAdmin: admin, accountCount: ids.length + (native?.count ?? 0) }, { headers });
 }
 export async function deviceLogin(request: Request, env: Env): Promise<Response> {
   const input = await request.json<{ email?: unknown; password?: unknown }>().catch(() => null);

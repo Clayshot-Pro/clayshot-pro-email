@@ -9,6 +9,7 @@ const TESTS = [
   "test-version",
   "test-unit-core",
   "test-audit-fixes",
+  "test-push",
   "test-stored-keys",
   "test-cloudflare-setup",
   "test-all-inboxes",

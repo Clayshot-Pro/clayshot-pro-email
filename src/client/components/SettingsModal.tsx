@@ -116,7 +116,7 @@ export function SettingsModal(props: Props) {
               <div>
                 <strong>Push notifications</strong>
                 <small>
-                  {notificationLabel(props.notificationState)} · alerts contain no sender or subject
+                  {notificationLabel(props.notificationState)} · alerts show the sender, subject and a short preview
                 </small>
               </div>
               <button

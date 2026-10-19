@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.18
+
+- Phone notifications keep working: open the app once after updating on each phone so it re-registers. iPhone users need the app added to the Home Screen.
+
 ## v3.17
 
 - New compose icon, and mail with narrow table layouts reads normally again. Nothing to do.
