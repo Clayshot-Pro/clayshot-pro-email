@@ -50,10 +50,10 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
 // A fresh fork's first deploy creates its database and bucket; an existing
 // Worker never gets a new database. Cloudflare is faked behind fetch.
 {
-  const { provisionFirstDeploy, workerExists } = await import("./config-lib.mjs");
+  const { deployedWorkerDatabase, provisionFirstDeploy, workerExists } = await import("./config-lib.mjs");
   const values = { CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef", CLOUDFLARE_API_TOKEN: "token-123456789",
     WORKER_NAME: "fresh-mail", D1_DATABASE_NAME: "fresh-mail", R2_BUCKET_NAME: "fresh-mail-mail" };
-  const fake = (state, { r2Disabled = false, scriptsForbidden = false } = {}) => {
+  const fake = (state, { r2Disabled = false, scriptsForbidden = false, unbound = false } = {}) => {
     const calls = [];
     globalThis.fetch = async (url, init = {}) => {
       const path = new URL(url).pathname.replace(`/client/v4/accounts/${values.CLOUDFLARE_ACCOUNT_ID}`, "");
@@ -62,7 +62,8 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
       const reply = (status, result, errors = []) => new Response(JSON.stringify({ success: status < 300, result, errors }), { status });
       if (path === `/workers/scripts/${values.WORKER_NAME}/settings`) {
         if (scriptsForbidden) return reply(403, null, [{ code: 10000, message: "Authentication error" }]);
-        return state.worker ? reply(200, { bindings: [{ type: "d1", name: "DB", database_id: state.databases[0]?.uuid }] }) : reply(404, null, [{ code: 10007, message: "not found" }]);
+        if (!state.worker) return reply(404, null, [{ code: 10007, message: "not found" }]);
+        return reply(200, { bindings: unbound ? [{ type: "plain_text", name: "X" }] : [{ type: "d1", name: "DB", id: state.databases[0]?.uuid }] });
       }
       if (path === "/d1/database" && method === "GET") return reply(200, state.databases);
       if (path === "/d1/database" && method === "POST") {
@@ -97,6 +98,13 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
 
     fake({ worker: true, databases: [{ uuid: "x", name: "fresh-mail" }], buckets: [] });
     assert.equal(await workerExists(values), true, "an existing Worker is detected");
+    assert.deepEqual(await deployedWorkerDatabase(values), { state: "bound", id: "x" }, "a Worker keeps its own database");
+    fake({ worker: true, databases: [], buckets: [] }, { unbound: true });
+    assert.deepEqual(await deployedWorkerDatabase(values), { state: "unbound" }, "a Worker without a database (an earlier failed setup) has nothing to lose");
+    const forbidden = fake({ worker: false, databases: [], buckets: [] }, { scriptsForbidden: true });
+    assert.equal((await deployedWorkerDatabase(values)).state, "unknown");
+    assert.match((await deployedWorkerDatabase(values)).detail, /HTTP 403: Authentication error/);
+    assert.ok(!forbidden.some(call => call.startsWith("POST")), "nothing is created when the Worker cannot be read");
     fake({ worker: false, databases: [], buckets: [] }, { scriptsForbidden: true });
     assert.equal(await workerExists(values), null, "a token without access is not mistaken for a new instance");
     fake({ worker: false, databases: [], buckets: [] }, { r2Disabled: true });
@@ -105,7 +113,9 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
     globalThis.fetch = realFetch;
   }
   const render = readFileSync(new URL("./config-render.mjs", import.meta.url), "utf8");
-  assert.match(render, /isProductionDeploy\(\) && await workerExists\(values\) === false/, "only a deploy whose Worker does not exist provisions");
+  assert.match(render, /deployed\?\.state === "missing" \|\| deployed\?\.state === "unbound"\) \{\n\s+databaseId = await provisionFirstDeploy/,
+    "only a deploy whose Worker is missing or has no database provisions");
+  assert.match(render, /Could not read the Worker/, "an unreadable Worker names the account and permissions");
   assert.match(workflow, /- name: Check the Cloudflare secrets[\s\S]{0,800}Repository secrets/, "missing secrets fail with directions");
   assert.ok(workflow.indexOf("Check the Cloudflare secrets") < workflow.indexOf("- name: Checkout"), "checked before anything runs");
   assert.match(workflow, /GITHUB_STEP_SUMMARY/, "the run summary names the app address");
