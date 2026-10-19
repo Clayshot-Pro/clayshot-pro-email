@@ -41,7 +41,8 @@ function database() {
 }
 
 async function run(keys) {
-  const { planKeys, validKeyValue, keyHint, withStoredKeys, adminKeysResponse, saveStoredKey, deleteStoredKey, encryptionKeyBackup } = keys;
+  const { planKeys, validKeyValue, keyHint, withStoredKeys, adminKeysResponse, saveStoredKey, deleteStoredKey, encryptionKeyBackup,
+    cloudflareConnection, deployCloudflareConnection, storeCloudflareConnection, removeCloudflareConnection } = keys;
   const credential = randomBytes(32).toString("base64url");
   const resend = "re_live_ABCDEFGH12345678";
   const put = value => new Request("https://mail.example.com/api/admin/keys/x", { method: "PUT", body: JSON.stringify({ value }) });
@@ -131,6 +132,31 @@ async function run(keys) {
     assert.equal(shown.headers.get("cache-control"), "no-store");
     assert.equal((await encryptionKeyBackup({ DB: d1(db) })).status, 404, "no key set");
     assert.equal((await encryptionKeyBackup({ DB: d1(db), PROVIDER_CREDENTIAL_KEY: "not-a-key" })).status, 404, "an invalid key is not shown");
+  }
+
+  // v3.22: the deploy's own token is used when no token is connected in Admin → Keys.
+  {
+    const deployed = { token: "d".repeat(40), accountId: "a".repeat(32), scriptName: "mail" };
+    const secret = JSON.stringify(deployed);
+    const fresh = { DB: d1(db), CLOUDFLARE_DEPLOY_CONNECTION: secret };
+    assert.deepEqual(deployCloudflareConnection(fresh), deployed);
+    assert.deepEqual(await cloudflareConnection(fresh), deployed, "works without an encryption key");
+    const listed = (await (await adminKeysResponse(fresh)).json()).cloudflare;
+    assert.deepEqual(listed, { connected: true, source: "deploy", hint: "…dddd", accountId: deployed.accountId, worker: "mail" });
+    assert.doesNotMatch(JSON.stringify(listed), /d{8}/, "the token is never listed");
+    for (const bad of ["", "{", JSON.stringify({ ...deployed, token: "short" }), JSON.stringify({ ...deployed, accountId: "x" }),
+      JSON.stringify({ ...deployed, scriptName: "" }), JSON.stringify([deployed])]) {
+      assert.equal(deployCloudflareConnection({ DB: d1(db), CLOUDFLARE_DEPLOY_CONNECTION: bad }), null, bad);
+    }
+    // A token connected in Admin → Keys wins; removing it falls back to the deploy's.
+    const both = { DB: d1(db), PROVIDER_CREDENTIAL_KEY: credential, CLOUDFLARE_DEPLOY_CONNECTION: secret };
+    const own = { token: "o".repeat(40), accountId: "b".repeat(32), scriptName: "mail" };
+    await storeCloudflareConnection(both, own);
+    assert.deepEqual(await cloudflareConnection(both), own);
+    assert.equal((await (await adminKeysResponse(both)).json()).cloudflare.source, "stored");
+    await removeCloudflareConnection(both);
+    assert.deepEqual(await cloudflareConnection(both), deployed);
+    assert.equal(await cloudflareConnection({ DB: d1(db), PROVIDER_CREDENTIAL_KEY: credential }), null, "neither: not connected");
   }
   console.log("PASS: stored keys are encrypted, write-only, mirrored from Worker secrets, VAPID generated once");
 }

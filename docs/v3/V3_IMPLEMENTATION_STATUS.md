@@ -182,6 +182,15 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Admin page:** when an essential key is missing, a red **Setup incomplete** notice sits above the section links with a **Fix in Keys** link, and the Keys link has a red dot.
 - **Tests:** `scripts/test-key-status.mjs`; the end-to-end suite checks the badges on a configured instance.
 
+## v3.22: the deploy token connects Cloudflare
+
+- **Deploy:** `npm run deploy` runs `scripts/wrangler-deploy.mjs`. On the GitHub Actions deploy from `main` it passes `wrangler deploy --secrets-file` with one Worker secret, `CLOUDFLARE_DEPLOY_CONNECTION` (`{ token, accountId, scriptName }` from `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the Worker name). It goes up with the new version (no extra deployment); other secrets are kept; the temporary file is private and deleted. Version branches and deploys from a computer pass nothing.
+- **Why a Worker secret, not D1:** D1 values are encrypted with `PROVIDER_CREDENTIAL_KEY`, which Cloudflare never returns, so the deploy cannot encrypt for D1. A Worker secret is encrypted by Cloudflare and follows the GitHub secret on every deploy.
+- **App:** `cloudflareConnection` uses a token connected in Admin → Keys first, then the deploy's. Admin → Keys shows **Using the deploy's token** (hint only; no Remove, since the next deploy would bring it back). Domain setup and **Re-check Cloudflare setup** use it.
+- **Unchanged:** first-run setup still needs a pasted token or the setup secret as proof of ownership; the deploy token is never accepted as proof.
+- **Security:** the Worker holds the deploy token (Workers Scripts, D1, R2 edit). An in-app token already needed Workers Scripts: Edit, so the added reach is D1 and R2, which the Worker already has through its bindings.
+- **Requires manual validation:** Admin → Keys on a fork after its next deploy; domain setup with a deploy token that has the email and DNS permissions.
+
 ## Production rollout (LTM instance)
 
 **Done:** v3.14 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.

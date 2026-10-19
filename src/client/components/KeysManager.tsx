@@ -6,7 +6,7 @@ import { CloudflareTokenHelp } from "./CloudflareSetup";
 import { keyChecklist, keySummary, type KeyCheck } from "../keyStatus";
 
 type KeyStatus = { name: string; source: KeySource; hint: string };
-type CloudflareStatus = { connected: boolean; hint?: string; accountId?: string; worker?: string };
+type CloudflareStatus = { connected: boolean; source?: "stored" | "deploy"; hint?: string; accountId?: string; worker?: string };
 type KeysResponse = { encryption: boolean; keys: KeyStatus[]; push: KeyStatus; cloudflare?: CloudflareStatus; generatedKey?: string | null; error?: string };
 
 const LABELS: Record<EditableKey, { label: string; help: string; placeholder: string }> = {
@@ -168,20 +168,22 @@ export function KeysManager({ onStatus }: { onStatus?: (missing: KeyCheck[]) => 
             <li className={`key-row key-${byId.get("cloudflare")!.state}`}>
               <KeyTitle item={byId.get("cloudflare")!} />
               <small>
-                {data.cloudflare?.connected
-                  ? `Connected · token ${data.cloudflare.hint ?? ""} · Worker ${data.cloudflare.worker ?? ""}. Used to set up mail domains.`
-                  : "Not connected. A token lets the app set up Email Routing, delivery, Email Sending and DMARC for your domains."}
+                {!data.cloudflare?.connected
+                  ? "Not connected. A token lets the app set up Email Routing, delivery, Email Sending and DMARC for your domains."
+                  : data.cloudflare.source === "deploy"
+                    ? `Using the deploy's token ${data.cloudflare.hint ?? ""} (GitHub secret CLOUDFLARE_API_TOKEN) · Worker ${data.cloudflare.worker ?? ""}. Updated by every deploy. If domain setup asks for a permission, add it to that token in Cloudflare, or connect a different token here.`
+                    : `Connected · token ${data.cloudflare.hint ?? ""} · Worker ${data.cloudflare.worker ?? ""}. Used to set up mail domains.`}
               </small>
               <form className="admin-domain-add" onSubmit={event => { event.preventDefault(); void cloudflare("PUT"); }}>
                 <label>
-                  {data.cloudflare?.connected ? "Replace token" : "API token"}
+                  {!data.cloudflare?.connected ? "API token" : data.cloudflare.source === "deploy" ? "Use a different token" : "Replace token"}
                   <input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" maxLength={256}
                     className="mailbox-entry-input" placeholder="Cloudflare API token" value={cloudflareToken}
                     onChange={event => setCloudflareToken(event.target.value)} />
                 </label>
                 <div className="admin-domain-actions">
                   <button type="submit" className="auth-secondary" disabled={busy || !cloudflareToken.trim()}>Connect</button>
-                  {data.cloudflare?.connected && (
+                  {data.cloudflare?.connected && data.cloudflare.source !== "deploy" && (
                     <button type="button" className="auth-secondary" disabled={busy}
                       onClick={() => window.confirm("Remove the Cloudflare token? Domains keep working; new ones need manual setup.") && void cloudflare("DELETE")}>
                       Remove
