@@ -53,6 +53,20 @@ export function KeysManager() {
 
   const [cloudflareToken, setCloudflareToken] = useState("");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [backupKey, setBackupKey] = useState<string | null>(null);
+
+  // The encryption key, for the administrator's password manager (passkey approval).
+  async function showEncryptionKey() {
+    setBusy(true); setNotice(null);
+    try {
+      const response = await adminActionFetch("/api/admin/encryption-key/backup", "POST");
+      const result = await response.json().catch(() => ({})) as { key?: string; error?: string };
+      if (!response.ok || !result.key) throw new Error(result.error || "Could not show the encryption key");
+      setBackupKey(result.key);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not show the encryption key");
+    } finally { setBusy(false); }
+  }
 
   async function cloudflare(method: "PUT" | "DELETE") {
     setBusy(true); setNotice(null);
@@ -88,8 +102,9 @@ export function KeysManager() {
         <>
           {!data.encryption && (
             <p className="admin-inline-state" role="alert">
-              Keys need the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. Connecting Cloudflare below creates it; or add it
-              yourself under Worker → Settings → Variables &amp; Secrets. Keep a copy of it: changing it makes stored keys unreadable.
+              Stored keys and push notifications need the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. The GitHub Actions
+              deploy creates it (run <strong>Deploy production</strong> again), and so does connecting Cloudflare below. Keep a copy:
+              changing it makes stored keys unreadable.
             </p>
           )}
           {generatedKey && (
@@ -100,6 +115,23 @@ export function KeysManager() {
             </div>
           )}
           <ul className="admin-dns-report">
+            {data.encryption && (
+              <li>
+                <strong>Encryption key</strong>
+                <small>Set as the <code>PROVIDER_CREDENTIAL_KEY</code> Worker secret. Keep a copy in your password manager: without it, stored keys cannot be recovered.</small>
+                {backupKey ? (
+                  <div className="setup-key" role="status">
+                    <label htmlFor="backup-key">Encryption key</label>
+                    <input id="backup-key" readOnly value={backupKey} onFocus={event => event.currentTarget.select()} />
+                    <button type="button" className="auth-secondary" onClick={() => setBackupKey(null)}>Hide</button>
+                  </div>
+                ) : (
+                  <div className="admin-domain-actions">
+                    <button type="button" className="auth-secondary" disabled={busy} onClick={() => void showEncryptionKey()}>Back up encryption key</button>
+                  </div>
+                )}
+              </li>
+            )}
             <li>
               <strong>Cloudflare</strong>
               <small>

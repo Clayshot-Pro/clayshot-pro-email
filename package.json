@@ -1,7 +1,7 @@
 {
   "name": "ltm-email-service",
   "private": true,
-  "version": "3.19.0",
+  "version": "3.20.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/config-render.mjs && vite dev",
@@ -9,7 +9,7 @@
     "build": "node scripts/config-render.mjs && npm run typecheck && vite build",
     "build:cloudflare": "npm run build",
     "preview": "npm run build && vite preview",
-    "deploy": "node scripts/assert-cloudflare-production.mjs && node scripts/verify-production-d1.mjs && node scripts/migrate-remote.mjs && wrangler deploy",
+    "deploy": "node scripts/assert-cloudflare-production.mjs && node scripts/verify-production-d1.mjs && node scripts/migrate-remote.mjs && wrangler deploy && node scripts/ensure-worker-secrets.mjs",
     "deploy:self": "node scripts/deploy-self.mjs",
     "setup": "node scripts/setup.mjs",
     "config:render": "node scripts/config-render.mjs",

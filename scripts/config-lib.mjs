@@ -69,6 +69,24 @@ const describe = call => call.status === 0 ? "Cloudflare could not be reached"
   : `HTTP ${call.status}${call.errors[0]?.message ? `: ${call.errors[0].message}` : ""}`;
 
 /**
+ * The app encrypts stored keys (and its push notification keys) with the
+ * PROVIDER_CREDENTIAL_KEY Worker secret. A deploy creates it when the Worker
+ * has none, so a new instance works without a manual step. An existing one is
+ * never replaced: data encrypted with it would become unreadable. Returns
+ * "created", "present", or throws with the reason.
+ */
+export async function ensureCredentialKeySecret(values) {
+  const path = `/workers/scripts/${encodeURIComponent(values.WORKER_NAME)}/secrets`;
+  const list = await cloudflareCall(path, values);
+  if (!list.success) throw new Error(`Could not list the Worker's secrets (${describe(list)}). The API token needs Workers Scripts: Edit.`);
+  if ((list.result ?? []).some(secret => secret?.name === "PROVIDER_CREDENTIAL_KEY")) return "present";
+  const key = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+  const created = await cloudflareCall(path, values, { method: "PUT", body: { name: "PROVIDER_CREDENTIAL_KEY", text: key, type: "secret_text" } });
+  if (!created.success) throw new Error(`Could not create the PROVIDER_CREDENTIAL_KEY secret (${describe(created)}).`);
+  return "created";
+}
+
+/**
  * The Worker's database, as deployed: "missing" (no such Worker), "unbound"
  * (the Worker exists without a DB binding, for example a placeholder made in
  * the dashboard or an earlier failed setup), "bound" with its database ID, or

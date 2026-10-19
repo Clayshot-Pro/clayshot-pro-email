@@ -37,7 +37,7 @@ import { appOrigin } from "./config";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance } from "./bootstrap";
 import { addBlockedSender, listBlockedSenders, removeBlockedSender } from "./blockedSenders";
-import { adminKeysResponse, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
+import { adminKeysResponse, encryptionKeyBackup, deleteStoredKey, saveStoredKey, withStoredKeys } from "./storedKeys";
 import { setupInstance } from "./setup";
 import { versionResponse } from "./version";
 import { deleteCloudflareToken, saveCloudflareToken } from "./cloudflare/routes";
@@ -215,6 +215,7 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/admin/instance/logo" && request.method === "PUT") return uploadLogo(request, env);
   if (url.pathname === "/api/admin/instance/logo" && request.method === "DELETE") return deleteLogo(env);
   if (url.pathname === "/api/admin/keys" && request.method === "GET") return adminKeysResponse(env);
+  if (url.pathname === "/api/admin/encryption-key/backup" && request.method === "POST") return encryptionKeyBackup(env);
   const keyRoute = url.pathname.match(/^\/api\/admin\/keys\/([A-Z_]+)$/);
   if (keyRoute && request.method === "PUT") return saveStoredKey(request, env, keyRoute[1]);
   if (keyRoute && request.method === "DELETE") return deleteStoredKey(env, keyRoute[1]);

@@ -19,7 +19,7 @@ You need a Cloudflare account with your mail domain on Cloudflare DNS, and a dev
 1. **Fork** this repository on GitHub (keep the name and the `main` branch), then open the fork's **Actions** tab and enable workflows.
 2. In Cloudflare, create an API token from the *Edit Cloudflare Workers* template and add **D1: Edit**. Copy your **Account ID** (Workers & Pages → Account details).
 3. In the fork: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`. Forks do not copy secrets, so this is always needed.
-4. **Actions → Deploy production → Run workflow.** The first run creates the D1 database and R2 bucket; the run summary shows the app's address. After that, every push to `main` deploys.
+4. **Actions → Deploy production → Run workflow.** The first run creates the D1 database, the R2 bucket and the encryption key (`PROVIDER_CREDENTIAL_KEY`); the run summary shows the app's address. After that, every push to `main` deploys.
 5. Optional: add your own address (Worker → **Settings → Domains & Routes → Custom domain**). Do this before setup: passkeys are tied to the address.
 
 Keep your fork unmodified: every setting lives in the app, and an unmodified fork updates cleanly. To use other names, add the repository variables `WORKER_NAME`, `D1_DATABASE_NAME` or `R2_BUCKET_NAME` instead of editing `wrangler.jsonc`.
@@ -123,6 +123,7 @@ The admin panel shows when a new version is out. To update, open your fork on Gi
 | Deploy says `Missing secrets` or `Missing required configuration` | Add `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` as repository secrets in the fork (or in `.env`), then run **Deploy production** again. |
 | Deploy says it could not create or check the R2 bucket | Open **R2** in the Cloudflare dashboard once to enable it, and check the token has **Workers R2 Storage: Edit**. |
 | Deploy says `Could not resolve the D1 database` | The Worker exists but its database was not found: check the token has **D1: Edit**, or set the variable `D1_DATABASE_ID`. |
+| Notifications say "setup needed", or Admin → Keys asks for `PROVIDER_CREDENTIAL_KEY` | Run **Actions → Deploy production** once (it creates the key), or connect Cloudflare in **Admin → Keys**. Push keys are then generated automatically. Back the key up with **Admin → Keys → Back up encryption key**. |
 | A phone gets no notifications | iPhone/iPad: open the site in Safari, **Share → Add to Home Screen**, open it from the Home Screen and tap the bell there (iOS allows web push only for installed apps). Any phone: allow notifications for the app in the phone's settings, open the app once so it re-registers, and turn the bell off and on if needed. |
 | Each push deploys twice, or Workers Builds reports a deleted build token | Disconnect Git under the Worker's **Settings → Build**; GitHub Actions deploys. |
 

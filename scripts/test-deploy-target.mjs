@@ -121,6 +121,51 @@ assert.doesNotMatch(workflow, /DEPLOY_WITH_ACTIONS|github\.repository ==/, "no o
   assert.match(workflow, /GITHUB_STEP_SUMMARY/, "the run summary names the app address");
 }
 
+// The deploy creates the encryption key secret only when the Worker has none.
+{
+  const { ensureCredentialKeySecret } = await import("./config-lib.mjs");
+  const values = { CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef", CLOUDFLARE_API_TOKEN: "token-123456789", WORKER_NAME: "fresh-mail" };
+  const realFetch = globalThis.fetch;
+  const fake = (secrets, { listStatus = 200 } = {}) => {
+    const calls = [];
+    globalThis.fetch = async (url, init = {}) => {
+      calls.push({ method: init.method ?? "GET", path: new URL(url).pathname, body: init.body ? JSON.parse(init.body) : null });
+      if ((init.method ?? "GET") === "GET") {
+        return new Response(JSON.stringify(listStatus === 200 ? { success: true, result: secrets.map(name => ({ name, type: "secret_text" })) }
+          : { success: false, errors: [{ code: 10000, message: "Authentication error" }] }), { status: listStatus });
+      }
+      return new Response(JSON.stringify({ success: true, result: {} }), { status: 200 });
+    };
+    return calls;
+  };
+  try {
+    const kept = fake(["PROVIDER_CREDENTIAL_KEY", "OTHER"]);
+    assert.equal(await ensureCredentialKeySecret(values), "present");
+    assert.ok(!kept.some(call => call.method === "PUT"), "an existing key is never replaced");
+    const created = fake(["OTHER"]);
+    assert.equal(await ensureCredentialKeySecret(values), "created");
+    const put = created.find(call => call.method === "PUT");
+    assert.equal(put.path, `/client/v4/accounts/${values.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/fresh-mail/secrets`);
+    assert.equal(put.body.name, "PROVIDER_CREDENTIAL_KEY");
+    assert.equal(put.body.type, "secret_text");
+    assert.match(put.body.text, /^[A-Za-z0-9_-]{43}$/, "a random 32-byte key");
+    fake([], { listStatus: 403 });
+    await assert.rejects(ensureCredentialKeySecret(values), /Workers Scripts: Edit/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  const deploy = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts.deploy;
+  assert.match(deploy, /wrangler deploy && node scripts\/ensure-worker-secrets\.mjs$/, "the key is ensured after every production deploy");
+  // A deploy that already succeeded is never failed by this step.
+  const ensure = env => spawnSync(process.execPath, ["scripts/ensure-worker-secrets.mjs"], { env: { PATH: process.env.PATH, ...env }, encoding: "utf8" });
+  const local = ensure({});
+  assert.equal(local.status, 0);
+  assert.match(local.stdout, /Not a production deploy/);
+  const keyless = ensure({ GITHUB_ACTIONS: "true", GITHUB_REF: "refs/heads/main" });
+  assert.equal(keyless.status, 0);
+  assert.match(keyless.stdout, /::warning title=Encryption key::/);
+}
+
 // Repository variables override the committed names in both the build and the deploy.
 for (const step of ["Type-check and build", "Apply D1 migrations and deploy"]) {
   const body = workflow.slice(workflow.indexOf(`- name: ${step}`)).split(/\n\s+- name:/)[0];
