@@ -21,123 +21,113 @@ An **authenticated web application**, not a traditional mail server: there are n
 | Gmail API (optional) | Connected Gmail accounts |
 | Web Push / VAPID (optional) | Browser/PWA notifications |
 
-**There is no instance configuration in the Worker.** The app's address comes from the URL it is served on. The admin's mailbox (`admin@<mail domain>`), mail domains, branding, themes, forwarding, limits and integration keys are stored in D1 and managed from the app. Outside the app you set only two Worker **secrets** (`PROVIDER_CREDENTIAL_KEY`, plus `AUTH_SETUP_TOKEN` until setup is done) and two Cloudflare **deploy keys**. Nothing secret is committed.
+**There is no instance configuration in the Worker.** The app's address comes from the URL it is served on. The admin's mailbox (`admin@<mail domain>`), mail domains, branding, themes, forwarding, limits and integration keys are stored in D1 and managed from the app. First-run setup takes one Cloudflare API token and does the rest: it creates the encryption key (`PROVIDER_CREDENTIAL_KEY`, the only Worker secret), stores the token encrypted, and sets up mail routing and sending for your domain. Nothing secret is committed.
 
 ## Before you start
 
-- A Cloudflare account with **Workers, D1, R2, Email Routing and Email Sending**. Check each product's availability, quotas and billing; a free deployment is not guaranteed.
-- A mail domain on **Cloudflare DNS** (for example `example.com`), and a hostname for the app (for example `mail.example.com`).
-- Node.js **22 or later** (CI uses 24) and npm, if you deploy or develop from your computer.
-- A passkey-capable device and browser. WebAuthn requires HTTPS on real domains.
-- Optionally: a Google Cloud OAuth client (Gmail) and a Resend account. Push notification keys are created for you.
+- A Cloudflare account with your mail domain on **Cloudflare DNS** (for example `example.com`). Workers, D1, R2 and Email Routing work on the free plan; **sending** through Cloudflare needs the Workers Paid plan (or use Resend). Check each product's terms and quotas.
+- A device with a passkey (phone, laptop or security key). Passkeys are tied to the address you set up on, so decide first whether to use the `workers.dev` address or your own, for example `mail.example.com`.
+- A GitHub account for the one-click deploy, or Node.js 22+ to deploy from your computer.
 
 Use fresh D1/R2 resources for a new installation, and back up both D1 **and** R2 before changing an existing one.
 
-## 1. Get the code
+## 1. Deploy
 
-Keep your copy **private**: publishing a public fork with changes is redistribution under the licence. Either import this repository into a private GitHub repository of your own (needed for automatic deploys), or clone it:
+Pick one way and use only that one. Every way deploys **only from `main`**.
+
+### Option A — Deploy to Cloudflare (one click)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LiamTheMo/LTM-Email-Service)
+
+1. Click the button and sign in to Cloudflare and GitHub. Keep the suggested names or change them. Cloudflare copies this repository to your GitHub account, creates the D1 database and R2 bucket, then builds and deploys. It asks for no keys.
+2. **Make your copy private right away:** on GitHub, open the new repository → **Settings → General → Danger Zone → Change visibility → Private**. The licence does not allow a public copy.
+3. Optional: to use your own address, open the Worker → **Settings → Domains & Routes → Add → Custom domain** (for example `mail.example.com`) before first-run setup.
+
+Every push to `main` of your copy redeploys it, and the app applies database migrations itself on its first request.
+
+### Option B — GitHub Actions
+
+`.github/workflows/deploy.yml` builds, applies database migrations and deploys on every push to `main` of your own (private) repository. Use this if you would rather not use Workers Builds.
+
+1. Import this repository into a private repository of your own.
+2. In Cloudflare, create a **D1 database** named `ltm-email-service` and an **R2 bucket** named `ltm-email-service-mail` (or change the names in `wrangler.jsonc`).
+3. Create a deploy token (**My Profile → API Tokens → Create Token → Edit Cloudflare Workers** template, plus **D1: Edit**). In GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+4. Push to `main`, or run **Actions → Deploy production → Run workflow**.
+5. Optional: add a custom domain as in Option A, step 3.
+
+### Option C — from your computer
 
 ```bash
 git clone https://github.com/LiamTheMo/LTM-Email-Service.git my-mail
 cd my-mail
 npm ci
+cp config/env.example .env
 ```
 
-## 2. Know where each setting goes
-
-| Setting | Where it goes |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` — deploy token with **Workers Scripts: Edit, D1: Edit, Workers R2 Storage: Edit, Account Settings: Read** | Wherever your deploys run (step 3): GitHub **repository secret**, Workers Builds **build variable** (secret), or `.env` |
-| `CLOUDFLARE_ACCOUNT_ID` | Next to the token |
-| `PROVIDER_CREDENTIAL_KEY` — encrypts the keys and Gmail tokens stored in D1 | **Worker → Settings → Variables & Secrets**, type **Secret** (`npm run setup` generates and uploads it for command-line installs) |
-| `AUTH_SETUP_TOKEN` — one-time password for first-run setup | **Worker → Settings → Variables & Secrets**, type **Secret**; delete it after setup |
-| Google OAuth client ID and secret (Gmail) | **Admin → Keys** in the app |
-| Resend API key and webhook secret | **Admin → Keys** |
-| Cloudflare Email Sending API token — optional, sending works without it | **Admin → Keys** |
-| Push notification (VAPID) keys | Nothing to do: created automatically on first use and stored in D1 |
-| `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME`, `D1_DATABASE_ID` — optional, sensible defaults | Next to the deploy token, only if you change the defaults |
-| Mail domain, mailboxes, branding, themes, forwarding, limits | **The app itself** (first-run setup and the admin panel) |
-
-Create the two Worker secrets with a strong random value each:
+Fill in `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (gitignored), then:
 
 ```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
-
-**Keep a copy of `PROVIDER_CREDENTIAL_KEY` outside Cloudflare** (for example in a password manager). Changing or losing it makes everything in Admin → Keys and every connected Gmail account unreadable; your mail itself is not affected.
-
-Deploy keys are never visible to the running app, and Worker secrets never belong in GitHub. Add Worker secrets as type **Secret**: a plain "Text" variable added in the dashboard is removed on the next deploy, while secrets persist across deploys.
-
-**Admin → Keys** stores keys in D1, encrypted with `PROVIDER_CREDENTIAL_KEY`. Saved values are never shown again, and saving or removing one needs a fresh passkey check. A Worker secret with the same name (for example `RESEND_API_KEY`) also still works and takes precedence; the app copies it into D1, so you can delete the Worker secret later and keep the value.
-
-## 3. Deploy
-
-Pick one way to deploy and use only that one. Every way deploys **only from `main`**: `npm run deploy` refuses to run for any other branch or for pull requests.
-
-### Option A — GitHub Actions (recommended)
-
-`.github/workflows/deploy.yml` builds, applies database migrations and deploys on every push to `main`.
-
-1. In the Cloudflare dashboard, create a **D1 database** named `ltm-email-service` and an **R2 bucket** named `ltm-email-service-mail` (other names work if you add them as repository secrets too).
-2. Create the Worker: **Workers & Pages → Create → Worker**, named `ltm-email-service` (or set `WORKER_NAME`). If it is connected to Git under **Settings → Build**, disconnect it so it does not deploy twice.
-3. In your GitHub repository: **Settings → Secrets and variables → Actions → New repository secret**. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-4. Push or merge to `main`, or run **Actions → Deploy production → Run workflow** on `main`. The run shows the migrations it applied and the deployed version.
-5. In the Worker's **Settings → Variables & Secrets**, add `PROVIDER_CREDENTIAL_KEY` and `AUTH_SETUP_TOKEN` as type **Secret**.
-6. Under **Settings → Domains & Routes**, add your custom domain (for example `mail.example.com`).
-
-Every later merge to `main` deploys automatically.
-
-### Option B — Cloudflare Workers Builds
-
-1. Create the D1 database and R2 bucket as in Option A step 1.
-2. **Workers & Pages → Create → Import a repository**, pick your private repository, and name the Worker `ltm-email-service` (or set `WORKER_NAME`).
-3. In the Worker's **Settings → Build**:
-   - Production branch: `main`. Turn off builds for other branches unless you give them their own database and bucket.
-   - Build command: `npm run build:cloudflare`
-   - Deploy command: `npm run deploy`
-   - **Build variables:** `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (as a secret).
-4. Push or merge to `main`.
-5. Continue with Option A steps 5 and 6.
-
-If every build fails before it starts with "The build token selected for this build has been deleted or rolled", create a new token from the **API token** dropdown under **Settings → Build** and save. If that does not help, switch to Option A.
-
-### Option C — from your computer (`.env`)
-
-```bash
-cp .env.example .env
-```
-
-Fill in `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and `AUTH_SETUP_TOKEN` in `.env` (it is gitignored), then:
-
-```bash
-npm run setup
-```
-
-Creates the D1 database and R2 bucket if missing, records the D1 ID, generates `PROVIDER_CREDENTIAL_KEY` if `.env` has none, uploads the secrets as Worker secrets and applies migrations. Safe to re-run. Copy the generated `PROVIDER_CREDENTIAL_KEY` from `.env` to your password manager.
-
-```bash
+npm run setup      # creates the D1 database and R2 bucket, applies migrations
 npm run deploy:self
 ```
 
-Asks for confirmation, then type-checks, builds, migrates and deploys. Then add a **custom domain** under the Worker's **Settings → Domains & Routes**.
+Both are safe to re-run, and leave the committed `wrangler.jsonc` unchanged.
 
-`npm run secrets:push` uploads secrets after you change them in `.env`. It only uploads: to remove a secret, delete it in the dashboard or run `npx wrangler secret delete NAME`.
+## 2. First-run setup
 
-## 4. First-run setup
+Open the app on its final address and fill in one page:
 
-Open the app on its **final HTTPS hostname** (passkeys are bound to it).
+1. **Mail domain**, for example `example.com`. This creates **admin@example.com**, your own mailbox and the administrator sign-in.
+2. **Administrator password** (4–32 characters).
+3. **Cloudflare API token.** **Create a Cloudflare token** opens Cloudflare's form with most permissions already selected; add **Email Sending: Edit** and **Email Routing Rules: Edit**, create the token and paste it. All permissions: Account · Workers Scripts: Edit, Account · Email Sending: Edit, Zone · Zone: Read, Zone · Zone Settings: Edit, Zone · DNS: Edit, Zone · Email Routing Rules: Edit.
 
-1. Enter your **mail domain** (for example `example.com`) and your `AUTH_SETUP_TOKEN`, then register the owner passkey. This creates the **admin@** mailbox on that domain (`admin@example.com`): the administrator's own inbox and sign-in. It cannot be deleted, it receives postmaster@ and abuse@ by default, and only the administrator sign-in opens it.
-2. In **Email administration**, set an administrator password (4–32 characters).
-3. Sign in again as `admin@<mail domain>` (for example `admin@example.com`; `admin@<app hostname>` also works) with the password and your passkey. You land in the mail app with every mailbox in the account switcher. **Admin panel** (sidebar, or Settings on a phone) opens the administration pages, and **Back to mail** returns. Sensitive admin actions ask for a fresh passkey check.
-4. Delete the `AUTH_SETUP_TOKEN` secret: **Worker → Settings → Variables & Secrets**, or `npx wrangler secret delete AUTH_SETUP_TOKEN`. (Also remove it from `.env` if you use one.)
-5. Open **Admin → Keys**. *Push notification keys* should read "Created and stored automatically". If the page asks for `PROVIDER_CREDENTIAL_KEY`, add that Worker secret first. Add Gmail or Resend keys here when you need them.
+**Continue** checks the token belongs to the Cloudflare account that runs this app, then:
+
+- creates `PROVIDER_CREDENTIAL_KEY` (the key that encrypts stored keys and Gmail connections) as a Worker secret and **shows it once**. Save it in your password manager.
+- turns on Email Routing for your domain, sends its catch-all to this app, sets the domain up for Email Sending, and adds a monitoring DMARC record. Each step is listed with its result. If the domain still receives mail elsewhere, nothing is changed; finish it later in **Admin → Domains**.
+
+Then tap **Create administrator passkey**. You are signed in to the mail app. From then on, sign in as `admin@<mail domain>` with your password and passkey; **Admin panel** in the sidebar opens the administration pages. The token stays encrypted in **Admin → Keys**, where you can replace or remove it.
+
+Without a token: set an `AUTH_SETUP_TOKEN` Worker secret, use **Use the setup secret instead** on the setup page, and follow the manual steps in sections 4 and 5.
+
+### Deploy with an AI coding agent
+
+Paste this into an agent that has a terminal. Give it your Cloudflare account ID and a deploy token through its secret input, never in chat:
+
+```text
+Deploy LTM Email Service (https://github.com/LiamTheMo/LTM-Email-Service) to my
+Cloudflare account from a private copy of the repository. Ask me for my
+Cloudflare account ID and a deploy API token (Workers Scripts Edit, D1 Edit,
+Workers R2 Storage Edit, Account Settings Read) through a secret input. Never
+print, commit or pass either value as a command-line argument.
+
+Read README.md and wrangler.jsonc first. Run npm ci, copy config/env.example to
+.env, put the two values in .env, then run npm run setup and
+npm run deploy:self -- --yes. Tell me the deployed URL. I will open it and finish
+first-run setup with my own Cloudflare token.
+```
+
+## Where each setting goes
+
+| Setting | Where it goes |
+| --- | --- |
+| Mail domains, mailboxes, branding, themes, forwarding, limits | **The app** (first-run setup and the admin panel) |
+| Cloudflare API token (setup and domain wiring) | Pasted at first-run setup or in **Admin → Keys**; stored encrypted |
+| `PROVIDER_CREDENTIAL_KEY` | Created by first-run setup as a Worker secret (or `npm run setup`). **Keep a copy outside Cloudflare** |
+| Google OAuth client, Resend keys, Cloudflare Email Sending API token | **Admin → Keys** |
+| Push notification (VAPID) keys | Nothing to do: created automatically and stored in D1 |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` deploy keys | Option B: GitHub repository secrets. Option C: `.env`. Option A: not needed |
+| Worker, database and bucket names | `wrangler.jsonc` (or `WORKER_NAME`, `D1_DATABASE_NAME`, `R2_BUCKET_NAME` next to the deploy keys) |
+
+Changing or losing `PROVIDER_CREDENTIAL_KEY` makes everything in Admin → Keys and every connected Gmail account unreadable; your mail itself is not affected. Setup never replaces an existing key. A Worker secret with the same name as an Admin → Keys entry (for example `RESEND_API_KEY`) still works and takes precedence; the app copies it into D1.
 
 ## Upgrading an existing instance
 
 1. Back up D1 **and** R2, and test a restore.
-2. Merge the new version into `main` (or run `npm run deploy:self`). Migrations are additive and apply during the deploy.
+2. Merge the new version into `main` (or run `npm run deploy:self`). Migrations are additive; deploys apply them, and the app applies any that are still pending on its first request.
 3. Check the deploy log, then sign in and open the admin panel.
+
+From v3.12, existing instances can connect a Cloudflare token in **Admin → Keys** to set up new domains automatically. `AUTH_SETUP_TOKEN` is no longer needed once setup is done, and `.env.example` moved to `config/env.example`.
 
 From v2 to v3:
 
@@ -147,18 +137,23 @@ From v2 to v3:
 - From v3.06, existing `GOOGLE_*`, `RESEND_*`, `CF_EMAIL_SENDING_TOKEN` and `VAPID_*` Worker secrets are copied into D1 (push subscriptions keep working). Once **Admin → Keys** shows them, you may delete those Worker secrets — but keep them while you might roll back to v2, which reads them. Never delete `PROVIDER_CREDENTIAL_KEY`.
 - From v3.08 there is no "primary mailbox". An `admin@<mail domain>` mailbox is created on the first request after the deploy and becomes the administrator's starting inbox. The former primary mailbox keeps its address and mail and becomes an ordinary mailbox (it can now be disabled or deleted). Postmaster/abuse mail without a chosen mailbox, forwarding (Mail settings), the profile photo and the push contact now belong to admin@.
 
-## 5. Route incoming mail
+## 3. More mail domains
+
+**Admin → Domains → Add domain.** With a connected Cloudflare token, adding a domain also sets it up (Email Routing, delivery to this app, Email Sending, DMARC) and activates it once Cloudflare confirms mail reaches the app. One passkey approval covers it. If the domain still has MX records of another mail service, the app lists them and replaces them only after you confirm. **Set up in Cloudflare** / **Re-check Cloudflare setup** runs the same steps again; it is safe to repeat.
+
+The domain must be a zone (or inside a zone) on Cloudflare DNS in the same account. Create mailboxes in **Admin → Mailboxes**, then test mail from an external provider, including a plus alias and an unregistered address.
+
+## 4. Route incoming mail by hand (without a token)
 
 For **each** mail domain:
 
 1. In Cloudflare, enable **Email Routing** for the zone and review the MX/TXT records it adds.
 2. Set the **catch-all** rule to *Send to a Worker* → this Worker. Unknown or disabled addresses are rejected by the app; catch-all does not create inboxes.
 3. In **Admin → Domains**, add the domain (the main one from setup already exists), run **Check DNS**, then **Activate**. Activation requires MX records pointing to Cloudflare.
-4. Create mailboxes in **Admin → Mailboxes**, then test mail from an external provider, including a plus alias and an unregistered address.
 
-## 6. Outbound sending
+## 5. Outbound sending
 
-- **Cloudflare (default):** onboard each mail domain for **Email Sending** in the same Cloudflare account. That's all: the Worker sends through its built-in `EMAIL` binding, which needs no token, and every active mailbox on an active domain can send. (Optionally add an Email Sending API token in **Admin → Keys** to use the REST API instead.) Check Cloudflare's terms cover your use.
+- **Cloudflare (default):** each mail domain is onboarded for **Email Sending** in the same Cloudflare account; with a token this happens automatically, otherwise onboard it in the dashboard. The Worker sends through its built-in `EMAIL` binding, which needs no token, and every active mailbox on an active domain can send. (Optionally add an Email Sending API token in **Admin → Keys** to use the REST API instead.) Check Cloudflare's terms cover your use.
 - **Resend (optional, per domain):** verify the domain in Resend, add `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` in **Admin → Keys**, add the webhook URL shown in **Admin → Domains**, and switch the domain to Resend. Mail for that domain then passes through Resend. Hard bounces and complaints are blocked automatically (**Admin → Deliverability**).
 - A domain can also be **receive-only**.
 
@@ -168,7 +163,7 @@ Outbound sending always applies server-side mailbox authorization, rate and dail
 
 The **Unsubscribe** control appears on any open message. It uses `List-Unsubscribe` headers first, then likely unsubscribe links in the body, and opens an explanation dialog; links are only followed when you click them and must be HTTPS or mailto. It cannot be guaranteed for every sender.
 
-## 7. Make it yours
+## 6. Make it yours
 
 All from the admin panel, stored in D1:
 
@@ -205,23 +200,27 @@ Each custom mailbox can **block senders**: **Block** in the message reader (on p
 - [ ] Sending, replying and forwarding with attachments work from each domain's transport.
 - [ ] **Admin → Keys** shows the push keys and any Gmail/Resend keys as stored; Gmail and push work if enabled; the app installs as a PWA.
 - [ ] D1 **and** R2 backups exist and a restore has been tested.
-- [ ] `AUTH_SETUP_TOKEN` has been removed, and `PROVIDER_CREDENTIAL_KEY` is saved somewhere outside Cloudflare.
+- [ ] `PROVIDER_CREDENTIAL_KEY` is saved somewhere outside Cloudflare (setup showed it once), and the GitHub copy of the code is private.
 
 ## Troubleshooting
 
 | Symptom | Likely cause / action |
 | --- | --- |
-| First-run setup is not offered | `AUTH_SETUP_TOKEN` is not set, or the instance is already set up (it has a mail domain or an owner passkey). |
+| First-run setup is not offered | The instance already has an owner passkey. |
+| Setup says the token "cannot see the Worker that runs this app" | Create the token in the Cloudflare account that runs this app, with **Workers Scripts: Edit**; paste the token value, not its ID. Setup must run on the deployed app, not `npm run dev`. |
+| A domain step fails with "The token needs …" | Edit the token in Cloudflare and add the named permission (for that zone), then **Re-check Cloudflare setup** in Admin → Domains. |
+| "Email Sending" step fails | Sending through Cloudflare needs the Workers Paid plan, and no MX records of another mail service on the domain. Or switch the domain to Resend. |
 | `Invalid credentials` as admin | Use `admin@<mail domain>` (or `admin@<app hostname>`), and check the admin password was set. |
 | Passkey fails after changing hostnames | Passkeys are bound to the hostname; use the original host. |
 | Mail never arrives | Check Email Routing MX records, the catch-all → Worker rule, that the domain is **active** in Admin → Domains, and that the mailbox exists and is active. |
-| "Cloudflare Email Sending is not available" | The `EMAIL` send binding is missing from the deployed Worker; redeploy with the rendered `wrangler.jsonc`. |
+| "Cloudflare Email Sending is not available" | The `EMAIL` send binding is missing from the deployed Worker; redeploy with the committed `wrangler.jsonc`. |
 | Sending fails with an entitlement or domain error | Onboard the domain for Email Sending in the same account, or switch the domain to Resend. |
 | `redirect_uri_mismatch` from Google | Add the exact callback URI to the OAuth client. |
 | Build cannot resolve D1 | Run `npm run setup`, set `D1_DATABASE_ID`, or check the deploy token's D1 and Workers Scripts permissions. |
-| Deploy fails with `Missing required configuration: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN` | Add both as GitHub repository secrets (Option A), build variables (Option B) or in `.env` (Option C). |
-| Workers Builds fails before starting: "build token … deleted or rolled" | Create a new token from the **API token** dropdown under **Settings → Build**; if it keeps failing, deploy with GitHub Actions (Option A). |
-| Admin → Keys asks for `PROVIDER_CREDENTIAL_KEY`, or push / Gmail are unavailable | Add `PROVIDER_CREDENTIAL_KEY` as a Worker secret (step 2); push keys are then created on the next page load. |
+| Deploy fails with `Missing required configuration: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN` | The D1 database ID is not in `wrangler.jsonc`, so the deploy looks it up: add both as GitHub repository secrets (Option B) or in `.env` (Option C). |
+| Workers Builds fails before starting: "build token … deleted or rolled" | Create a new token from the **API token** dropdown under **Settings → Build**; if it keeps failing, deploy with GitHub Actions (Option B). |
+| Build log: "Could not apply D1 migrations from the build" | Harmless in Workers Builds: the app applies pending migrations on its first request. |
+| Admin → Keys asks for `PROVIDER_CREDENTIAL_KEY`, or push / Gmail are unavailable | Connect a Cloudflare token in Admin → Keys (it creates the key), or add the Worker secret yourself; push keys are then created on the next page load. |
 | A key in Admin → Keys cannot be edited | It is also set as a Worker secret, which wins. Delete that Worker secret; the value stays in D1. |
 | Stored keys or Gmail stopped working after a secret change | `PROVIDER_CREDENTIAL_KEY` was changed. Restore the original value, or re-enter the keys and reconnect Gmail. |
 
@@ -235,7 +234,7 @@ npm run dev
 npm test
 ```
 
-`npm run dev` renders a local `wrangler.jsonc` and starts Vite with the Worker; apply local migrations first with `npm run db:migrate:local`. `npm test` runs every regression script, including the CSS token guard and the default-theme equivalence check. GitHub Actions validate and scan version branches (`vX.XX`); production deploys only from `main`. Deliberate visual changes to the v2.08 layout go in `src/client/layout-fixes.css`, which the equivalence check leaves out.
+`npm run dev` starts Vite with the Worker using the committed `wrangler.jsonc`; the app applies migrations to the local database itself (or run `npm run db:migrate:local`). First-run setup with a Cloudflare token needs the deployed app. `npm test` runs every regression script, including the CSS token guard and the default-theme equivalence check. GitHub Actions validate and scan version branches (`vX.XX`); production deploys only from `main`. Deliberate visual changes to the v2.08 layout go in `src/client/layout-fixes.css`, which the equivalence check leaves out.
 
 ## Repository layout
 
@@ -246,11 +245,14 @@ src/worker/config.ts          Request-derived origin, passkey RP ID and admin si
 src/worker/domains.ts         Domains, first-run setup, address rules
 src/worker/branding.ts        Branding, lock, preferences, app icon
 src/worker/storedKeys.ts      Admin → Keys: integration keys encrypted in D1, VAPID generation
+src/worker/cloudflare/        Cloudflare token: ownership check, encryption key, domain wiring
+src/worker/migrationRunner.ts Applies pending D1 migrations through the Worker's binding
 src/worker/transports/        Cloudflare Email Sending API and Resend transports
 src/worker/webhooks/          Signed Resend delivery webhooks
 src/worker/email/             Inbound storage and outbound sending
 migrations/                   Ordered D1 schema migrations
-config/schema.mjs             Secret and deploy keys (.env.example is generated from it)
+wrangler.jsonc                Worker config; the Deploy button's source (no account IDs)
+config/schema.mjs             Secret and deploy keys (config/env.example is generated from it)
 scripts/                      Setup, render, deploy guards and regression tests
 .github/workflows/            Validation and security scans for version branches; production deploy from main
 docs/v3/                      v3 design, status and self-hosting notes

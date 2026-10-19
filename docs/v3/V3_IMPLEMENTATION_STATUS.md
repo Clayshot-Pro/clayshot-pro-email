@@ -18,6 +18,7 @@
 | `v3.09` | Per-mailbox blocked senders (migration 0021) |
 | `v3.10` | Per-mailbox profile photos; junk filter on for every mailbox with authentication and content signals (migration 0022) |
 | `v3.11` | Native HTML email reader: full reader width, app-themed rendering for ordinary mail, a light card only for designed mail |
+| `v3.12` | Easier setup: Deploy to Cloudflare button, in-app migrations, one-page setup with a Cloudflare token, automatic domain wiring (migration 0023) |
 
 ## Decisions applied in v3.05
 
@@ -96,6 +97,15 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - The email document is given the app's `color-scheme`; a mismatch makes browsers paint the frame on an opaque white canvas. Paper mail uses `color-scheme: light`.
 - Wider-than-reader mail (600px newsletters on phones) is scaled with `zoom` to fit; the frame height follows the content with a ResizeObserver; the frame stays hidden until it is adapted, so there is no flash of unadapted mail. A real theme change re-renders the open email.
 - Unchanged: sanitization in `emailHtml.ts`, the CSP (no remote images, scripts, forms or frames) and the iframe sandbox (no `allow-scripts`). `email-html.css` is excluded from `verify-css-equivalence` as a redesigned stylesheet; `test-email-reader` covers it.
+
+## v3.12: easier setup
+
+- **Deploy button:** `wrangler.jsonc` is committed (no account or database IDs) and is the Deploy to Cloudflare button's source; production deploys (`scripts/config-render.mjs`) fill in the D1 ID and vars, and command-line deploys restore the committed file. `.env.example` moved to `config/env.example` so the button asks for no keys. Worker vars: `LTM_WORKER_NAME`; new binding `CF_VERSION_METADATA`.
+- **Migrations in the app:** `migrationRunner.ts` applies pending files (bundled with `import.meta.glob`) through the DB binding on the first request per isolate, one atomic batch per file, using Wrangler's `d1_migrations` history. Deploys still run Wrangler first; in Workers Builds a failed Wrangler run only warns.
+- **Setup:** `POST /api/setup` takes the mail domain, administrator password and a Cloudflare token (or `AUTH_SETUP_TOKEN`). The token must see the exact Worker version serving the request (`/accounts/:id/workers/scripts/:name/versions/:version`), which proves it belongs to this app's account. Setup creates `PROVIDER_CREDENTIAL_KEY` as a Worker secret only when it is entirely absent (an invalid one is never replaced), stores the connection encrypted (`instance_keys` row `CLOUDFLARE`, migration 0023 rebuilds the table to allow it), wires the main domain, and returns a 30-minute grant (`setup_grants`, hashed) for passkey registration. The administrator finishes signed in.
+- **Domains:** `POST /api/admin/domains/:domain/connect` (and `POST /api/admin/domains` with `connect: true`) finds the zone, asks before replacing another provider's MX records, enables Email Routing, points the catch-all at this Worker, onboards Email Sending, adds `v=DMARC1; p=none` if no DMARC record exists, and activates the domain when the zone's MX and catch-all confirm routing. Every step is idempotent and reported.
+- **Admin → Keys:** connect, replace or remove the token (`PUT`/`DELETE /api/admin/cloudflare`, passkey step-up). The token is never returned.
+- **Requires manual validation:** the Deploy button end to end in a fresh Cloudflare account; the token form link (Cloudflare publishes no template keys for the email permissions, which are added by hand); Email Sending onboarding on a paid plan.
 
 ## Production rollout (LTM instance)
 
