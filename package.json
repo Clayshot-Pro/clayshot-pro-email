@@ -3,6 +3,9 @@
   "private": true,
   "version": "3.23.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "node scripts/config-render.mjs && vite dev",
     "typecheck": "tsc --noEmit",

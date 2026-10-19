@@ -4,15 +4,17 @@
 // the request URL; the primary mailbox, domains, branding and mail settings
 // live in D1 (first-run setup and the admin panel). .env only holds:
 //   "secret" Worker secrets, uploaded with `wrangler secret bulk`, never rendered
-//   "deploy" values used by local/CI scripts, never sent to the Worker as secrets
+//   "deploy" values used by local/CI scripts, never uploaded from .env as Worker secrets
 //            (CLOUDFLARE_ACCOUNT_ID is also rendered as the non-secret
-//             CF_EMAIL_SENDING_ACCOUNT_ID so the Email Sending API needs no extra key)
+//             CF_EMAIL_SENDING_ACCOUNT_ID so the Email Sending API needs no extra key,
+//             and the GitHub Actions deploy hands the token and account ID to the
+//             app as the CLOUDFLARE_DEPLOY_CONNECTION secret)
 import { readFileSync, existsSync } from "node:fs";
 import { wranglerDefaults } from "./wrangler-file.mjs";
 
 export const CONFIG = [
   { key: "PROVIDER_CREDENTIAL_KEY", kind: "secret", example: "", group: "Encryption",
-    help: "Encrypts the keys and Gmail tokens stored in the database. First-run setup with a Cloudflare token creates it; npm run setup generates it too. Back it up: changing it makes stored keys and connected Gmail accounts unreadable." },
+    help: "Encrypts the keys and Gmail tokens stored in the database. The GitHub Actions deploy creates it when missing; first-run setup with a Cloudflare token and npm run setup do too. Back it up (Admin -> Keys -> Back up encryption key): changing it makes stored keys and connected Gmail accounts unreadable." },
   { key: "AUTH_SETUP_TOKEN", kind: "secret", example: "", group: "First-run setup",
     help: "Optional. A one-time setup secret for installs that do not connect a Cloudflare token at setup. Setup stops accepting it once an administrator passkey exists." },
   { key: "CF_EMAIL_SENDING_TOKEN", kind: "secret", example: "", group: "Sending (optional; or set in Admin -> Keys)",
@@ -27,7 +29,7 @@ export const CONFIG = [
   { key: "CLOUDFLARE_ACCOUNT_ID", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
     help: "Cloudflare account ID. Used by scripts and for the Email Sending API." },
   { key: "CLOUDFLARE_API_TOKEN", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
-    help: "Deploy token with Workers Scripts edit, D1 edit, R2 edit and Account Settings read. Used by scripts only." },
+    help: "Deploy token with Workers Scripts edit, D1 edit, R2 edit and Account Settings read. Used by deploy scripts; the GitHub Actions deploy also gives it to the app (CLOUDFLARE_DEPLOY_CONNECTION) for domain setup." },
   { key: "WORKER_NAME", kind: "deploy", example: "", group: "Cloudflare deployment",
     help: "Optional. Defaults to \"name\" in wrangler.jsonc." },
   { key: "D1_DATABASE_NAME", kind: "deploy", example: "", group: "Cloudflare deployment",
@@ -83,7 +85,7 @@ export function renderEnvExample() {
   const lines = [
     "# For deploying from your computer only: cp config/env.example .env, then fill it in. .env is gitignored.",
     "# The Deploy to Cloudflare button and GitHub Actions need no .env (see README). Most installs need nothing",
-    "# here but the two deploy keys: first-run setup creates PROVIDER_CREDENTIAL_KEY, and other keys go in",
+    "# here but the two deploy keys: the deploy or npm run setup creates PROVIDER_CREDENTIAL_KEY, and other keys go in",
     "# Admin -> Keys in the app.",
     "# Generated from config/schema.mjs by `npm run config:example`. Do not edit by hand.",
     "#",
@@ -91,7 +93,7 @@ export function renderEnvExample() {
     "# configured here: choose them in first-run setup and the admin panel (stored in D1).",
     "#",
     "# secret -> uploaded as a Worker secret by `npm run secrets:push`",
-    "# deploy -> used by local scripts and automatic deploys only, never by the running app",
+    "# deploy -> used by deploy scripts; never uploaded from .env as Worker secrets",
   ];
   let group = "";
   for (const entry of CONFIG) {
