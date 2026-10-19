@@ -1,3 +1,4 @@
+import { sha256Hex } from "../bytes";
 import { junkVerdict, senderAuthenticated } from "./junk";
 import { mailboxForRecipient, ADMIN_MAILBOX_ID } from "../mailboxes";
 import PostalMime from "postal-mime";
@@ -143,12 +144,8 @@ export async function receiveEmail(message: ForwardableEmailMessage, env: Env, c
   // Delivery retries may reuse the same SMTP envelope/MIME, but two real
   // messages can share a sender-supplied RFC Message-ID. Dedup by MIME+recipient
   // over a short retention window, not by Message-ID.
-  const contentDigest = await crypto.subtle.digest("SHA-256", raw);
-  const contentHex = Array.from(new Uint8Array(contentDigest), b => b.toString(16).padStart(2, "0")).join("");
-  const envelopeDigest = await crypto.subtle.digest(
-    "SHA-256", encoder.encode(`${message.to.trim().toLowerCase()}:${contentHex}`),
-  );
-  const fingerprint = Array.from(new Uint8Array(envelopeDigest), b => b.toString(16).padStart(2, "0")).join("");
+  const contentHex = await sha256Hex(raw);
+  const fingerprint = await sha256Hex(`${message.to.trim().toLowerCase()}:${contentHex}`);
   // Everything that only reads or computes happens before the delivery is
   // claimed, so a slow or failing step can never leave a claim behind.
   const storedMessageId = null; // RFC IDs go to original_message_id (the legacy column is globally unique).

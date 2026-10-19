@@ -1,3 +1,4 @@
+import { randomBase64Url, sha256Hex, toBase64Url } from "./bytes";
 import { mailboxPasswordError } from "./mailboxPasswordPolicy";
 import { preparePassword, checkPassword } from "./passwordCrypto";
 import { isAuthenticated, logout as ownerLogout } from "./auth";
@@ -12,22 +13,12 @@ import { beginAdminLogin } from "./adminAuth";
 const DEVICE_COOKIE = "__Host-ltm_device";
 const OAUTH_COOKIE = "__Host-ltm_oauth";
 const DEVICE_LIFETIME = 60 * 60 * 24 * 30;
-const utf8 = new TextEncoder();
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 
 type DeviceSessionRow = { id: string; token_hash: string };
 export type DeviceGrant = { account_id: string; provider: "native" | "gmail" };
 
-function b64url(bytes: Uint8Array): string {
-  let text = "";
-  for (const byte of bytes) text += String.fromCharCode(byte);
-  return btoa(text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-function token(bytes = 32): string { return b64url(crypto.getRandomValues(new Uint8Array(bytes))); }
-export async function tokenHash(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", utf8.encode(value));
-  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
+export { sha256Hex as tokenHash } from "./bytes";
 function readCookie(request: Request, key: string): string | null {
   for (const pair of (request.headers.get("Cookie") ?? "").split(";")) {
     const index = pair.indexOf("=");
@@ -43,12 +34,12 @@ const clearDeviceCookie = () => cookie(DEVICE_COOKIE, "", 0);
 const oauthCookie = (value: string) => cookie(OAUTH_COOKIE, value, 600);
 export const clearOAuthCookie = () => cookie(OAUTH_COOKIE, "", 0);
 export function prepareOAuthNonce(): { nonce: string; setCookie: string } {
-  const nonce = token();
+  const nonce = randomBase64Url();
   return { nonce, setCookie: oauthCookie(nonce) };
 }
 export async function oauthNonceMatches(request: Request, hash: string | null): Promise<boolean> {
   const nonce = readCookie(request, OAUTH_COOKIE);
-  return Boolean(hash && nonce && /^[\w-]{30,100}$/.test(nonce) && await tokenHash(nonce) === hash);
+  return Boolean(hash && nonce && /^[\w-]{30,100}$/.test(nonce) && await sha256Hex(nonce) === hash);
 }
 
 export async function credentialForMailbox(_id: string, password: string): Promise<{
@@ -80,7 +71,7 @@ export async function setMailboxPassword(env: Env, id: string, password: string)
 export async function rotateMailboxPassword(env: Env, id: string): Promise<string> {
   // 24 random bytes -> 32 base64url chars (192 bits of entropy).
   const bytes = crypto.getRandomValues(new Uint8Array(24));
-  const password = b64url(bytes);
+  const password = toBase64Url(bytes);
   await setMailboxPassword(env,id,password);
   return password; // only displayed once to the verified owner.
 }
@@ -99,18 +90,18 @@ export async function currentDeviceSession(request: Request, env: Env): Promise<
   if (!t || !/^[\w-]{30,100}$/.test(t)) return null;
   return env.DB.prepare(`SELECT id,token_hash FROM device_sessions
     WHERE token_hash=?1 AND expires_at>datetime('now')`)
-    .bind(await tokenHash(t)).first<DeviceSessionRow>();
+    .bind(await sha256Hex(t)).first<DeviceSessionRow>();
 }
 async function establishDeviceGrant(request: Request, env: Env, accountId: string, provider: DeviceGrant["provider"]): Promise<string | null> {
   let session = await currentDeviceSession(request, env);
   let issued: string | null = null;
   if (!session) {
-    issued = token();
+    issued = randomBase64Url();
     const id = crypto.randomUUID();
     await env.DB.prepare(`INSERT INTO device_sessions (id,token_hash,expires_at,user_agent)
       VALUES (?1,?2,datetime('now','+30 days'),?3)`)
-      .bind(id, await tokenHash(issued), request.headers.get("User-Agent")?.slice(0, 300) ?? null).run();
-    session = { id, token_hash: await tokenHash(issued) };
+      .bind(id, await sha256Hex(issued), request.headers.get("User-Agent")?.slice(0, 300) ?? null).run();
+    session = { id, token_hash: await sha256Hex(issued) };
   }
   await env.DB.prepare(`INSERT OR IGNORE INTO device_session_accounts(session_id,account_id,provider)
     VALUES (?1,?2,?3)`).bind(session.id,accountId,provider).run();
@@ -142,7 +133,7 @@ async function renewDeviceSession(request: Request, env: Env): Promise<string | 
   const renewed = await env.DB.prepare(`UPDATE device_sessions
     SET expires_at=datetime('now','+30 days'), last_seen_at=CURRENT_TIMESTAMP
     WHERE token_hash=?1 AND expires_at>datetime('now') AND expires_at<datetime('now','+23 days')`)
-    .bind(await tokenHash(t)).run();
+    .bind(await sha256Hex(t)).run();
   return renewed.meta.changes ? deviceCookie(t) : null;
 }
 export async function deviceStatus(request: Request, env: Env): Promise<Response> {

@@ -1,3 +1,4 @@
+import { randomBase64Url, sha256Hex } from "./bytes";
 import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
@@ -20,14 +21,6 @@ function decodeTransports(value: string | null): AuthenticatorTransportFuture[] 
   } catch { return undefined; }
 }
 
-function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-async function hexSha256(value: string): Promise<string> {
-  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
-  return [...bytes].map(byte => byte.toString(16).padStart(2,"0")).join("");
-}
 
 export async function stepUpOptions(request: Request, env: Env): Promise<Response> {
   const sessionHash = await ownerSessionHash(request, env);
@@ -100,12 +93,12 @@ export async function stepUpVerify(request: Request, env: Env): Promise<Response
     await env.DB.prepare(
       "UPDATE auth_credentials SET counter=?1,last_used_at=datetime('now') WHERE id=?2 AND counter<=?1",
     ).bind(result.authenticationInfo.newCounter,stored.id).run();
-    const token = randomToken();
+    const token = randomBase64Url();
     const batch = /\/(purge|reconcile)$/.test(row.pathname);
     await env.DB.prepare(
       `INSERT INTO admin_stepup_approvals(token_hash,session_hash,method,pathname,body_hash,max_uses,expires_at)
        VALUES(?1,?2,?3,?4,?5,?6,datetime('now',?7))`,
-    ).bind(await hexSha256(token),sessionHash,row.method,row.pathname,row.body_hash,
+    ).bind(await sha256Hex(token),sessionHash,row.method,row.pathname,row.body_hash,
       batch ? 500 : 1,batch ? "+5 minutes" : "+2 minutes").run();
     await tryRecordAdminSecurityEvent(env,"admin.stepup.verify","success",sessionHash.slice(0,16),"operation",row.pathname);
     return Response.json({approval:token});
@@ -129,6 +122,6 @@ export async function consumeAdminApproval(request: Request, env: Env): Promise<
      WHERE token_hash=?1 AND session_hash=?2 AND method=?3 AND pathname=?4
        AND body_hash=?5 AND expires_at>datetime('now') AND uses<max_uses
      RETURNING uses`,
-  ).bind(await hexSha256(token),sessionHash,request.method,url.pathname,bodyHash).first();
+  ).bind(await sha256Hex(token),sessionHash,request.method,url.pathname,bodyHash).first();
   return Boolean(result);
 }

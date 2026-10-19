@@ -1,3 +1,4 @@
+import { toBase64Url } from "./bytes";
 import { aliasTarget, normalizeMailboxAddress } from "./mailboxRules";
 import { credentialForMailbox } from "./deviceAuth";
 import { instanceSettings } from "./branding";
@@ -79,9 +80,7 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM native_mailboxes").first<{ n: number }>();
   if ((count?.n ?? 0) >= (await instanceSettings(env)).mail.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
   const id = `native:${crypto.randomUUID()}`;
-  const random = crypto.getRandomValues(new Uint8Array(24));
-  const password = btoa(String.fromCharCode(...random))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const password = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const credential = await credentialForMailbox(id,password);
   try {
     // Atomic mailbox plus credential creation; do not expose plaintext except

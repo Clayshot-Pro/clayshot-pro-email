@@ -1,21 +1,9 @@
+import { fromBase64Url, toBase64Url } from "../bytes";
 const VERSION = "v1";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export function toBase64Url(bytes: Uint8Array): string {
-  let value = "";
-  for (const byte of bytes) value += String.fromCharCode(byte);
-  return btoa(value)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function fromBase64Url(value: string): Uint8Array {
-  let normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  while (normalized.length % 4) normalized += "=";
-  return Uint8Array.from(atob(normalized), (character) => character.charCodeAt(0));
-}
+export { toBase64Url };
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return Uint8Array.from(bytes).buffer;

@@ -1,3 +1,4 @@
+import { toBase64 } from "../bytes.ts";
 import { TransportError, type OutboundMessage, type OutboundTransport, type TransportResult } from "./types.ts";
 
 const ENDPOINT = "https://api.resend.com/emails";
@@ -9,14 +10,7 @@ export function formatSender(name: string, email: string): string {
   return clean ? `"${clean}" <${email}>` : email;
 }
 
-export function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary);
-}
+export { toBase64 };
 
 export function resendPayload(message: OutboundMessage): Record<string, unknown> {
   const headers = Object.fromEntries(Object.entries(message.headers ?? {})

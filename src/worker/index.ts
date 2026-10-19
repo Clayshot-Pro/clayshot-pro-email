@@ -1,3 +1,4 @@
+import { sha256Hex } from "./bytes";
 import { primaryProfilePath, protectedAccountPath, requestedMailAccount } from "./accountAccess";
 import { imageProxy } from "./api/imageProxy";
 import { adminProtectedApiPath } from "./adminRoutePolicy";
@@ -414,9 +415,7 @@ export default {
         const token = readOwnerSessionToken(request);
         let actor = "anonymous";
         if (token) {
-          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-          actor = Array.from(new Uint8Array(digest)).slice(0, 8)
-            .map(byte => byte.toString(16).padStart(2, "0")).join("");
+          actor = (await sha256Hex(token)).slice(0, 16);
         }
         const outcome = response.ok ? "success" : response.status === 401 || response.status === 403 ? "denied" : "failure";
         // Paginated operations are one logical action: record completion and

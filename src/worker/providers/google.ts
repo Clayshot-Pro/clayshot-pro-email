@@ -1,3 +1,4 @@
+import { randomBase64Url, sha256Hex, toBase64Url } from "../bytes";
 import { appOrigin } from "../config";
 import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, clearOAuthCookie } from "../deviceAuth";
 import { decryptSecret, encryptSecret } from "./crypto";
@@ -31,26 +32,6 @@ type OAuthStateRow = {
   device_nonce_hash: string | null;
 };
 
-function toBase64Url(bytes: Uint8Array): string {
-  let value = "";
-  for (const byte of bytes) value += String.fromCharCode(byte);
-  return btoa(value)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return Array.from(
-    new Uint8Array(digest),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-function randomBase64Url(byteLength = 32): string {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
-}
 
 async function pkceChallenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(verifier));

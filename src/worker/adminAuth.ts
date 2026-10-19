@@ -1,11 +1,8 @@
+import { randomBase64Url, sha256Hex } from "./bytes";
 import { checkPassword, preparePassword } from "./passwordCrypto";
 import { revokeAllMailAlerts } from "./push";
 import { isAdministratorEmail } from "./config";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
-async function tokenHash(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
-}
 import { adminPasswordError } from "./mailboxPasswordPolicy";
 
 const COOKIE = "__Host-ltm_admin_pending";
@@ -23,7 +20,7 @@ export async function adminPasswordConfigured(env: Env): Promise<boolean> {
 export async function pendingAdminHash(request: Request, env: Env): Promise<string | null> {
   const value=readCookie(request);
   if (!value) return null;
-  const hash=await tokenHash(value);
+  const hash=await sha256Hex(value);
   const pending=await env.DB.prepare(
     "SELECT 1 FROM admin_login_pending WHERE token_hash=?1 AND expires_at>datetime('now')"
   ).bind(hash).first();
@@ -54,9 +51,8 @@ export async function beginAdminLogin(request: Request, env: Env): Promise<Respo
     await tryRecordAdminSecurityEvent(env, "admin.login.password", "denied");
     return Response.json({error:"Invalid credentials"},{status:401});
   }
-  const bytes=crypto.getRandomValues(new Uint8Array(32));
-  const session=btoa(String.fromCharCode(...bytes)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
-  const hash=await tokenHash(session);
+  const session=randomBase64Url();
+  const hash=await sha256Hex(session);
   await env.DB.prepare(
     "INSERT INTO admin_login_pending(token_hash,expires_at) VALUES(?1,datetime('now','+5 minutes'))"
   ).bind(hash).run();

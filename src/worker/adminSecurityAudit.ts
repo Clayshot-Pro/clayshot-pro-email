@@ -1,3 +1,4 @@
+import { sha256Hex } from "./bytes.ts";
 export type AdminSecurityOutcome = "success" | "denied" | "failure";
 
 export function adminMutationEvent(method: string, path: string): string {
@@ -38,12 +39,7 @@ async function recordAdminSecurityEvent(
   if (!SAFE_EVENT.test(event) || !SAFE_EVENT.test(targetType || "none")) {
     throw new Error("Invalid security event");
   }
-  const digest = target
-    ? await crypto.subtle.digest("SHA-256", new TextEncoder().encode(target))
-    : null;
-  const fingerprint = digest
-    ? Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("").slice(0, 16)
-    : "";
+  const fingerprint = target ? (await sha256Hex(target)).slice(0, 16) : "";
   await env.DB.prepare(
     `INSERT INTO admin_security_events(id,event_type,outcome,actor,target_type,target_fingerprint)
      VALUES(?1,?2,?3,?4,?5,?6)`,

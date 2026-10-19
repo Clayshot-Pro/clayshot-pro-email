@@ -1,3 +1,4 @@
+import { randomBase64Url, sha256Hex } from "./bytes";
 import { adminPasswordConfigured, pendingAdminHash, consumePendingAdmin, clearPendingCookie } from "./adminAuth";
 import { revokeAllMailAlerts } from "./push";
 import {
@@ -50,28 +51,6 @@ type SessionRow = {
 const jsonError = (message: string, status: number) =>
   Response.json({ error: message }, { status });
 
-function base64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(
-    new Uint8Array(digest),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-function randomToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return base64Url(bytes);
-}
 
 function sessionCookie(token: string, maxAge = OWNER_SESSION_TTL_SECONDS): string {
   return `${OWNER_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
@@ -105,7 +84,7 @@ async function cleanup(env: Env): Promise<void> {
 }
 
 async function createSession(env: Env, request: Request): Promise<string> {
-  const token = randomToken();
+  const token = randomBase64Url();
   await env.DB.prepare(
     "INSERT INTO auth_sessions (session_id, token_hash, expires_at, user_agent) VALUES (?, ?, datetime('now', ?), ?)",
   )

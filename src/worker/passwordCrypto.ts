@@ -1,3 +1,4 @@
+import { fromBase64Url, toBase64Url } from "./bytes.ts";
 import { pbkdf2Sync, scryptSync } from "node:crypto";
 import { adminPasswordError, mailboxPasswordError } from "./mailboxPasswordPolicy.ts";
 
@@ -10,15 +11,6 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_MAXMEM = 32 * 1024 * 1024;
 
-function encode(bytes: Uint8Array): string {
-  let result = "";
-  for (const value of bytes) result += String.fromCharCode(value);
-  return btoa(result).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-function decode(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4));
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
-}
 
 /** KDF version is stored in the pre-existing integer "iterations" column.
  * -1 = scrypt v1 (N=2^14, r=8, p=1, 32-byte hash).
@@ -29,16 +21,16 @@ export async function hashPassword(password: string, salt: string, iterations = 
     (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 1_000_000)) {
     throw new Error("Unsupported password hash parameters");
   }
-  const saltBytes = decode(salt);
+  const saltBytes = fromBase64Url(salt);
   if (saltBytes.length < 16 || saltBytes.length > 64) {
     throw new Error("Invalid password salt");
   }
   if (iterations === SCRYPT_V1) {
-    return encode(scryptSync(encoder.encode(password), saltBytes, 32, {
+    return toBase64Url(scryptSync(encoder.encode(password), saltBytes, 32, {
       N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, maxmem: SCRYPT_MAXMEM,
     }));
   }
-  return encode(pbkdf2Sync(encoder.encode(password), saltBytes, iterations, 32, "sha256"));
+  return toBase64Url(pbkdf2Sync(encoder.encode(password), saltBytes, iterations, 32, "sha256"));
 }
 import { constantTimeEqual } from "./constantTime.ts";
 export type PasswordHash = { salt: string; hash: string; iterations: number };
@@ -48,7 +40,7 @@ export async function preparePassword(
 ): Promise<PasswordHash> {
   const invalid = policy === "admin" ? adminPasswordError(password) : mailboxPasswordError(password);
   if (invalid) throw new Error(invalid);
-  const salt = encode(crypto.getRandomValues(new Uint8Array(24)));
+  const salt = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   return { salt, hash: await hashPassword(password, salt, SCRYPT_V1), iterations: SCRYPT_V1 };
 }
 export async function checkPassword(
