@@ -1,5 +1,6 @@
 import { jsonError } from "./http";
 import { deviceAuthorized } from "./deviceAuth";
+import { chunked } from "./sql";
 import {
   effectiveAppearance, ICON_SIZES, pngDimensions, readPreferences, readSettings, THEMES, updatePreferences, updateSettings,
   type InstanceSettings, type ThemeId,
@@ -115,13 +116,16 @@ async function preferencesFor(env: Env, accountId: string) {
 export async function accountColors(env: Env, ids: string[]): Promise<Map<string, string>> {
   const colors = new Map<string, string>();
   if (!ids.length) return colors;
-  const marks = ids.map(() => "?").join(",");
+  // In slices, within D1's bound-parameter limit (an instance may have hundreds of mailboxes).
+  const slices = chunked(ids);
+  const marks = (slice: string[]) => slice.map(() => "?").join(",");
   const [prefs, natives] = await Promise.all([
-    env.DB.prepare(`SELECT account_id, preferences FROM account_preferences WHERE account_id IN (${marks})`)
-      .bind(...ids).all<{ account_id: string; preferences: string }>(),
-    env.DB.prepare(`SELECT id, accent_color FROM native_mailboxes WHERE accent_color IS NOT NULL AND id IN (${marks})`)
-      .bind(...ids).all<{ id: string; accent_color: string }>(),
-  ]).catch(() => [{ results: [] }, { results: [] }] as const);
+    Promise.all(slices.map(slice => env.DB.prepare(`SELECT account_id, preferences FROM account_preferences WHERE account_id IN (${marks(slice)})`)
+      .bind(...slice).all<{ account_id: string; preferences: string }>())),
+    Promise.all(slices.map(slice => env.DB.prepare(`SELECT id, accent_color FROM native_mailboxes WHERE accent_color IS NOT NULL AND id IN (${marks(slice)})`)
+      .bind(...slice).all<{ id: string; accent_color: string }>())),
+  ]).then(([p, n]) => [{ results: p.flatMap(r => r.results) }, { results: n.flatMap(r => r.results) }] as const)
+    .catch(() => [{ results: [] }, { results: [] }] as const);
   const settings = await instanceSettings(env);
   for (const row of prefs.results) {
     let raw: unknown = {};
