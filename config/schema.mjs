@@ -29,7 +29,7 @@ export const CONFIG = [
   { key: "CLOUDFLARE_ACCOUNT_ID", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
     help: "Cloudflare account ID. Used by scripts and for the Email Sending API." },
   { key: "CLOUDFLARE_API_TOKEN", kind: "deploy", required: true, example: "", group: "Cloudflare deployment",
-    help: "Deploy token with Workers Scripts edit, D1 edit, R2 edit and Account Settings read. Used by deploy scripts; the GitHub Actions deploy also gives it to the app (CLOUDFLARE_DEPLOY_CONNECTION) for domain setup." },
+    help: "The one Cloudflare API token (README, step 1.2): Workers Scripts, D1 and R2 edit and Account Settings read for deploys, plus Email Sending, Zone, Zone Settings, DNS and Email Routing Rules for domain setup. Used by deploy scripts; the GitHub Actions deploy also gives it to the app (CLOUDFLARE_DEPLOY_CONNECTION)." },
   { key: "WORKER_NAME", kind: "deploy", example: "", group: "Cloudflare deployment",
     help: "Optional. Defaults to \"name\" in wrangler.jsonc." },
   { key: "D1_DATABASE_NAME", kind: "deploy", example: "", group: "Cloudflare deployment",

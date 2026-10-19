@@ -1,17 +1,18 @@
 import { CLOUDFLARE_TOKEN_PERMISSIONS, CLOUDFLARE_TOKEN_URL, type ConnectReport } from "../cloudflareToken";
 
-/** How to create the Cloudflare API token: one link, two permissions to add by hand. */
+/** How to create the one Cloudflare API token: one link, two permissions to add by hand. */
 export function CloudflareTokenHelp() {
-  const manual = CLOUDFLARE_TOKEN_PERMISSIONS.filter(permission => !permission.prefilled);
+  const manual = CLOUDFLARE_TOKEN_PERMISSIONS.filter(permission => !permission.key);
   return (
     <div className="cf-token-help">
       <a className="auth-secondary cf-token-link" href={CLOUDFLARE_TOKEN_URL} target="_blank" rel="noopener noreferrer">
         Create a Cloudflare token
       </a>
       <p>
-        The link fills in most permissions. Add {manual.map((permission, index) => (
+        Use the same token as your fork's <code>CLOUDFLARE_API_TOKEN</code> secret: one token deploys the app and
+        sets up your domains. To make one, open the link (it selects every other permission), add {manual.map((permission, index) => (
           <span key={permission.name}>{index ? " and " : ""}<strong>{permission.name}: {permission.access}</strong></span>
-        ))}, then create the token and paste it here.
+        ))}, create the token and paste it here.
       </p>
       <details>
         <summary>All permissions</summary>
