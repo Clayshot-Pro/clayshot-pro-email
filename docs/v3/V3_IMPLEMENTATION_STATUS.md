@@ -157,7 +157,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Fixes:** the app re-registers its subscription on every start (so a new sign-in takes it over); a device sign-in is renewed for 30 days, with the same token, when the app is opened after a week; the service worker registers a subscription the browser rotates (`pushsubscriptionchange`); pushes are sent with high urgency (Android delivers them while idle) and a 24-hour TTL; failed deliveries log the push service and its reason.
 - **iPhone/iPad:** outside an installed Home Screen app the bell says **Add to Home Screen for notifications** instead of "unavailable". Settings now says alerts show the sender, subject and a preview (they always did).
 - **Alert text:** the sender is the title; the body is the subject, then a short preview.
-- **Administrator:** a phone that turns alerts on while signed in as admin gets alerts for every mailbox (the title also names the mailbox) for 30 days, renewed each time the app starts with the admin signed in. Admin passkey sessions stay short (12 hours, 1 hour idle); signing out as admin, signing out other sessions, ending that session or changing the admin password stops it (`push_subscriptions.all_mail_until`, migration 0025).
+- **Administrator:** a phone that turns alerts on while signed in as admin gets alerts for every mailbox for 30 days, renewed each time the app starts with the admin signed in. Admin passkey sessions stay short (12 hours, 1 hour idle); signing out as admin, signing out other sessions, ending that session or changing the admin password stops it (`push_subscriptions.all_mail_until`, migration 0025).
 - **Requires manual validation:** an iPhone installed from the Home Screen and an Android phone receiving an alert after the update.
 
 ## v3.19: images in mail
@@ -190,6 +190,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Unchanged:** first-run setup still needs a pasted token or the setup secret as proof of ownership; the deploy token is never accepted as proof.
 - **Security:** the Worker holds the deploy token (Workers Scripts, D1, R2 edit). An in-app token already needed Workers Scripts: Edit, so the added reach is D1 and R2, which the Worker already has through its bindings.
 - **Requires manual validation:** Admin → Keys on a fork after its next deploy; domain setup with a deploy token that has the email and DNS permissions.
+
+## v3.23: notification layout
+
+- Every new-mail alert is three lines: the sender's name (or address when there is none) as the title, then the subject, then the start of the message. Administrator alerts for other mailboxes no longer add "→ mailbox" to the title.
 
 ## Production rollout (LTM instance)
 
