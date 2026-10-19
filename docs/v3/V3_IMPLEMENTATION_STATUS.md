@@ -1,6 +1,6 @@
 # v3 implementation status
 
-**Status:** v3.00 → v3.15 are released; production (`main`) runs v3.15, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
+**Status:** v3.00 → v3.16 are released; production (`main`) runs v3.16, deployed by GitHub Actions (`.github/workflows/deploy.yml`). Each version branch contains everything before it. Setup and operation: [README](../../README.md); upgrade notes: [UPGRADING.md](../UPGRADING.md).
 
 ## Branches
 
@@ -22,6 +22,7 @@
 | `v3.13` | Forks: deploy a GitHub fork with Cloudflare and update with Sync fork; app version and update notice; licence allows unmodified forks |
 | `v3.14` | End-to-end and unit tests; fixes from a security and bug review; real outbound Message-IDs (migration 0024) |
 | `v3.15` | Simpler fork deploys: the first GitHub Actions deploy creates the D1 database and R2 bucket; missing secrets are named |
+| `v3.16` | Fork deploys also provision when the Worker exists without a database (an earlier failed setup); an unreadable Worker names the account and permissions |
 
 ## Decisions applied in v3.05
 
@@ -139,6 +140,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Clear failures:** a first workflow step names missing or malformed `CLOUDFLARE_*` secrets; R2 and D1 errors say which permission or dashboard step is missing. The run summary shows the workers.dev address.
 - **Fork steps:** fork → enable Actions → token (*Edit Cloudflare Workers* + D1: Edit) → two repository secrets → run **Deploy production**.
 - **Requires manual validation:** a first deploy into a fresh Cloudflare account.
+- **v3.16:** a Worker that exists without a DB binding (made in the dashboard, or left by an earlier failed setup) has no data, so it is provisioned like a missing one. A Worker that cannot be read stops the deploy and names the account ID and token permissions to check.
 
 ## Production rollout (LTM instance)
 

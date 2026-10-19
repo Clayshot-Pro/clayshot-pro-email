@@ -69,21 +69,34 @@ const describe = call => call.status === 0 ? "Cloudflare could not be reached"
   : `HTTP ${call.status}${call.errors[0]?.message ? `: ${call.errors[0].message}` : ""}`;
 
 /**
- * Whether the Worker is already deployed in the account: true, false (it is
- * not), or null when that cannot be told (no permission, network error).
+ * The Worker's database, as deployed: "missing" (no such Worker), "unbound"
+ * (the Worker exists without a DB binding, for example a placeholder made in
+ * the dashboard or an earlier failed setup), "bound" with its database ID, or
+ * "unknown" with a reason when it cannot be read (no permission, wrong account).
  */
-export async function workerExists(values) {
+export async function deployedWorkerDatabase(values) {
   const call = await cloudflareCall(`/workers/scripts/${encodeURIComponent(values.WORKER_NAME)}/settings`, values);
-  if (call.success) return true;
-  if (call.status === 404 || call.errors.some(error => error?.code === 10007)) return false;
-  return null;
+  if (!call.success) {
+    if (call.status === 404 || call.errors.some(error => error?.code === 10007)) return { state: "missing" };
+    return { state: "unknown", detail: describe(call) };
+  }
+  const bindings = (call.result?.bindings ?? []).filter(binding => binding?.type === "d1" && binding?.name === "DB");
+  if (!bindings.length) return { state: "unbound" };
+  const id = bindings.length === 1 ? bindings[0].database_id ?? bindings[0].id : null;
+  return typeof id === "string" && id ? { state: "bound", id } : { state: "unknown", detail: "the Worker's DB binding has no database ID" };
+}
+
+/** Whether the Worker is already deployed: true, false, or null when that cannot be told. */
+export async function workerExists(values) {
+  const { state } = await deployedWorkerDatabase(values);
+  return state === "missing" ? false : state === "unknown" ? null : true;
 }
 
 /**
  * First deploy of a new instance (a fresh fork): create the D1 database and
  * the R2 bucket named in the config when they do not exist yet. Only called
- * when the Worker itself does not exist, so an existing instance is never
- * pointed at a new, empty database. Returns the database ID.
+ * when the Worker does not exist or has no database bound, so an instance
+ * with data is never pointed at a new, empty database. Returns the database ID.
  */
 export async function provisionFirstDeploy(values, log = console.log) {
   let databaseId = await databaseIdByName(values);
@@ -107,14 +120,6 @@ export async function provisionFirstDeploy(values, log = console.log) {
     log(`First deploy: created the R2 bucket "${values.R2_BUCKET_NAME}".`);
   }
   return databaseId;
-}
-
-/** LTM production path: resolve D1 from the currently deployed Worker binding. */
-export async function databaseIdFromDeployedWorker(values) {
-  const settings = await cloudflare(`/workers/scripts/${encodeURIComponent(values.WORKER_NAME)}/settings`, values);
-  const matches = (settings?.bindings ?? []).filter(binding =>
-    binding?.type === "d1" && binding?.name === "DB" && typeof (binding?.database_id ?? binding?.id) === "string");
-  return matches.length === 1 ? matches[0].database_id ?? matches[0].id : null;
 }
 
 /** Self-host path: resolve D1 by database name. */

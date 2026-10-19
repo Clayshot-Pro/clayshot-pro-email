@@ -7,7 +7,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { loadConfigValues, missingRequired } from "../config/schema.mjs";
 import { WRANGLER_FILE, parseJsonc } from "../config/wrangler-file.mjs";
-import { renderWrangler, databaseIdFromDeployedWorker, databaseIdByName, isProductionDeploy, isWorkersBuildOnMain, provisionFirstDeploy, workerExists } from "./config-lib.mjs";
+import { renderWrangler, databaseIdByName, deployedWorkerDatabase, isProductionDeploy, isWorkersBuildOnMain, provisionFirstDeploy } from "./config-lib.mjs";
 
 const strict = process.argv.includes("--strict") || isProductionDeploy();
 if (!strict) {
@@ -28,15 +28,20 @@ if (!databaseId && missing.length && isWorkersBuildOnMain()) {
   if (missing.length) {
     throw new Error(`Missing required configuration: ${missing.join(", ")}. In a GitHub fork, add them under Settings → Secrets and variables → Actions → Repository secrets; elsewhere set them in .env or as Workers Builds build variables.`);
   }
-  // A fresh fork's first deploy: no Worker yet, so nothing can be lost by
-  // creating the database and bucket. An existing Worker always resolves its
-  // own database, and a lookup that fails for it stops the deploy.
-  const firstDeploy = isProductionDeploy() && await workerExists(values) === false;
-  databaseId = firstDeploy
-    ? await provisionFirstDeploy(values)
-    : (isProductionDeploy() ? await databaseIdFromDeployedWorker(values) : null) ?? await databaseIdByName(values) ?? "";
+  // A fresh fork's first deploy: no Worker yet, or one with no database bound,
+  // so nothing can be lost by creating the database and bucket. A Worker with
+  // a database always uses it, and a Worker that cannot be read stops the deploy.
+  const deployed = isProductionDeploy() ? await deployedWorkerDatabase(values) : null;
+  if (deployed?.state === "missing" || deployed?.state === "unbound") {
+    databaseId = await provisionFirstDeploy(values);
+  } else {
+    databaseId = (deployed?.state === "bound" ? deployed.id : null) ?? await databaseIdByName(values) ?? "";
+  }
   if (!databaseId) {
-    throw new Error("Could not resolve the D1 database. Run `npm run setup`, or set D1_DATABASE_ID, and check the API token has D1 and Workers Scripts access.");
+    const reason = deployed?.state === "unknown"
+      ? `Could not read the Worker "${values.WORKER_NAME}" (${deployed.detail}). Check that CLOUDFLARE_ACCOUNT_ID is the account that holds it and that the API token has Workers Scripts: Edit and D1: Edit there.`
+      : "Run `npm run setup`, or set D1_DATABASE_ID, and check the API token has D1 and Workers Scripts access.";
+    throw new Error(`Could not resolve the D1 database. ${reason}`);
   }
 }
 

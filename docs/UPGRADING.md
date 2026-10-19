@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. All migrations are additive.
 
+## v3.16
+
+- A fork whose Worker already exists without a database (for example after an earlier failed setup) now deploys and creates its database and bucket.
+
 ## v3.15
 
 - Fork deploys are simpler: add the two secrets and run **Deploy production**. The first deploy creates the D1 database and R2 bucket; existing instances are unchanged.
