@@ -23,6 +23,7 @@ const TESTS = [
   "test-account-access",
   "test-admin-auth-boundary",
   "test-admin-stepup",
+  "test-login-limits",
   "test-mailbox-rules",
   "test-mail-mutation-shields",
   "test-password-crypto",

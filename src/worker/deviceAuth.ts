@@ -75,8 +75,7 @@ export async function rotateMailboxPassword(env: Env, id: string): Promise<strin
   await setMailboxPassword(env,id,password);
   return password; // only displayed once to the verified owner.
 }
-async function checkNativePassword(env: Env, address: string, password: string): Promise<string | null> {
-  const normalized = normalizeMailboxAddress(address, await addressRules(env, "routing"));
+async function checkNativePassword(env: Env, normalized: string | null, password: string): Promise<string | null> {
   const record = normalized ? await env.DB.prepare(`SELECT m.id, c.password_salt, c.password_hash, c.iterations
     FROM native_mailboxes m JOIN native_mailbox_credentials c ON c.mailbox_id=m.id
     WHERE m.email_address=?1 AND m.status='active' AND m.deleted_at IS NULL`)
@@ -161,14 +160,19 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
     }), env);
   }
-  const accountBucket = accountRateLimitBucket("native-login", email);
-  // The account counter is incremented before the password check (one atomic
-  // upsert), so parallel guesses cannot all pass; a success clears it.
-  if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))
-    || !(await countAccountLoginAttempt(env, accountBucket))) {
+  if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "native-login")))) {
     return jsonError("Too many attempts. Try again later.", 429);
   }
-  const mailboxId = await checkNativePassword(env,email,password);
+  // One allowance per mailbox, however the address was typed ("work" or
+  // "work@domain"). The account counter is incremented before the password
+  // check (one atomic upsert), so parallel guesses cannot all pass; a success
+  // clears it.
+  const normalized = normalizeMailboxAddress(email, await addressRules(env, "routing"));
+  const accountBucket = accountRateLimitBucket("native-login", normalized ?? email);
+  if (!(await countAccountLoginAttempt(env, accountBucket))) {
+    return jsonError("Too many attempts. Try again later.", 429);
+  }
+  const mailboxId = await checkNativePassword(env,normalized,password);
   if (!mailboxId) return jsonError("Invalid credentials", 401);
   await clearAccountLoginFailures(env, accountBucket);
   const setCookie = await establishDeviceGrant(request, env, mailboxId, "native");
