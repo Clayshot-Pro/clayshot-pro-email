@@ -12,6 +12,7 @@ const TESTS = [
   "test-push",
   "test-email-images",
   "test-stored-keys",
+  "test-key-status",
   "test-cloudflare-setup",
   "test-all-inboxes",
   "test-admin-mailbox",

@@ -175,6 +175,13 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Backup:** Admin → Keys → **Back up encryption key** shows the key after a passkey approval (audited as `admin.encryption_key.shown`).
 - **Requires manual validation:** a fork deploy creating the key, then push notifications on that instance.
 
+## v3.21: key setup status at a glance
+
+- **Admin → Keys:** each key has a status badge (green **Set up** / **Connected**, red **Missing**, grey **Not set** for optional keys) and a coloured edge; a summary at the top says whether the essential keys are in place and what each missing one breaks.
+- **Essential keys:** the encryption key (`PROVIDER_CREDENTIAL_KEY`) and the push notification (VAPID) keys. Cloudflare and the provider keys are optional.
+- **Admin page:** when an essential key is missing, a red **Setup incomplete** notice sits above the section links with a **Fix in Keys** link, and the Keys link has a red dot.
+- **Tests:** `scripts/test-key-status.mjs`; the end-to-end suite checks the badges on a configured instance.
+
 ## Production rollout (LTM instance)
 
 **Done:** v3.14 deployed from `main` (2026-10-19) with migrations through 0023; `email.liamthemo.com` serves it with `liamthemo.com` as the main domain. Deploys run through GitHub Actions with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.

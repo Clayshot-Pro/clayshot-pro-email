@@ -160,3 +160,8 @@
 .remote-images-banner span { flex: 1 1 180px; }
 .remote-images-banner button { border: 0; border-radius: 8px; padding: 6px 10px; background: var(--tone-bg-35); color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 .remote-images-banner .remote-images-always { background: transparent; text-decoration: underline; font-weight: 500; }
+.admin-keys-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--ui-error-border); border-radius: 12px; background: var(--ui-error-bg); font-size: 13px; line-height: 1.55; }
+.admin-keys-notice strong { color: var(--ui-error-text); }
+.admin-keys-notice span { flex: 1 1 260px; color: var(--muted); }
+.admin-keys-notice a { color: var(--accent); font-weight: 700; }
+.admin-nav-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--ui-error-text); vertical-align: middle; }
