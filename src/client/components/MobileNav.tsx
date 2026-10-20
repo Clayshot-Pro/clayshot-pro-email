@@ -46,6 +46,7 @@ export function MobileNav({
 
   return (
     <>
+      <div className="mobile-status-backdrop" aria-hidden="true"/>
       <div className="mobile-account-bar">
         <button ref={menuButton} className="mobile-menu-button" type="button" aria-label="Open folders"
           aria-expanded={drawerOpen} aria-controls="mobile-folder-drawer" onClick={() => setDrawerOpen(true)}>

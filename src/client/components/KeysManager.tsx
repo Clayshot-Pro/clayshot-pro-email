@@ -112,7 +112,7 @@ export function KeysManager({ onStatus }: { onStatus?: (missing: KeyCheck[]) => 
     <section className="settings-section admin-domain-panel" id="admin-keys" aria-label="Integration keys">
       <div className="admin-section-heading">
         <div>
-          <p className="admin-section-kicker">Integrations</p>
+          <p className="admin-section-kicker">Keys</p>
           <h2>Keys</h2>
           <p>Stored encrypted in the database. Saved values are never shown again; replace a key to change it. Changes can take up to a minute to reach every server.</p>
         </div>

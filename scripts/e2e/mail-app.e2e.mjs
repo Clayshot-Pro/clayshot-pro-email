@@ -765,6 +765,71 @@ export async function run() {
         assert.ok(accounts.json.accounts.some(a => a.emailAddress === `admin@${DOMAIN}`));
       }],
 
+      ["attachments open in the system viewer, never replace the app, and close by tapping outside", async () => {
+        const page = alice.page;
+        await page.bringToFront();
+        const pdf = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 300]>>endobj\ntrailer<</Root 1 0 R>>";
+        const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+        assert.equal((await deliver(worker.origin, { from: "Bob <bob@partner.test>", to: `alice@${DOMAIN}`, subject: "Files to open", text: "files",
+          attachments: [{ name: "photo.png", type: "image/png", content: png }, { name: "doc.pdf", type: "application/pdf", content: pdf }] })).status, 200);
+        try {
+          for (const [width, height] of [[1280, 720], [390, 844]]) {
+            await page.setViewportSize({ width, height });
+            await page.reload();
+            await page.locator(".mail-row", { hasText: "Files to open" }).first().click();
+            for (const name of ["photo.png", "doc.pdf"]) {
+              await page.locator(".attachment-card", { hasText: name }).click();
+              const viewer = page.locator(".attachment-preview-backdrop");
+              await viewer.waitFor();
+              const open = viewer.locator(".attachment-preview-open");
+              assert.equal(await open.getAttribute("target"), "_blank", `${name}: Open uses a new window`);
+              assert.match(await open.getAttribute("href"), /^\/api\/attachment-previews\//);
+              assert.equal(await viewer.locator(".attachment-preview-download").getAttribute("target"), "_blank", `${name}: Download never replaces the app`);
+              const response = await page.request.get(worker.origin + await open.getAttribute("href"));
+              assert.match(response.headers()["content-security-policy"] ?? "", /default-src 'none'/, "the opened file runs no script");
+              await page.locator(".attachment-preview-body").click({ position: { x: 4, y: 4 } });
+              await viewer.waitFor({ state: "detached" });
+            }
+          }
+        } finally {
+          await page.setViewportSize({ width: 1280, height: 720 });
+        }
+      }],
+
+      ["admin panel: one button size, themed dropdowns, green set-up chips, a chevron that stays put", async () => {
+        const page = admin.page;
+        await page.bringToFront();
+        await page.goto(`${worker.origin}/#admin`);
+        await page.reload();
+        await page.locator(".admin-home-nav").waitFor({ timeout: 15_000 });
+        for (const selector of ["#admin-security .key-chip-ok", "#admin-keys .key-chip-ok", ".admin-mailbox-status.is-active", ".admin-home select"]) {
+          await page.locator(selector).first().waitFor({ state: "attached", timeout: 15_000 });
+        }
+        const looks = await page.evaluate(() => {
+          const visible = [...document.querySelectorAll(".admin-home :is(.settings-primary, .auth-secondary, .settings-row-actions button)")].filter(el => el.getClientRects().length);
+          const color = sel => getComputedStyle(document.querySelector(sel)).color;
+          return {
+            heights: [...new Set(visible.map(el => Math.round(el.getBoundingClientRect().height)))],
+            fonts: [...new Set(visible.map(el => getComputedStyle(el).fontSize))],
+            selects: [...new Set([...document.querySelectorAll(".admin-home select")].map(el => getComputedStyle(el).appearance))],
+            passkey: color("#admin-security .key-chip-ok"), keyOk: color("#admin-keys .key-chip-ok"), active: color(".admin-mailbox-status.is-active"),
+          };
+        });
+        assert.deepEqual(looks.heights, [36], `buttons share one height (${looks.heights})`);
+        assert.deepEqual(looks.fonts, ["12px"], `buttons share one text size (${looks.fonts})`);
+        assert.deepEqual(looks.selects, ["none"], "dropdowns use the themed field");
+        assert.equal(looks.passkey, looks.keyOk, "Passkey enabled is the same green as the set-up keys");
+        assert.equal(looks.active, looks.keyOk, "an active mailbox is the same green");
+        const summary = page.locator("details.admin-mailbox-more > summary").first();
+        await summary.scrollIntoViewIfNeeded();
+        const before = await summary.boundingBox();
+        await summary.click();
+        await page.waitForTimeout(250);
+        const after = await summary.boundingBox();
+        assert.deepEqual(after, before, `More actions stays put when opened (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
+        await summary.click();
+      }],
+
       ["signing out ends the mailbox session", async () => {
         const aliceApi = api(alice.context, worker.origin);
         assert.equal((await aliceApi("/api/device/logout", { method: "POST" })).status, 200);

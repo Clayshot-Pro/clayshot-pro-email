@@ -18,6 +18,7 @@ import "./mobile-accounts.css";
 import "./email-html.css";
 import "./device-login.css";
 import "./layout-fixes.css";
+import "./admin-ui.css";
 
 installMailFetchCache();
 const root = document.getElementById("root");

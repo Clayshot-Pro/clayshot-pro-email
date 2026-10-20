@@ -39,7 +39,7 @@ export function AdminSecurityLog() {
     <section className="settings-section admin-audit-panel" id="admin-audit" aria-label="Administrator security audit log">
       <div className="admin-section-heading">
         <div>
-          <p className="admin-section-kicker">Account security</p>
+          <p className="admin-section-kicker">Activity</p>
           <h2>Security activity</h2>
           <p>Recent administrator sign-ins, passkey approvals and account changes. Events are retained for up to 90 days. No passwords or email contents are stored here.</p>
         </div>

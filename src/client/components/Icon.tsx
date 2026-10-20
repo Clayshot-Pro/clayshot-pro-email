@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useAppearance } from "../appearance";
 
-type IconName = "mail" | "inbox" | "junk" | "star" | "send" | "draft" | "archive" | "trash" | "search" | "compose" | "reply" | "forward" | "back" | "refresh" | "paperclip" | "bell" | "lock" | "more" | "menu";
+type IconName = "mail" | "inbox" | "junk" | "star" | "send" | "draft" | "archive" | "trash" | "search" | "compose" | "reply" | "forward" | "back" | "refresh" | "paperclip" | "bell" | "lock" | "more" | "menu" | "external" | "download";
 
 type IconProps = {
   name: IconName;
@@ -28,6 +28,8 @@ const paths: Record<IconName, ReactNode> = {
   lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
   more: <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></>,
   menu: <path d="M4 7h16M4 12h16M4 17h16"/>,
+  external: <><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></>,
+  download: <><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/></>,
 };
 
 /** Closed body shapes tinted by the duotone set (open strokes stay as lines). */

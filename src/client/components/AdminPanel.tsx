@@ -95,11 +95,11 @@ export function AdminPanel() {
     <section className="settings-section admin-security-panel" id="admin-security" aria-label="Administrator security">
       <div className="admin-section-heading">
         <div>
-          <p className="admin-section-kicker">Account security</p>
+          <p className="admin-section-kicker">Security</p>
           <h2>Administrator password</h2>
           <p>A fresh passkey check is required to save security changes.</p>
         </div>
-        {configured && <span className="admin-security-state">Passkey enabled</span>}
+        {configured && <span className="key-chip key-chip-ok"><span aria-hidden="true">✓</span> Passkey enabled</span>}
       </div>
 
       {configured === null ? (

@@ -1,0 +1,226 @@
+/*
+ * v3.29 admin panel: one set of controls for every section. Loaded last and
+ * scoped to #root .admin-home, so the mail app is unchanged. Buttons, fields,
+ * dropdowns, status chips and expanding rows each have a single size, font
+ * and look, taken from the theme's tokens.
+ */
+
+/* Text */
+#root .admin-home :is(input, select, textarea, button) {
+  font-family: inherit;
+}
+#root .admin-home label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+#root .admin-home .admin-field-optional {
+  display: inline;
+  margin-left: 4px;
+  color: var(--muted-2);
+  font-weight: 500;
+}
+
+/* Buttons: primary, secondary and danger, one size. */
+#root .admin-home :is(
+  .settings-primary,
+  .auth-secondary,
+  .mailbox-danger-button,
+  .settings-row-actions button,
+  .admin-mailbox-more-content button,
+  .cf-token-link
+) {
+  width: auto;
+  min-width: 0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#root .admin-home :is(.auth-secondary, .settings-row-actions button, .admin-mailbox-more-content button, .cf-token-link):hover:not(:disabled) {
+  border-color: var(--ui-focus-border);
+  background: var(--panel-raised);
+  color: var(--text);
+}
+#root .admin-home :is(button, a).settings-primary {
+  border-color: var(--ui-cta-border);
+  background: var(--ui-cta);
+  color: var(--ui-cta-ink);
+}
+#root .admin-home :is(button, a).settings-primary:hover:not(:disabled) {
+  border-color: var(--ui-cta-border);
+  background: var(--ui-cta-hover);
+  color: var(--ui-cta-ink);
+}
+#root .admin-home :is(.auth-secondary.danger, .mailbox-danger-button),
+#root .admin-home :is(.auth-secondary.danger, .mailbox-danger-button):hover:not(:disabled) {
+  border-color: var(--ui-error-border);
+  background: var(--ui-error-bg);
+  color: var(--ui-error-text);
+}
+#root .admin-home :is(.settings-primary, .auth-secondary, .mailbox-danger-button, .settings-row-actions button, .admin-mailbox-more-content button):disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+/* Fields and dropdowns: one height and text size. Dropdowns keep the native
+   picker (the phone's wheel or sheet) with a themed field and arrow. */
+#root .admin-home :is(input:not([type="checkbox"], [type="radio"], [type="color"], [type="file"]), select, textarea) {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-field-border);
+  border-radius: 10px;
+  background-color: var(--ui-field);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+#root .admin-home textarea:not([hidden]) {
+  padding-block: 10px;
+}
+#root .admin-home :is(input, select, textarea):focus {
+  border-color: var(--ui-focus-border);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ui-focus-ring);
+}
+#root .admin-home select:not([multiple]) {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+#root .admin-home select:disabled {
+  opacity: .55;
+  cursor: default;
+}
+#root .admin-home :is(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+#root .admin-home label:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+#root .admin-home input[type="color"] {
+  width: 40px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid var(--ui-field-border);
+  border-radius: 10px;
+  background: var(--ui-field);
+  cursor: pointer;
+}
+
+/* Status chips: one pill. Green for anything enabled, active or set up;
+   red for a problem; grey for neutral counts and optional items. */
+#root .admin-home :is(.key-chip, .admin-domain-chip, .admin-mailbox-status, .admin-home-session, .admin-mailbox-count, .admin-audit-outcome) {
+  min-height: 24px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+#root .admin-home :is(.key-chip-ok, .admin-mailbox-status.is-active, .admin-domain-chip.chip-active, .admin-audit-success) {
+  border-color: color-mix(in srgb, var(--color-success) 55%, transparent);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
+}
+#root .admin-home :is(.key-chip-missing, .admin-mailbox-status.is-pending, .admin-domain-chip.chip-disabled, .admin-audit-denied, .admin-audit-failure) {
+  border-color: var(--ui-error-border);
+  background: var(--ui-error-bg);
+  color: var(--ui-error-text);
+}
+
+/* Expanding rows: one chevron after the label that turns in place (it used
+   to swap glyphs and jump). */
+#root .admin-home details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+}
+#root .admin-home details > summary::-webkit-details-marker {
+  display: none;
+}
+#root .admin-home details > summary::marker {
+  content: "";
+}
+#root .admin-home details > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  margin: 0 2px;
+  padding: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  font-size: 0;
+  transform: translateY(-25%) rotate(45deg);
+  transition: transform .15s ease;
+}
+#root .admin-home details[open] > summary::after {
+  transform: translateY(25%) rotate(225deg);
+}
+#root .admin-home .admin-security-details > summary::after {
+  margin-left: auto;
+}
+#root .admin-home .admin-mailbox-more > summary {
+  display: inline-flex;
+  padding: 6px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  #root .admin-home details > summary::after {
+    transition: none;
+  }
+}
+
+/* Rows of actions wrap on phones; a field and its button stay side by side
+   while they fit. */
+#root .admin-home :is(.settings-row-actions, .admin-mailbox-more-content, .admin-domain-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
