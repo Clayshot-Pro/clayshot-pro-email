@@ -697,11 +697,53 @@ export async function run() {
           const bar = await box(".reader-reply-bar");
           assert.ok(Math.abs(height - (bar.y + bar.height)) <= 1, `the action bar reaches the bottom edge (${JSON.stringify(bar)})`);
           const visibleLabels = await page.locator(".reader-reply-bar button:visible .reader-action-label").allInnerTexts();
-          assert.deepEqual(visibleLabels, ["Reply", "Forward", "Archive", "Junk", "Unsubscribe", "Delete"], "the bottom bar's actions, in order");
+          assert.deepEqual(visibleLabels, ["Reply", "Forward", "Archive", "Junk", "Unsub", "Delete"], "the bottom bar's actions, in order (Unsubscribe shortened to fit)");
           assert.equal(await page.locator(".reader-actions button").count(), 1, "the top bar keeps only Star");
           assert.equal(await page.locator(".mobile-compose-fab").isVisible(), false, "compose hides while a message is open");
           await page.locator(".reader-back").click();
           await page.locator(".mail-row").first().waitFor();
+        } finally {
+          await page.setViewportSize({ width: 1280, height: 720 });
+        }
+      }],
+
+      ["desktop: equal action buttons in order, inside the window; medium windows show list or reader", async () => {
+        const { page } = alice;
+        const bar = () => page.evaluate(() => {
+          const buttons = [...document.querySelectorAll(".reader-reply-bar button")].filter(b => b.getClientRects().length);
+          const box = document.querySelector(".reader-reply-bar").getBoundingClientRect();
+          return {
+            labels: buttons.map(b => b.querySelector(".reader-action-label").innerText.trim()),
+            widths: [...new Set(buttons.map(b => Math.round(b.getBoundingClientRect().width)))],
+            cut: buttons.some(b => { const l = b.querySelector(".reader-action-label"); return l.scrollWidth > l.clientWidth + 1; }),
+            bottom: box.bottom, right: box.right, height: innerHeight,
+          };
+        });
+        try {
+          await page.setViewportSize({ width: 1280, height: 720 });
+          await page.reload();
+          await navItem(page, "Inbox").click();
+          await page.locator(".mail-row").first().click();
+          await page.locator(".reader-reply-bar").waitFor();
+          let state = await bar();
+          assert.deepEqual(state.labels, ["Reply", "Forward", "Archive", "Junk", "Unsub", "Delete"], "order, with Unsubscribe shortened to fit");
+          assert.equal(state.widths.length, 1, `equal widths (${state.widths})`);
+          assert.ok(!state.cut, "no label is cut off");
+          assert.ok(state.bottom <= state.height, `the bar is inside the window (${state.bottom} > ${state.height})`);
+
+          await page.setViewportSize({ width: 1600, height: 900 });
+          state = await bar();
+          assert.deepEqual(state.labels, ["Reply", "Forward", "Archive", "Junk", "Unsubscribe", "Delete"], "full words when they fit");
+          assert.equal(state.widths.length, 1);
+
+          await page.setViewportSize({ width: 1024, height: 700 });
+          assert.equal(await page.locator(".mail-list-scroll").isVisible(), false, "the list makes room for the open message");
+          assert.ok(await page.locator(".desktop-topbar").isVisible(), "the search bar stays");
+          state = await bar();
+          assert.ok(!state.cut && state.widths.length === 1 && state.bottom <= state.height);
+          await page.locator(".reader-back").click();
+          await page.locator(".mail-list-scroll").waitFor();
+          assert.equal(await page.locator(".reader-pane").isVisible(), false, "with no message open, the list fills the space");
         } finally {
           await page.setViewportSize({ width: 1280, height: 720 });
         }
