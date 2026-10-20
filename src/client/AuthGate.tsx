@@ -1,4 +1,5 @@
 import { AdminPanel } from "./components/AdminPanel";
+import { InstanceAppearance } from "./appearance";
 import { startRegistration } from "@simplewebauthn/browser";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AccountSignIn } from "./AccountSignIn";
@@ -128,10 +129,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
       openMail: () => { window.history.replaceState(null, "", window.location.pathname + window.location.search); setAdminPanel(false); },
     };
     const panel = adminPanel || owner?.adminPasswordConfigured === false;
-    return <AdminViewProvider value={view}>{panel ? <AdminPanel /> : children}</AdminViewProvider>;
+    return <AdminViewProvider value={view}>{panel ? <><InstanceAppearance /><AdminPanel /></> : children}</AdminViewProvider>;
   }
   if (device?.authenticated && device.accountCount > 0) return <>{children}</>;
   return <main className="auth-shell">
+    {/* Signed out (or first run): the instance's look, once that is known. */}
+    {device && owner ? <InstanceAppearance /> : null}
     <section className="auth-card" aria-labelledby="auth-title">
       <div className="auth-brand-row">
         <img className="auth-logo" src={instanceIconUrl(instance, 180)} alt="" width="64" height="64" />

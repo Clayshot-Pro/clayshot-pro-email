@@ -1,19 +1,37 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import type { EffectiveAppearance, IconSetId, Lock, Preferences } from "../worker/customization";
 import { useInstance } from "./instance";
 
 export type { EffectiveAppearance, IconSetId, Lock, Preferences };
 
+// The look on screen (theme-boot.js applies it before the bundle loads), and
+// each mailbox's own look, so switching to a mailbox needs no round trip.
 const STORAGE_KEY = "ltm:appearance";
+const ACCOUNT_KEY = (accountId: string) => `ltm:appearance:account:${accountId}`;
 
 declare global {
   interface Window { __ltmApplyAppearance?: (appearance: Partial<EffectiveAppearance>) => void }
 }
 
+type AccountAppearance = { id: string; preferences: Preferences; effective: EffectiveAppearance; lock: Lock };
+
+function readJson<T>(key: string): T | null {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
+    return parsed && typeof parsed === "object" ? parsed as T : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage may be blocked */ }
+}
+
 /** Apply through theme-boot.js (same attributes it sets on load) and cache for the next cold start. */
 function applyAppearance(appearance: EffectiveAppearance): void {
   try { window.__ltmApplyAppearance?.(appearance); } catch { /* theme-boot is optional */ }
-  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance)); } catch { /* storage may be blocked */ }
+  writeJson(STORAGE_KEY, appearance);
 }
 
 type AppearanceState = {
@@ -37,22 +55,39 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     textSize: "md",
     iconSet: instance.defaultIconSet ?? "ltm",
   }), [instance.defaultTheme, instance.accent, instance.defaultIconSet]);
-  const [accountId, setAccountId] = useState<string | null>(null);
-  const [account, setAccount] = useState<{ id: string; preferences: Preferences; effective: EffectiveAppearance; lock: Lock } | null>(null);
+  // undefined until a screen says what it shows: a mailbox (its id) or the
+  // signed-out and admin screens (null, the instance defaults). Until then the
+  // look theme-boot.js applied stays, so nothing flashes while the app starts.
+  const [accountId, setAccountId] = useState<string | null | undefined>(undefined);
+  const [account, setAccount] = useState<AccountAppearance | null>(null);
+  const [startup] = useState<EffectiveAppearance>(() => ({ ...fallback, ...readJson<EffectiveAppearance>(STORAGE_KEY) }));
+  // Cached instance details count: only a browser that has never loaded them waits.
+  const knowsInstance = instance.loaded || instance.defaultTheme !== undefined;
 
-  // Signed-out screens and the admin panel follow the instance defaults.
-  useEffect(() => {
-    if (!accountId && instance.loaded) applyAppearance(instanceDefaults);
-  }, [accountId, instance.loaded, instanceDefaults]);
+  useLayoutEffect(() => {
+    if (accountId === null && knowsInstance) applyAppearance(instanceDefaults);
+  }, [accountId, knowsInstance, instanceDefaults]);
 
-  useEffect(() => {
+  // Before paint: the mailbox's cached look, then the server's current one.
+  useLayoutEffect(() => {
     if (!accountId) { setAccount(null); return; }
+    const cached = readJson<AccountAppearance>(ACCOUNT_KEY(accountId));
+    if (cached?.effective) {
+      setAccount({ ...cached, id: accountId });
+      applyAppearance(cached.effective);
+    }
+  }, [accountId]);
+
+  useEffect(() => {
+    if (!accountId) return;
     let cancelled = false;
     fetch(`/api/preferences?accountId=${encodeURIComponent(accountId)}`, { cache: "no-store" })
-      .then(response => response.ok ? response.json() as Promise<{ preferences: Preferences; effective: EffectiveAppearance; lock: Lock }> : null)
+      .then(response => response.ok ? response.json() as Promise<Omit<AccountAppearance, "id">> : null)
       .then(data => {
         if (!data || cancelled) return;
-        setAccount({ id: accountId, ...data });
+        const next = { id: accountId, ...data };
+        setAccount(next);
+        writeJson(ACCOUNT_KEY(accountId), next);
         applyAppearance(data.effective);
       })
       .catch(() => undefined);
@@ -66,19 +101,21 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     });
     const data = await response.json().catch(() => ({})) as { preferences?: Preferences; effective?: EffectiveAppearance; lock?: Lock; error?: string };
     if (!response.ok || !data.effective || !data.preferences || !data.lock) throw new Error(data.error || "Could not save appearance");
-    setAccount({ id: accountId, preferences: data.preferences, effective: data.effective, lock: data.lock });
+    const next = { id: accountId, preferences: data.preferences, effective: data.effective, lock: data.lock };
+    setAccount(next);
+    writeJson(ACCOUNT_KEY(accountId), next);
     applyAppearance(data.effective);
   }, [accountId]);
 
   const current = account && account.id === accountId ? account : null;
   const value = useMemo<AppearanceState>(() => ({
-    effective: current?.effective ?? instanceDefaults,
+    effective: current?.effective ?? (accountId === undefined ? startup : instanceDefaults),
     preferences: current?.preferences ?? {},
     lock: current?.lock ?? instance.lock ?? null,
-    accountId,
+    accountId: accountId ?? null,
     setAccountId,
     save,
-  }), [current, instanceDefaults, instance.lock, accountId, save]);
+  }), [current, accountId, startup, instanceDefaults, instance.lock, save]);
 
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
 }
@@ -90,11 +127,17 @@ export function useAppearance(): AppearanceState {
   };
 }
 
-/** Appearance follows the mailbox the user is looking at. */
+/** Appearance follows the mailbox the user is looking at (switched before the next paint). */
 export function useActiveAccountAppearance(accountId: string | null): void {
   const { setAccountId } = useAppearance();
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAccountId(accountId);
     return () => setAccountId(null);
   }, [accountId, setAccountId]);
+}
+
+/** Rendered by screens that show the instance's own look: sign-in, setup and the admin panel. */
+export function InstanceAppearance(): null {
+  useActiveAccountAppearance(null);
+  return null;
 }
