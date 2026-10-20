@@ -39,6 +39,7 @@ const TESTS = [
   "test-compose-sender",
   "test-unsubscribe-ui",
   "test-mobile-nav",
+  "test-desktop-reader",
   "test-reader-action-bar",
   "test-email-reader",
   "test-reader-bulk-delete",

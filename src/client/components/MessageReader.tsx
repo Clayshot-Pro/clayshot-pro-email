@@ -4,7 +4,7 @@ import { buildSafeEmailDocument, remoteImageCount } from "../emailHtml";
 import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 import { applyNativeColors, classifyEmail, emailBaseStyles, fitEmailWidth, parseColor, type EmailMode, type EmailTheme } from "../emailTheme";
 import type { MessageDetail } from "../mailTypes";
-import { attachmentUrls, formatBytes, formatFullDate, senderLabel } from "../mailUtils";
+import { attachmentUrls, formatBytes, formatFullDate, oneLine, senderLabel } from "../mailUtils";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { Icon } from "./Icon";
 import { SenderAvatar } from "./SenderAvatar";
@@ -26,7 +26,7 @@ type MessageReaderProps = {
 };
 
 function messageSender(message: MessageDetail): string {
-  return message.direction === "outbound" ? "You" : senderLabel(message);
+  return message.direction === "outbound" ? "You" : oneLine(senderLabel(message));
 }
 
 function messageSecondary(message: MessageDetail): string {
@@ -263,17 +263,14 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
         {accountId.startsWith("native:") && message.direction === "inbound" && !message.isDeleted && !message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: true }, true)}><Icon name="junk" size={16}/><span className="reader-action-label">Junk</span></button>
         ) : null}
-        <button className="unsubscribe-action" type="button" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label">Unsubscribe</span></button>
-        {onBlockSender && message.direction === "inbound" ? (
-          <button className="reader-block-action" type="button" onClick={() => onBlockSender(message.fromAddress)} title={`Block ${message.fromAddress}`}><Icon name="lock" size={16}/><span className="reader-action-label">Block</span></button>
-        ) : null}
+        <button className="unsubscribe-action" type="button" aria-label="Unsubscribe" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label"><span className="label-long">Unsubscribe</span><span className="label-short">Unsub</span></span></button>
         {!message.isDeleted ? (
           <button className="destructive" type="button" onClick={() => onPatch({ isDeleted: true }, true)}><Icon name="trash" size={16}/><span className="reader-action-label">Delete</span></button>
         ) : (
           <button type="button" onClick={() => onPatch({ isDeleted: false }, true)}><Icon name="inbox" size={16}/><span className="reader-action-label">Restore</span></button>
         )}
         {message.isDeleted && canPermanentlyDelete ? (
-          <button className="destructive" type="button" onClick={onPermanentDelete}><Icon name="trash" size={16}/><span className="reader-action-label">Delete forever</span></button>
+          <button className="destructive delete-forever-action" type="button" aria-label="Delete forever" onClick={onPermanentDelete}><Icon name="trash" size={16}/><span className="reader-action-label"><span className="label-long">Delete forever</span><span className="label-short">Del forever</span></span></button>
         ) : null}
       </footer>
 

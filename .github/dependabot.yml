@@ -5,7 +5,7 @@ updates:
   # target-branch values to each new vX.XX branch when it is created.
   - package-ecosystem: "npm"
     directory: "/"
-    target-branch: "v3.27"
+    target-branch: "v3.28"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -15,7 +15,7 @@ updates:
         update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "v3.27"
+    target-branch: "v3.28"
     schedule:
       interval: "weekly"
       day: "monday"

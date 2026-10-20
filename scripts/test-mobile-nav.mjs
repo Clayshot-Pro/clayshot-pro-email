@@ -26,7 +26,8 @@ const toolbar = reader.split('<header className="reader-toolbar">')[1].split("</
 const toolbarButtons = [...toolbar.matchAll(/<button\b/g)].length;
 assert.equal(toolbarButtons, 2, "the reader toolbar keeps only Back and Star; the other actions are in the bottom bar");
 const footer = reader.split('<footer className="reader-reply-bar">')[1].split("</footer>")[0];
-const labels = [...footer.matchAll(/reader-action-label">([^<{]+|\{[^}]+\})</g)].map(match => match[1]);
-assert.deepEqual(labels, ["Reply", "Forward", "Not junk", '{message.isArchived ? "Unarchive" : "Archive"}', "Junk", "Unsubscribe", "Block", "Delete", "Restore", "Delete forever"],
+const labels = [...footer.matchAll(/reader-action-label">(?:<span className="label-long">)?([^<{]+|\{[^}]+\})</g)].map(match => match[1]);
+assert.deepEqual(labels, ["Reply", "Forward", "Not junk", '{message.isArchived ? "Unarchive" : "Archive"}', "Junk", "Unsubscribe", "Delete", "Restore", "Delete forever"],
   "actions run Reply, Forward, Archive (or Not junk), Junk, Unsubscribe, Delete");
+
 console.log("PASS: phone folders drawer, corner compose button and bottom action bar");
