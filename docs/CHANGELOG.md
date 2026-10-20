@@ -35,6 +35,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.26` | Appearance is cached on the device, so themes, accents and icons no longer flash while the app starts or switches mailbox |
 | `v3.27` | Phones: folders in a drawer from the left instead of a bottom tab bar, New message in the bottom-right corner, and an open message's actions along the bottom edge |
 | `v3.28` | Desktop: equal-width message actions in order, with short labels (Unsub) when a word does not fit; list and message take turns in windows under 1280px; nothing runs off the bottom of short windows; aligned pane headers; sender names on one line |
+| `v3.29` | Admin panel normalized (one button size, themed dropdowns, green set-up chips, a steady chevron); attachments open in the system viewer and never replace the app; a solid status-bar strip for iOS 26 Safari |
 
 ## Decisions applied in v3.05
 
@@ -239,4 +240,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Desktop windows under about 750px tall no longer push the bottom of the reader and its action bar off screen: the row fits the window and the sidebar scrolls instead.
 - The list's tab row (or the Drafts label) and the reader's title bar are both 61px tall, so their bottom borders form one line across the two panes (they were 12px apart).
 - Sender names in the list and the reader heading are shown with non-breaking spaces, so no browser can break a name across lines (Safari on iPad showed "Intern / Insider" on two lines); a long name still ends in "…".
+
+## v3.29: admin panel, attachments, iOS 26 top bar
+
+- **Admin panel:** one stylesheet (`admin-ui.css`, loaded last, scoped to `#root .admin-home`) gives every section the same controls: primary, secondary and danger buttons of one height (36px) and text size (12px); fields and dropdowns of one height (40px) and text size (13px), with themed dropdowns that keep the phone's native picker; theme-coloured checkboxes; one pill for every status, green for anything enabled, active or set up (Passkey enabled, Active, Main, successful activity), red for problems; and one drawn chevron for every expanding row that turns in place (More actions used to swap glyphs and jump). Section labels match the navigation (Mailboxes, Keys, Security, Activity), and "(optional)" sits beside its field name.
+- **Attachments:** the viewer has **Open** (the browser's or the system's own viewer, which has its own Done button in a Home Screen app) next to **Download**, and both open outside the app: in an installed app a plain link replaced the app with the file and left no way back. Tapping outside the file closes the viewer. The server still serves only images and PDFs inline, under a script-free Content-Security-Policy, and every other file as a sandboxed download.
+- **iOS 26 Safari:** Safari blurs whatever sits under its top bar unless a solid, full-width element touches the top edge; a strip in the page colour now fills the status bar area and the gap above the account bar on phones.
 

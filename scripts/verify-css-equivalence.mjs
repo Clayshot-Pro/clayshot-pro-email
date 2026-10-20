@@ -209,7 +209,7 @@ function comparable(decls) {
 // out on both sides; their behaviour is covered by test-email-reader.
 const REDESIGNED = new Set(["src/client/email-html.css"]);
 const oldFiles = cssImports(git("src/client/main.tsx")).filter(f => !REDESIGNED.has(f));
-const AMENDMENTS = new Set(["src/client/layout-fixes.css"]);
+const AMENDMENTS = new Set(["src/client/layout-fixes.css", "src/client/admin-ui.css"]);
 const mainImports = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8"));
 const newFiles = mainImports.filter(f => !AMENDMENTS.has(f) && !REDESIGNED.has(f));
 const originals = new Set(oldFiles);

@@ -40,6 +40,7 @@ const TESTS = [
   "test-unsubscribe-ui",
   "test-mobile-nav",
   "test-desktop-reader",
+  "test-admin-ui",
   "test-reader-action-bar",
   "test-email-reader",
   "test-reader-bulk-delete",
