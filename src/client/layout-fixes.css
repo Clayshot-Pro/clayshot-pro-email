@@ -442,3 +442,14 @@ select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: da
     flex-shrink: 0;
   }
 }
+
+/* v3.28: the list's tab row (or the Drafts label) and the reader's title bar
+   share one height, so their bottom borders form one line across the panes. */
+@media (min-width: 761px) {
+  .mail-filter-tabs,
+  .draft-list-label,
+  .reader-toolbar {
+    height: 61px;
+    min-height: 61px;
+  }
+}

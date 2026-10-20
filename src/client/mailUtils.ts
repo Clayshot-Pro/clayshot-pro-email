@@ -42,6 +42,15 @@ export function senderLabel(message: MessageListItem): string {
   return message.fromName || message.fromAddress;
 }
 
+/**
+ * A name shown on one line: its spaces (and any line or paragraph separators
+ * in it) become non-breaking spaces, so no browser can break it across lines;
+ * a long name still ends in an ellipsis.
+ */
+export function oneLine(text: string): string {
+  return text.trim().replace(/\s+/g, "\u00a0");
+}
+
 export function senderInitial(message: MessageListItem): string {
   return senderLabel(message).trim().slice(0, 1).toUpperCase() || "?";
 }

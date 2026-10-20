@@ -34,7 +34,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.25` | Sign in with a username and a domain picked from a list; one Cloudflare token for deploys and the app |
 | `v3.26` | Appearance is cached on the device, so themes, accents and icons no longer flash while the app starts or switches mailbox |
 | `v3.27` | Phones: folders in a drawer from the left instead of a bottom tab bar, New message in the bottom-right corner, and an open message's actions along the bottom edge |
-| `v3.28` | Desktop: equal-width message actions in order, with short labels (Unsub) when a word does not fit; list and message take turns in windows under 1280px; nothing runs off the bottom of short windows |
+| `v3.28` | Desktop: equal-width message actions in order, with short labels (Unsub) when a word does not fit; list and message take turns in windows under 1280px; nothing runs off the bottom of short windows; aligned pane headers; sender names on one line |
 
 ## Decisions applied in v3.05
 
@@ -237,4 +237,6 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - The message actions are equal-width buttons in one row, in the order Reply, Forward, Archive (or Not junk), Junk, Unsubscribe, Delete (Restore and Delete forever in Trash), on every screen. Each button is a CSS size container: when the word does not fit, Unsubscribe shows as **Unsub** and Delete forever as **Del forever**; in the narrowest desktop windows a button drops its icon before its word is cut. Block left the bar and is in the Unsubscribe dialog, as it already was on phones.
 - Windows from 761 to 1279px wide no longer squeeze the open message between the sidebar and the list (the reader shrank to a sliver and its text broke a word or a letter per line): the list and the open message take turns, with a Back button, and the search bar stays.
 - Desktop windows under about 750px tall no longer push the bottom of the reader and its action bar off screen: the row fits the window and the sidebar scrolls instead.
+- The list's tab row (or the Drafts label) and the reader's title bar are both 61px tall, so their bottom borders form one line across the two panes (they were 12px apart).
+- Sender names in the list and the reader heading are shown with non-breaking spaces, so no browser can break a name across lines (Safari on iPad showed "Intern / Insider" on two lines); a long name still ends in "…".
 
