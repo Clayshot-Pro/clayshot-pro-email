@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useAppearance } from "../appearance";
 
-type IconName = "mail" | "inbox" | "junk" | "star" | "send" | "draft" | "archive" | "trash" | "search" | "compose" | "reply" | "forward" | "back" | "refresh" | "paperclip" | "bell" | "lock" | "more";
+type IconName = "mail" | "inbox" | "junk" | "star" | "send" | "draft" | "archive" | "trash" | "search" | "compose" | "reply" | "forward" | "back" | "refresh" | "paperclip" | "bell" | "lock" | "more" | "menu";
 
 type IconProps = {
   name: IconName;
@@ -27,6 +27,7 @@ const paths: Record<IconName, ReactNode> = {
   bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
   more: <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></>,
+  menu: <path d="M4 7h16M4 12h16M4 17h16"/>,
 };
 
 /** Closed body shapes tinted by the duotone set (open strokes stay as lines). */

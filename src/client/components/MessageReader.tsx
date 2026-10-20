@@ -186,27 +186,6 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
         </div>
         <div className="reader-actions">
           <button className={message.isStarred ? "active-star" : ""} type="button" onClick={() => onPatch({ isStarred: !message.isStarred })} aria-label={message.isStarred ? "Unstar message" : "Star message"}><Icon name="star" size={16}/><span>{message.isStarred ? "Unstar" : "Star"}</span></button>
-          {message.isJunk ? (
-            <button className="mobile-reader-action junk-action" type="button" onClick={() => onPatch({ isJunk: false }, true)} aria-label="Mark as not junk"><Icon name="inbox" size={17}/><span>Not junk</span></button>
-          ) : !message.isDeleted ? (
-            <button className="mobile-reader-action" type="button" onClick={() => onPatch({ isArchived: !message.isArchived }, true)} aria-label={message.isArchived ? "Unarchive message" : "Archive message"}><Icon name="archive" size={17}/><span>{message.isArchived ? "Unarchive" : "Archive"}</span></button>
-          ) : null}
-          {accountId.startsWith("native:") && message.direction === "inbound" && !message.isDeleted && !message.isJunk ? (
-            <button className="mobile-reader-action" type="button" onClick={() => onPatch({ isJunk: true }, true)} aria-label="Mark as junk"><Icon name="junk" size={17}/><span>Junk</span></button>
-          ) : null}
-          <button className="mobile-reader-action unsubscribe-mobile-action" type="button" onClick={() => setUnsubscribeOpen(true)} aria-label="Unsubscribe options" title="Unsubscribe options">
-            <Icon name="mail" size={17}/><span>Unsubscribe</span>
-          </button>
-          <button className="mobile-reader-action" type="button" onClick={onReply} aria-label="Reply to message"><Icon name="reply" size={17}/><span>Reply</span></button>
-          {!message.isDeleted ? (
-            <button className="mobile-reader-action destructive" type="button" onClick={() => onPatch({ isDeleted: true }, true)} aria-label="Delete message"><Icon name="trash" size={17}/><span>Delete</span></button>
-          ) : (
-            <button className="mobile-reader-action" type="button" onClick={() => onPatch({ isDeleted: false }, true)} aria-label="Restore message"><Icon name="inbox" size={17}/><span>Restore</span></button>
-              
-          )}
-          {message.isDeleted && canPermanentlyDelete ? (
-            <button className="mobile-reader-action destructive" type="button" onClick={onPermanentDelete} aria-label="Permanently delete message"><Icon name="trash" size={17}/><span>Delete forever</span></button>
-          ) : null}
         </div>
       </header>
 
@@ -276,7 +255,6 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
       <footer className="reader-reply-bar">
         <button className="reply-primary" type="button" onClick={onReply}><Icon name="reply" size={17}/><span className="reader-action-label">Reply</span></button>
         <button type="button" onClick={onForward}><Icon name="forward" size={16}/><span className="reader-action-label">Forward</span></button>
-        <button className="unsubscribe-action" type="button" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label">Unsubscribe</span></button>
         {message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: false }, true)}><Icon name="inbox" size={16}/><span className="reader-action-label">Not junk</span></button>
         ) : !message.isDeleted ? (
@@ -285,6 +263,7 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
         {accountId.startsWith("native:") && message.direction === "inbound" && !message.isDeleted && !message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: true }, true)}><Icon name="junk" size={16}/><span className="reader-action-label">Junk</span></button>
         ) : null}
+        <button className="unsubscribe-action" type="button" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label">Unsubscribe</span></button>
         {onBlockSender && message.direction === "inbound" ? (
           <button className="reader-block-action" type="button" onClick={() => onBlockSender(message.fromAddress)} title={`Block ${message.fromAddress}`}><Icon name="lock" size={16}/><span className="reader-action-label">Block</span></button>
         ) : null}
