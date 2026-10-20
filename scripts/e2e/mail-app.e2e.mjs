@@ -696,9 +696,8 @@ export async function run() {
           await page.locator(".reader-reply-bar").waitFor();
           const bar = await box(".reader-reply-bar");
           assert.ok(Math.abs(height - (bar.y + bar.height)) <= 1, `the action bar reaches the bottom edge (${JSON.stringify(bar)})`);
-          for (const label of ["Reply", "Forward", "Unsubscribe", "Delete"]) {
-            assert.ok(await page.locator(".reader-reply-bar button", { hasText: label }).first().isVisible(), `${label} is in the bottom bar`);
-          }
+          const visibleLabels = await page.locator(".reader-reply-bar button:visible .reader-action-label").allInnerTexts();
+          assert.deepEqual(visibleLabels, ["Reply", "Forward", "Archive", "Junk", "Unsubscribe", "Delete"], "the bottom bar's actions, in order");
           assert.equal(await page.locator(".reader-actions button").count(), 1, "the top bar keeps only Star");
           assert.equal(await page.locator(".mobile-compose-fab").isVisible(), false, "compose hides while a message is open");
           await page.locator(".reader-back").click();

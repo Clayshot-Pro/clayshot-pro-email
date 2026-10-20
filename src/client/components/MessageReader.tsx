@@ -255,7 +255,6 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
       <footer className="reader-reply-bar">
         <button className="reply-primary" type="button" onClick={onReply}><Icon name="reply" size={17}/><span className="reader-action-label">Reply</span></button>
         <button type="button" onClick={onForward}><Icon name="forward" size={16}/><span className="reader-action-label">Forward</span></button>
-        <button className="unsubscribe-action" type="button" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label">Unsubscribe</span></button>
         {message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: false }, true)}><Icon name="inbox" size={16}/><span className="reader-action-label">Not junk</span></button>
         ) : !message.isDeleted ? (
@@ -264,6 +263,7 @@ export function MessageReader({ message, thread, folderLabel, loading = false, a
         {accountId.startsWith("native:") && message.direction === "inbound" && !message.isDeleted && !message.isJunk ? (
           <button type="button" onClick={() => onPatch({ isJunk: true }, true)}><Icon name="junk" size={16}/><span className="reader-action-label">Junk</span></button>
         ) : null}
+        <button className="unsubscribe-action" type="button" onClick={() => setUnsubscribeOpen(true)}><Icon name="mail" size={16}/><span className="reader-action-label">Unsubscribe</span></button>
         {onBlockSender && message.direction === "inbound" ? (
           <button className="reader-block-action" type="button" onClick={() => onBlockSender(message.fromAddress)} title={`Block ${message.fromAddress}`}><Icon name="lock" size={16}/><span className="reader-action-label">Block</span></button>
         ) : null}
