@@ -26,7 +26,16 @@ const toolbar = reader.split('<header className="reader-toolbar">')[1].split("</
 const toolbarButtons = [...toolbar.matchAll(/<button\b/g)].length;
 assert.equal(toolbarButtons, 2, "the reader toolbar keeps only Back and Star; the other actions are in the bottom bar");
 const footer = reader.split('<footer className="reader-reply-bar">')[1].split("</footer>")[0];
-const labels = [...footer.matchAll(/reader-action-label">([^<{]+|\{[^}]+\})</g)].map(match => match[1]);
-assert.deepEqual(labels, ["Reply", "Forward", "Not junk", '{message.isArchived ? "Unarchive" : "Archive"}', "Junk", "Unsubscribe", "Block", "Delete", "Restore", "Delete forever"],
+const labels = [...footer.matchAll(/reader-action-label">(?:<span className="label-long">)?([^<{]+|\{[^}]+\})</g)].map(match => match[1]);
+assert.deepEqual(labels, ["Reply", "Forward", "Not junk", '{message.isArchived ? "Unarchive" : "Archive"}', "Junk", "Unsubscribe", "Delete", "Restore", "Delete forever"],
   "actions run Reply, Forward, Archive (or Not junk), Junk, Unsubscribe, Delete");
+
+// v3.28 desktop: equal-width buttons, short labels when a word does not fit,
+// list and reader taking turns below 1280px, and a window-height row.
+assert.match(fixes, /\.reader-reply-bar button \{\s*min-width: 0;\s*justify-content: center;\s*container: reader-action \/ inline-size;/, "each action button is a size container");
+assert.match(fixes, /@container reader-action \(max-width: 84px\) \{\s*\.unsubscribe-action \.label-long \{ display: none; \}\s*\.unsubscribe-action \.label-short \{ display: inline; \}/, "Unsubscribe shortens to Unsub when it does not fit");
+assert.match(fixes, /grid-auto-columns: minmax\(0, 132px\);/, "desktop actions share equal columns");
+assert.match(fixes, /@media \(min-width: 761px\) and \(max-width: 1279px\) \{\s*\.mail-workspace \{\s*grid-template-columns: minmax\(0, 1fr\);/, "medium windows show the list or the reader");
+assert.match(fixes, /\.app-shell\.message-open \.mail-list-pane > :not\(\.desktop-topbar\) \{\s*display: none;/, "the search bar stays while the list is hidden");
+assert.match(fixes, /\.app-shell \{\s*grid-template-rows: minmax\(0, 1fr\);/, "the desktop row fits the window height");
 console.log("PASS: phone folders drawer, corner compose button and bottom action bar");

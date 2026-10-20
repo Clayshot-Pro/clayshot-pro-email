@@ -72,14 +72,6 @@
   flex: 0 0 auto;
 }
 
-/* Block sender: a desktop footer action; on phones the footer stays as it
-   was and Block lives in the Unsubscribe dialog. */
-@media (max-width: 760px) {
-  .reader-reply-bar .reader-block-action {
-    display: none;
-  }
-}
-
 /* iOS 26 installed web app (WebKit bug 301108): with the black-translucent
    status bar and viewport-fit=cover the viewport is shorter than the screen
    by the status bar height, so the tab bar stopped above an empty band. A
@@ -349,5 +341,104 @@ select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: da
   .mobile-drawer.open,
   .mobile-drawer-backdrop {
     transition: none;
+  }
+}
+
+/* v3.28 message actions: one row of equal-width buttons in the order Reply,
+   Forward, Archive, Junk, Unsubscribe, Delete (Block is in the Unsubscribe
+   dialog). Each button is a size container, so a label that does not fit
+   switches to its short form (Unsubscribe → Unsub). */
+.reader-reply-bar button {
+  min-width: 0;
+  justify-content: center;
+  container: reader-action / inline-size;
+}
+.reader-reply-bar .reader-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-reply-bar .label-short {
+  display: none;
+}
+@container reader-action (max-width: 84px) {
+  .unsubscribe-action .label-long { display: none; }
+  .unsubscribe-action .label-short { display: inline; }
+}
+@container reader-action (max-width: 100px) {
+  .delete-forever-action .label-long { display: none; }
+  .delete-forever-action .label-short { display: inline; }
+}
+@media (min-width: 761px) {
+  .reader-reply-bar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 132px);
+    justify-content: start;
+  }
+  .reader-reply-bar button {
+    padding-inline: 8px;
+  }
+  /* Too narrow for icon and word side by side: the word alone. */
+  @container reader-action (max-width: 60px) {
+    .icon { display: none; }
+  }
+  @container reader-action (max-width: 80px) {
+    .delete-forever-action .icon { display: none; }
+  }
+}
+
+/* v3.28 medium windows (761-1279px): the folder sidebar, the list and the
+   reader do not fit side by side (the reader shrank to a sliver and its text
+   broke a word or a letter per line), so the list and the open message take
+   turns, as on phones, with a Back button. */
+@media (min-width: 761px) and (max-width: 1279px) {
+  .mail-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reader-pane.reader-empty {
+    display: none;
+  }
+  /* The list pane also holds the (fixed) search bar, which stays. */
+  .app-shell.message-open .mail-list-pane {
+    display: contents;
+  }
+  .app-shell.message-open .mail-list-pane > :not(.desktop-topbar) {
+    display: none;
+  }
+  .reader-back {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 2px;
+    border: 0;
+    background: transparent;
+    color: var(--tone-accent-345);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .reader-title-block {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* v3.28 short desktop windows (under about 750px tall): the sidebar's content
+   made the row taller than the window, pushing the bottom of the reader and
+   its action bar off screen. The row now fits the window and the sidebar
+   scrolls instead. */
+@media (min-width: 761px) {
+  .app-shell {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .desktop-sidebar {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .desktop-sidebar > :not(.sidebar-spacer) {
+    flex-shrink: 0;
   }
 }
