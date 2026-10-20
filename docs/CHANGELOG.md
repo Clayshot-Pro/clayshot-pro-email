@@ -32,6 +32,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.23` | Three-line new-mail alerts: sender, subject, preview |
 | `v3.24` | Repository cleanup: unused routes and scripts removed, shared Worker helpers, bug and security fixes, dependency updates, reorganised docs |
 | `v3.25` | Sign in with a username and a domain picked from a list; one Cloudflare token for deploys and the app |
+| `v3.26` | Appearance is cached on the device, so themes, accents and icons no longer flash while the app starts or switches mailbox |
 
 ## Decisions applied in v3.05
 
@@ -214,3 +215,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 - The sign-in form and Add inbox take a username, with the domain picked from a list on the right of the same field of the instance's active domains (main domain first; one domain is shown without a list). The last domain used is remembered on that browser, and a full address still works. `GET /api/instance` lists the active domains for it.
 - One Cloudflare API token for everything: the README and the app list the same nine permissions, and **Create a Cloudflare token** now pre-selects the deploy permissions too (D1, Workers R2 Storage, Account Settings) as well as the domain ones, leaving only Email Sending and Email Routing Rules to add by hand. A test keeps the list, the link, the README and the Worker's permission messages in step.
+
+## v3.26: no appearance flash
+
+- Each mailbox's look (theme, accent, density, text size, icon set) is kept in this browser, so opening or switching to a mailbox shows it before the server answers; the server's answer still updates it.
+- Until the app knows whether it shows a mailbox or a signed-out screen, it keeps the look applied at start-up instead of briefly switching to the instance defaults. Sign-in, setup and the admin panel ask for the instance's look themselves.
+- The public instance details (name, accent, default theme and icon set, logo) are cached too, so the first screen does not wait for them.
+- An end-to-end test records every theme and accent shown while the app reloads and expects only the mailbox's own.
