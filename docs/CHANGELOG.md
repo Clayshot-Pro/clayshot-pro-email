@@ -228,4 +228,5 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 - The tab bar along the bottom of the phone layout is gone. The menu button at the left of the account bar opens the folders in a drawer that slides in from the left, with the unread and draft counts; choosing a folder, tapping outside or pressing Escape closes it. A dot on the menu button shows when the Inbox has unread mail.
 - New message is a round button in the bottom-right corner.
-- With a message open, its actions (Reply, Forward, Unsubscribe, Archive or Not junk, Junk, Delete or Restore, Delete forever) sit in one row of icon-over-label buttons along the bottom edge, above the home indicator, where the tabs were. The reader's top bar keeps only Back and Star; the duplicate action icons it had on phones are gone. Desktop is unchanged.
+- With a message open, its actions sit in one row of icon-over-label buttons along the bottom edge, above the home indicator, where the tabs were. The reader's top bar keeps only Back and Star; the duplicate action icons it had on phones are gone.
+- The message actions run Reply, Forward, Archive (or Not junk), Junk, Unsubscribe, Delete (or Restore, then Delete forever in Trash), on phones and in the desktop footer alike (Block stays desktop-only, after Unsubscribe). Otherwise desktop is unchanged.
