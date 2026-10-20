@@ -284,6 +284,41 @@ export async function run() {
         await modal.waitFor({ state: "detached", timeout: 15_000 });
       }],
 
+      ["a reload shows the mailbox's own look from the first paint (no flash)", async () => {
+        const { page } = alice;
+        state.page = page;
+        // Alice chooses the light theme and a custom accent; one load caches them.
+        const status = await page.evaluate(async id => (await fetch(`/api/preferences?accountId=${encodeURIComponent(id)}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme: "light", accent: "#0b7a75" }),
+        })).status, state.aliceId);
+        assert.equal(status, 200);
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
+        await page.waitForFunction(() => document.documentElement.dataset.theme === "light", null, { timeout: 15_000 });
+        // Record every theme and accent the page shows while it starts again.
+        await page.addInitScript(() => {
+          const seen = window.__appearanceSeen = [];
+          const record = () => {
+            const root = document.documentElement;
+            if (!root?.hasAttribute("data-theme")) return;
+            const value = `${root.getAttribute("data-theme")}|${root.style.getPropertyValue("--user-accent")}`;
+            if (seen[seen.length - 1] !== value) seen.push(value);
+          };
+          // The page's <html> does not exist yet when this runs: watch the whole document.
+          new MutationObserver(record).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-theme", "style"] });
+        });
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
+        await page.waitForLoadState("networkidle");
+        assert.deepEqual(await page.evaluate(() => window.__appearanceSeen), ["light|#0b7a75"], "the cached look is the only one shown");
+        // Back to the defaults for the steps that follow.
+        await page.evaluate(async id => fetch(`/api/preferences?accountId=${encodeURIComponent(id)}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ theme: null, accent: null }),
+        }), state.aliceId);
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
+      }],
+
       ["attachments download as attachments with safe headers", async () => {
         const aliceApi = api(alice.context, worker.origin);
         const list = await aliceApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox`);

@@ -21,6 +21,18 @@ type InstanceInfo = {
   loaded: boolean;
 };
 
+const CACHE_KEY = "ltm:instance";
+
+/** The last /api/instance answer on this browser: brand, accent, theme and logo show before it answers again. */
+function cachedInstance(): Partial<InstanceInfo> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null");
+    return parsed && typeof parsed === "object" ? parsed as Partial<InstanceInfo> : {};
+  } catch {
+    return {};
+  }
+}
+
 function initialInstance(): InstanceInfo {
   // The Worker rewrites <title> and the app title meta before the bundle loads,
   // so the brand renders correctly before /api/instance answers.
@@ -30,6 +42,7 @@ function initialInstance(): InstanceInfo {
     brandShortName: shortName || document.title || "Mail",
     primaryDomain: "",
     features: { gmail: true },
+    ...cachedInstance(),
     loaded: false,
   };
 }
@@ -46,6 +59,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       .then(next => {
         if (!next || cancelled) return;
         setInstance(current => ({ ...current, ...next, loaded: true }));
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch { /* storage may be blocked */ }
         if (next.brandName) document.title = next.brandName;
       })
       .catch(() => undefined);
