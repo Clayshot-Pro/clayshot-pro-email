@@ -35,5 +35,8 @@ assert.match(preview, /onClick=\{event => \{ if \(event\.target === event\.curre
 const nav = read("src/client/components/MobileNav.tsx");
 const fixes = read("src/client/layout-fixes.css");
 assert.match(nav, /<div className="mobile-status-backdrop" aria-hidden="true"\/>/);
-assert.match(fixes, /\.mobile-status-backdrop \{\s*display: block;\s*position: fixed;\s*top: 0;\s*left: 0;\s*right: 0;/, "a full-width strip touches the top edge");
+assert.match(fixes, /\.mobile-status-backdrop \{\s*display: block;\s*position: fixed;\s*top: 0;\s*left: 0;\s*right: 0;\s*z-index: 44;\s*height: calc\(env\(safe-area-inset-top\) \+ 12px\);\s*background-color: var\(--tone-bg-945\);/,
+  "a full-width, solid strip touches the top edge and stays taller than WebKit's 10px minimum even without a safe-area inset");
+assert.match(fixes, /html,\s*body \{\s*background-color: var\(--tone-bg-953\);/, "the root has a plain colour for Safari to fall back on");
+assert.doesNotMatch(fixes.slice(fixes.indexOf(".mobile-status-backdrop {\n    display: block;")).split("}")[0], /backdrop-filter/, "no filter on the strip");
 console.log("PASS: admin controls, passkey chip, chevron, attachment viewer and iOS status-bar strip");

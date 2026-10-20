@@ -36,6 +36,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.27` | Phones: folders in a drawer from the left instead of a bottom tab bar, New message in the bottom-right corner, and an open message's actions along the bottom edge |
 | `v3.28` | Desktop: equal-width message actions in order, with short labels (Unsub) when a word does not fit; list and message take turns in windows under 1280px; nothing runs off the bottom of short windows; aligned pane headers; sender names on one line |
 | `v3.29` | Admin panel normalized (one button size, themed dropdowns, green set-up chips, a steady chevron); attachments open in the system viewer and never replace the app; a solid status-bar strip for iOS 26 Safari |
+| `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
 
 ## Decisions applied in v3.05
 
@@ -246,4 +247,9 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Admin panel:** one stylesheet (`admin-ui.css`, loaded last, scoped to `#root .admin-home`) gives every section the same controls: primary, secondary and danger buttons of one height (36px) and text size (12px); fields and dropdowns of one height (40px) and text size (13px), with themed dropdowns that keep the phone's native picker; theme-coloured checkboxes; one pill for every status, green for anything enabled, active or set up (Passkey enabled, Active, Main, successful activity), red for problems; and one drawn chevron for every expanding row that turns in place (More actions used to swap glyphs and jump). Section labels match the navigation (Mailboxes, Keys, Security, Activity), and "(optional)" sits beside its field name.
 - **Attachments:** the viewer has **Open** (the browser's or the system's own viewer, which has its own Done button in a Home Screen app) next to **Download**, and both open outside the app: in an installed app a plain link replaced the app with the file and left no way back. Tapping outside the file closes the viewer. The server still serves only images and PDFs inline, under a script-free Content-Security-Policy, and every other file as a sandboxed download.
 - **iOS 26 Safari:** Safari blurs whatever sits under its top bar unless a solid, full-width element touches the top edge; a strip in the page colour now fills the status bar area and the gap above the account bar on phones.
+
+## v3.30: iOS 26 top edge, second pass
+
+- v3.29's strip was 8px tall in a Safari tab (the top safe-area inset is 0 there) and 0px with a message open. WebKit only takes the colour of a box taller than 10px (it hit-tests 4px below the middle of the top edge, walks up to a fixed or sticky box at least 90% of the viewport wide, and reads its plain `background-color`; a `backdrop-filter` on the way keeps the blur), so Safari still blurred the top. The strip is now the status-bar area plus 12px in the list and the reader (the reader starts 6px lower, so the strip covers only its toolbar's top padding), and `html` and `body` have a plain background colour for Safari to fall back on.
+- wrangler 4.151.1 (Dependabot, merged through PR #210): its refreshed lockfile includes the Linux workerd binary, and the build passes.
 

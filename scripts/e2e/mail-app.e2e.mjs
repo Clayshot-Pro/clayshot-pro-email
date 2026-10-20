@@ -751,6 +751,40 @@ export async function run() {
         }
       }],
 
+      ["iOS 26: a solid, full-width strip over 10px tall sits at the top edge in the list and the reader", async () => {
+        const { page } = alice;
+        const strip = () => page.evaluate(() => {
+          const el = document.querySelector(".mobile-status-backdrop");
+          const r = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          const alpha = (style.backgroundColor.match(/rgba?\(([^)]+)\)/)?.[1].split(",")[3] ?? "1").trim();
+          return { top: r.top, height: r.height, widthShare: r.width / innerWidth, position: style.position, alpha: Number(alpha), filter: style.backdropFilter };
+        });
+        try {
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.reload();
+          await page.locator(".mail-row").first().waitFor();
+          for (const mode of ["list", "reader"]) {
+            if (mode === "reader") {
+              await page.locator(".mail-row").first().click();
+              await page.locator(".reader-reply-bar").waitFor();
+            }
+            const s = await strip();
+            assert.equal(s.top, 0, `${mode}: the strip touches the top edge`);
+            assert.ok(s.height > 10, `${mode}: taller than WebKit's 10px minimum (${s.height})`);
+            assert.ok(s.widthShare >= 0.9, `${mode}: at least 90% of the width`);
+            assert.equal(s.position, "fixed");
+            assert.equal(s.alpha, 1, `${mode}: a solid colour`);
+            assert.ok(!s.filter || s.filter === "none", `${mode}: no backdrop filter`);
+          }
+          const toolbarTop = await page.evaluate(() => document.querySelector(".reader-back").getBoundingClientRect().top);
+          assert.ok(toolbarTop >= (await strip()).height, "the strip never covers the reader's Back button");
+          await page.locator(".reader-back").click();
+        } finally {
+          await page.setViewportSize({ width: 1280, height: 720 });
+        }
+      }],
+
       ["the administrator opens on All inboxes, with every mailbox's mail", async () => {
         // A new tab: the open mailbox is remembered per tab, a fresh start opens All inboxes.
         const page = await admin.context.newPage();

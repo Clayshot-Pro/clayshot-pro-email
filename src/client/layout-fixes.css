@@ -492,14 +492,24 @@ select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: da
   }
 }
 
-/* v3.29 iOS 26 Safari blurs whatever sits under its top bar unless a solid,
-   full-width element touches the top edge; the account bar floats 8px below
-   the status bar and is translucent. This strip fills the status bar area
-   and that gap with the page colour, so Safari shows a solid top instead. */
+/* iOS 26 Safari blurs whatever sits under its top bar unless it finds a
+   solid colour there: WebKit hit-tests a point 4px below the middle of the
+   top edge, walks up to a position: fixed or sticky box at least 90% of the
+   viewport wide, and takes the first plain background-color on a box taller
+   than 10px; a backdrop-filter on that path keeps the blur. The account bar
+   floats below the edge and is translucent, so this strip (full width, solid,
+   no filter) fills the status-bar area and 12px below it. In a Safari tab the
+   top safe-area inset is 0, so the 12px also keeps it over WebKit's 10px
+   minimum (v3.29's 8px strip fell under it). With a message open the reader
+   starts 6px lower, so the strip covers only the toolbar's top padding. */
 .mobile-status-backdrop {
   display: none;
 }
 @media (max-width: 760px) {
+  html,
+  body {
+    background-color: var(--tone-bg-953);
+  }
   .mobile-status-backdrop {
     display: block;
     position: fixed;
@@ -507,11 +517,11 @@ select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: da
     left: 0;
     right: 0;
     z-index: 44;
-    height: calc(env(safe-area-inset-top) + 8px);
-    background: var(--tone-bg-945);
+    height: calc(env(safe-area-inset-top) + 12px);
+    background-color: var(--tone-bg-945);
     pointer-events: none;
   }
-  .app-shell.message-open .mobile-status-backdrop {
-    height: env(safe-area-inset-top);
+  .app-shell.message-open .reader-pane {
+    padding-top: calc(env(safe-area-inset-top) + 6px);
   }
 }
