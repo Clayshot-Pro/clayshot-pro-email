@@ -4,7 +4,7 @@ import { buildSafeEmailDocument, remoteImageCount } from "../emailHtml";
 import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 import { applyNativeColors, classifyEmail, emailBaseStyles, fitEmailWidth, parseColor, type EmailMode, type EmailTheme } from "../emailTheme";
 import type { MessageDetail } from "../mailTypes";
-import { attachmentUrls, formatBytes, formatFullDate, senderLabel } from "../mailUtils";
+import { attachmentUrls, formatBytes, formatFullDate, oneLine, senderLabel } from "../mailUtils";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { Icon } from "./Icon";
 import { SenderAvatar } from "./SenderAvatar";
@@ -26,7 +26,7 @@ type MessageReaderProps = {
 };
 
 function messageSender(message: MessageDetail): string {
-  return message.direction === "outbound" ? "You" : senderLabel(message);
+  return message.direction === "outbound" ? "You" : oneLine(senderLabel(message));
 }
 
 function messageSecondary(message: MessageDetail): string {

@@ -730,6 +730,8 @@ export async function run() {
           assert.equal(state.widths.length, 1, `equal widths (${state.widths})`);
           assert.ok(!state.cut, "no label is cut off");
           assert.ok(state.bottom <= state.height, `the bar is inside the window (${state.bottom} > ${state.height})`);
+          const borders = await page.evaluate(() => [".mail-filter-tabs", ".reader-toolbar"].map(s => Math.round(document.querySelector(s).getBoundingClientRect().bottom)));
+          assert.equal(borders[0], borders[1], `the list's tab row and the reader's title bar end on one line (${borders})`);
 
           await page.setViewportSize({ width: 1600, height: 900 });
           state = await bar();
