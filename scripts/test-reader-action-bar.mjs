@@ -32,7 +32,7 @@ console.log("PASS: Reader toolbar uses dark mobile theme and optically centered 
 // actions, and the iOS 26 installed-app viewport reaches the screen bottom.
 const fixes = readFileSync(new URL("../src/client/layout-fixes.css", import.meta.url), "utf8");
 assert.match(fixes, /@media \(display-mode: standalone\) \{\s*html \{\s*min-height: min\(100lvh, calc\(100% \+ env\(safe-area-inset-top\)\)\);/,
-  "installed iOS app: the root is screen-tall so the tab bar reaches the bottom edge (WebKit 301108)");
+  "installed iOS app: the root is screen-tall so the bottom bar reaches the bottom edge (WebKit 301108)");
 assert.match(fixes, /\.app-shell\.message-open \.reader-toolbar \{\s*min-height: 0;\s*padding-top: 6px;/,
   "the open reader's toolbar must not add the top safe area again");
 assert.match(fixes, /\.app-shell\.message-open \.reader-reply-bar \{\s*grid-template-columns: none;\s*grid-auto-flow: column;/,

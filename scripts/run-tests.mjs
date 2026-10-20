@@ -38,6 +38,7 @@ const TESTS = [
   "test-unsubscribe-and-senders",
   "test-compose-sender",
   "test-unsubscribe-ui",
+  "test-mobile-nav",
   "test-reader-action-bar",
   "test-email-reader",
   "test-reader-bulk-delete",
