@@ -185,7 +185,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
     <section className="settings-section admin-mailbox-panel" id="admin-mailboxes" aria-label="Native mailbox management">
       <div className="admin-section-heading">
         <div>
-          <p className="admin-section-kicker">Domain management</p>
+          <p className="admin-section-kicker">Mailboxes</p>
           <h2>Mailboxes</h2>
           <p>Create and manage addresses on {domains.length > 1 ? `${domains.length} domains` : primaryDomain || "your domain"}. Each mailbox has its own login and storage.</p>
         </div>
@@ -221,7 +221,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
             </select>
           </label>
           <label htmlFor="new-mailbox-name">
-            Display name <span className="admin-field-optional">(optional)</span>
+            <span>Display name <span className="admin-field-optional">(optional)</span></span>
             <input id="new-mailbox-name" maxLength={80} value={displayName} onChange={e => setDisplayName(e.target.value)}
               placeholder="Personal" className="mailbox-entry-input" />
           </label>
