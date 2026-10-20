@@ -34,7 +34,9 @@ assert.match(dialog, /Delete permanently/);
 assert.match(dialog, /onConfirm/);
 assert.match(reader, /className="unsubscribe-action"/);
 assert.match(css, /\.app-shell\.message-open \.reader-pane:not\(\.reader-empty\)/);
-assert.match(css, /bottom: calc\(65px \+ env\(safe-area-inset-bottom\)\)/);
+// v3.27: no tab bar under the reader, so the open reader reaches the bottom edge.
+const fixes = readFileSync(new URL("../src/client/layout-fixes.css", import.meta.url), "utf8");
+assert.match(fixes, /\.app-shell\.message-open \.reader-pane:not\(\.reader-empty\) \{\s*bottom: 0;/);
 assert.match(css, /height: auto;/);
 assert.match(css, /\.app-shell\.message-open \.reader-scroll/);
 assert.match(css, /flex: 1 1 0;/);

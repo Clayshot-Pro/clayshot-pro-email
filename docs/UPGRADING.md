@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. Migrations never remove columns or tables that older versions read, so an older v3 version keeps working on a newer database (some migrations also normalise stored data). What changed in each version: [CHANGELOG.md](./CHANGELOG.md).
 
+## v3.27
+
+- Phone layout only (folders drawer, corner compose button, bottom action bar). Nothing to do.
+
 ## v3.26
 
 - Appearance is cached on each device; the first load after the update fills the cache. Nothing to do.

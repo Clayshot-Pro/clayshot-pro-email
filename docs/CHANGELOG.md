@@ -33,6 +33,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.24` | Repository cleanup: unused routes and scripts removed, shared Worker helpers, bug and security fixes, dependency updates, reorganised docs |
 | `v3.25` | Sign in with a username and a domain picked from a list; one Cloudflare token for deploys and the app |
 | `v3.26` | Appearance is cached on the device, so themes, accents and icons no longer flash while the app starts or switches mailbox |
+| `v3.27` | Phones: folders in a drawer from the left instead of a bottom tab bar, New message in the bottom-right corner, and an open message's actions along the bottom edge |
 
 ## Decisions applied in v3.05
 
@@ -222,3 +223,9 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - Until the app knows whether it shows a mailbox or a signed-out screen, it keeps the look applied at start-up instead of briefly switching to the instance defaults. Sign-in, setup and the admin panel ask for the instance's look themselves.
 - The public instance details (name, accent, default theme and icon set, logo) are cached too, so the first screen does not wait for them.
 - An end-to-end test records every theme and accent shown while the app reloads and expects only the mailbox's own.
+
+## v3.27: phone navigation drawer
+
+- The tab bar along the bottom of the phone layout is gone. The menu button at the left of the account bar opens the folders in a drawer that slides in from the left, with the unread and draft counts; choosing a folder, tapping outside or pressing Escape closes it. A dot on the menu button shows when the Inbox has unread mail.
+- New message is a round button in the bottom-right corner.
+- With a message open, its actions (Reply, Forward, Unsubscribe, Archive or Not junk, Junk, Delete or Restore, Delete forever) sit in one row of icon-over-label buttons along the bottom edge, above the home indicator, where the tabs were. The reader's top bar keeps only Back and Star; the duplicate action icons it had on phones are gone. Desktop is unchanged.

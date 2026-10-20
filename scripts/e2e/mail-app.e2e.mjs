@@ -661,6 +661,53 @@ export async function run() {
         }
       }],
 
+      ["phones: folders in a left drawer, compose bottom-right, actions on the bottom edge", async () => {
+        const { page } = alice;
+        const [width, height] = [390, 844];
+        const box = selector => page.locator(selector).first().boundingBox();
+        try {
+          await page.setViewportSize({ width, height });
+          await page.reload();
+          await page.locator(".mail-row").first().waitFor();
+          assert.equal(await page.locator(".mobile-nav").count(), 0, "no bottom tab bar");
+          assert.equal(await page.locator(".mobile-drawer").isVisible(), false, "the drawer starts closed");
+
+          const fab = await box(".mobile-compose-fab");
+          assert.ok(Math.abs(height - (fab.y + fab.height) - 18) <= 2, `compose sits 18px above the bottom (${JSON.stringify(fab)})`);
+          assert.ok(Math.abs(width - (fab.x + fab.width) - 17) <= 2, "compose sits on the right");
+
+          await page.getByRole("button", { name: "Open folders" }).click();
+          const drawer = page.locator(".mobile-drawer");
+          await drawer.waitFor({ state: "visible" });
+          await page.waitForFunction(() => document.querySelector(".mobile-drawer").getBoundingClientRect().left === 0);
+          await drawer.locator(".nav-item", { hasText: "Archive" }).click();
+          await page.locator(".mail-list-header h1", { hasText: "Archive" }).waitFor();
+          await drawer.waitFor({ state: "hidden" });
+
+          await page.getByRole("button", { name: "Open folders" }).click();
+          await page.keyboard.press("Escape");
+          await drawer.waitFor({ state: "hidden" });
+          await page.getByRole("button", { name: "Open folders" }).click();
+          await drawer.locator(".nav-item", { hasText: "Inbox" }).click();
+          await page.locator(".mail-list-header h1", { hasText: "Inbox" }).waitFor();
+          await drawer.waitFor({ state: "hidden" });
+
+          await page.locator(".mail-row").first().click();
+          await page.locator(".reader-reply-bar").waitFor();
+          const bar = await box(".reader-reply-bar");
+          assert.ok(Math.abs(height - (bar.y + bar.height)) <= 1, `the action bar reaches the bottom edge (${JSON.stringify(bar)})`);
+          for (const label of ["Reply", "Forward", "Unsubscribe", "Delete"]) {
+            assert.ok(await page.locator(".reader-reply-bar button", { hasText: label }).first().isVisible(), `${label} is in the bottom bar`);
+          }
+          assert.equal(await page.locator(".reader-actions button").count(), 1, "the top bar keeps only Star");
+          assert.equal(await page.locator(".mobile-compose-fab").isVisible(), false, "compose hides while a message is open");
+          await page.locator(".reader-back").click();
+          await page.locator(".mail-row").first().waitFor();
+        } finally {
+          await page.setViewportSize({ width: 1280, height: 720 });
+        }
+      }],
+
       ["the administrator opens on All inboxes, with every mailbox's mail", async () => {
         // A new tab: the open mailbox is remembered per tab, a fresh start opens All inboxes.
         const page = await admin.context.newPage();

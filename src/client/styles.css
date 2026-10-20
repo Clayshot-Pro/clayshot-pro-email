@@ -111,7 +111,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .send-control:disabled { opacity: .55; cursor: progress; }
 
 .toast-error { position: fixed; right: 18px; bottom: 18px; z-index: 100; max-width: min(420px, calc(100vw - 36px)); padding: 11px 13px; border: 1px solid var(--tone-danger-border-155); border-radius: 11px; font-size: 11px; }
-.mobile-nav, .mobile-compose-fab { display: none; }
+.mobile-compose-fab { display: none; }
 
 
 
@@ -132,9 +132,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .message-content, .reader-attachments, .delivery-error { width: calc(100% - 32px); }
   .message-content { padding-top: 24px; }
   .message-content pre { font-size: 14px; line-height: 1.7; }
-  .mobile-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; height: calc(65px + env(safe-area-inset-bottom)); display: grid; padding: 5px 5px env(safe-area-inset-bottom); border-top: 1px solid var(--tone-border-strong-167-a82); backdrop-filter: blur(18px); }
-  .mobile-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; background: transparent; cursor: pointer; }
-  .mobile-nav-icon i { position: absolute; top: -7px; right: -11px; min-width: 15px; height: 15px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: var(--tone-danger-406); color: var(--tone-text-on-accent-0); font-size: 7px; font-style: normal; font-weight: 750; }
   .mobile-compose-fab { position: fixed; right: 17px; bottom: calc(78px + env(safe-area-inset-bottom)); z-index: 21; width: 52px; height: 52px; display: grid; place-items: center; border: 0; border-radius: 17px; cursor: pointer; }
   .app-shell.message-open .mobile-compose-fab { display: none; }
   .compose-overlay { align-items: flex-end; padding: 0; }

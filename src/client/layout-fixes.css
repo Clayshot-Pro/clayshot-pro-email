@@ -186,3 +186,168 @@
 .signin-domain { flex: 0 1 auto; max-width: 60%; min-width: 0; margin: 7px 0; padding: 0 12px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: dark; cursor: pointer; outline: none; }
 .signin-domain-fixed { display: flex; align-items: center; }
+
+/* v3.27 phones: the folders open in a drawer from the left instead of a tab
+   bar along the bottom, New message sits in the bottom-right corner, and an
+   open message's actions take the bottom edge where the tabs were. */
+.mobile-menu-button,
+.mobile-drawer,
+.mobile-drawer-backdrop {
+  display: none;
+}
+@media (max-width: 760px) {
+  .app-shell {
+    padding-bottom: 0;
+  }
+  .reader-pane,
+  .app-shell.message-open .reader-pane:not(.reader-empty) {
+    bottom: 0;
+  }
+  .mobile-compose-fab {
+    bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  .toast-error {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-account-bar .mobile-menu-button {
+    position: relative;
+    width: 32px;
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    border-color: var(--line);
+    background: var(--tone-surface-raised-888);
+    color: var(--tone-text-88-2);
+  }
+  .mobile-menu-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--tone-danger-406);
+  }
+
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: var(--tone-overlay-1000-a58);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .mobile-drawer-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .mobile-drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 61;
+    width: min(300px, 84vw);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: calc(env(safe-area-inset-top) + 14px) 12px calc(env(safe-area-inset-bottom) + 14px) max(12px, env(safe-area-inset-left));
+    border-right: 1px solid var(--line);
+    background: var(--tone-sidebar-949-a96);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  .mobile-drawer.open {
+    transform: none;
+    visibility: visible;
+    box-shadow: 0 20px 60px var(--tone-shadow-1000-a30);
+    transition: transform .22s ease;
+  }
+  .mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 4px;
+  }
+  .mobile-drawer-header div {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .mobile-drawer-header strong {
+    font-size: 15px;
+  }
+  .mobile-drawer-header small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-drawer-close {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .mobile-drawer-folders {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .mobile-drawer .nav-item {
+    min-height: 46px;
+  }
+  .mobile-drawer .nav-item-main {
+    font-size: 14px;
+  }
+
+  /* The open message's actions: one row of icon-over-label buttons across
+     the bottom edge, above the home indicator. */
+  .app-shell.message-open .reader-reply-bar {
+    padding-top: 5px;
+    padding-bottom: calc(5px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+  }
+  .app-shell.message-open .reader-reply-bar button,
+  .app-shell.message-open .reader-reply-bar button:hover {
+    min-height: 52px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--tone-text-subtle-527);
+  }
+  .app-shell.message-open .reader-reply-bar button.reply-primary {
+    color: var(--tone-accent-343);
+  }
+  .app-shell.message-open .reader-reply-bar button.destructive {
+    color: var(--tone-danger-243-2);
+  }
+  .app-shell.message-open .reader-reply-bar button .icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+  .mobile-drawer,
+  .mobile-drawer.open,
+  .mobile-drawer-backdrop {
+    transition: none;
+  }
+}

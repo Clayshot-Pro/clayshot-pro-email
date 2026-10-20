@@ -213,11 +213,13 @@ const AMENDMENTS = new Set(["src/client/layout-fixes.css"]);
 const mainImports = cssImports(readFileSync(join(ROOT, "src/client/main.tsx"), "utf8"));
 const newFiles = mainImports.filter(f => !AMENDMENTS.has(f) && !REDESIGNED.has(f));
 const originals = new Set(oldFiles);
-// Classes that no markup renders any more (removed in v3.24): their rules are
+// Classes that no markup renders any more (removed in v3.24, and in v3.27 the
+// phone tab bar and the reader toolbar's duplicate actions): their rules are
 // out of the comparison. Custom properties that nothing reads, likewise.
 const UNRENDERED = ["account-avatar", "account-avatar-photo", "account-card", "account-card-button", "auth-note", "auth-warning",
   "brand-mark", "mobile-profile-avatar", "mobile-profile-button", "reader-avatar", "sessions-current", "settings-badge",
-  "status-dot", "topbar-logo", "topbar-profile", "topbar-profile-avatar", "unread-dot"];
+  "status-dot", "topbar-logo", "topbar-profile", "topbar-profile-avatar", "unread-dot",
+  "mobile-nav", "mobile-nav-icon", "mobile-reader-action", "unsubscribe-mobile-action", "junk-action"];
 const UNRENDERED_SELECTOR = new RegExp(`\\.(${UNRENDERED.join("|")})(?![\\w-])`);
 const UNREAD = new Set(["--accent-strong"]);
 // Stylesheets imported by components come first in the bundle (main.tsx

@@ -187,9 +187,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   .message-heading-meta { grid-template-columns: 38px minmax(0,1fr); }
   .message-heading-meta time { grid-column: 2; margin-top: 4px; }
   .attachment-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .mobile-nav { border-top-color: var(--tone-border-845); background: var(--tone-sidebar-953-a96); }
-  .mobile-nav button { color: var(--tone-text-subtle-527); }
-  .mobile-nav button.active { color: var(--tone-accent-343); }
   .mobile-compose-fab { background: linear-gradient(180deg,var(--tone-accent-361),var(--tone-accent-416)); color: var(--tone-text-on-accent-933); box-shadow: 0 12px 34px var(--tone-accent-416-a22); }
   .mobile-notification-button.notification-on { border-color: var(--tone-accent-strong-718); background: var(--tone-accent-soft-808); color: var(--tone-accent-325); }
   .mobile-notification-button.notification-off { color: var(--tone-accent-343); }
@@ -301,20 +298,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 }
 
 @media (max-width: 760px) {
-  .mobile-nav {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-  }
-
-  .mobile-nav button {
-    min-width: 0;
-    padding-inline: 1px;
-    font-size: 8px;
-  }
-
-  .mobile-nav-icon {
-    position: relative;
-  }
-
   .conversation-current::before {
     left: 6px;
   }
@@ -1134,10 +1117,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
 
 /* ---- mobile-mail-actions.css ---- */
-.reader-actions .mobile-reader-action {
-  display: none;
-}
-
 @media (max-width: 760px) {
 
   .reader-toolbar {
@@ -1178,15 +1157,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
     width: 34px;
     min-width: 34px;
     height: 34px;
-  }
-
-  .reader-actions .mobile-reader-action {
-    display: grid !important;
-    place-items: center;
-  }
-
-  .reader-actions .mobile-reader-action.destructive {
-    color: var(--tone-danger-243-2) !important;
   }
 
   .reader-scroll {
@@ -1259,15 +1229,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
 
   .reader-actions button:nth-child(2) {
     display: none !important;
-  }
-
-  .reader-actions .junk-action {
-    display: grid !important;
-  }
-
-  .reader-actions .mobile-reader-action.destructive,
-  .reader-actions .mobile-reader-action:last-child {
-    display: grid !important;
   }
 }
 
@@ -1559,18 +1520,6 @@ body { background: radial-gradient(circle at 26% 2%, var(--tone-bg-glow-900) 0, 
   }
   .unsubscribe-dialog {
     padding: 18px;
-  }
-  .reader-actions .mobile-reader-action {
-    flex: 0 0 34px;
-  }
-}
-
-/* Narrow layouts used to hide the second toolbar action. In Trash,
- * Unsubscribe can be that second action, so explicitly retain it.
- */
-@media (max-width: 420px) {
-  .reader-actions button.unsubscribe-mobile-action {
-    display: grid !important;
   }
 }
 
