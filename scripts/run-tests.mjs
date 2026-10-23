@@ -41,6 +41,7 @@ const TESTS = [
   "test-mobile-nav",
   "test-desktop-reader",
   "test-admin-ui",
+  "test-search",
   "test-reader-action-bar",
   "test-email-reader",
   "test-reader-bulk-delete",

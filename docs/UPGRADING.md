@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. Migrations never remove columns or tables that older versions read, so an older v3 version keeps working on a newer database (some migrations also normalise stored data). What changed in each version: [CHANGELOG.md](./CHANGELOG.md).
 
+## v3.31
+
+- No configuration changes. Nothing to do.
+
 ## v3.30
 
 - Phone top edge only. Nothing to do.
