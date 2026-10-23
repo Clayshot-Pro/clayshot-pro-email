@@ -37,6 +37,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.28` | Desktop: equal-width message actions in order, with short labels (Unsub) when a word does not fit; list and message take turns in windows under 1280px; nothing runs off the bottom of short windows; aligned pane headers; sender names on one line |
 | `v3.29` | Admin panel normalized (one button size, themed dropdowns, green set-up chips, a steady chevron); attachments open in the system viewer and never replace the app; a solid status-bar strip for iOS 26 Safari |
 | `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
+| `v3.31` | SQL injection review of sign-in and search (no injection found; an end-to-end attack test added); long searches and long blocked domains no longer fail on D1's 50-byte LIKE limit |
 
 ## Decisions applied in v3.05
 
@@ -252,4 +253,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 
 - v3.29's strip was 8px tall in a Safari tab (the top safe-area inset is 0 there) and 0px with a message open. WebKit only takes the colour of a box taller than 10px (it hit-tests 4px below the middle of the top edge, walks up to a fixed or sticky box at least 90% of the viewport wide, and reads its plain `background-color`; a `backdrop-filter` on the way keeps the blur), so Safari still blurred the top. The strip is now the status-bar area plus 12px in the list and the reader (the reader starts 6px lower, so the strip covers only its toolbar's top padding), and `html` and `body` have a plain background colour for Safari to fall back on.
 - wrangler 4.151.1 (Dependabot, merged through PR #210): its refreshed lockfile includes the Linux workerd binary, and the build passes.
+
+## v3.31: SQL injection review
+
+- **Review:** every sign-in path (mailbox password, administrator password and passkey, setup) and every query in the Worker was read for SQL injection. User input only ever reaches D1 as a bound parameter (`?`); the few queries assembled at run time insert fixed strings, constants or `?` placeholders, the folder name is checked against a fixed list, and search text is LIKE-escaped. The administrator address is compared in code, never in SQL. No injection was found.
+- **Attack test:** a new end-to-end step (last, as it spends the sign-in rate limit) posts injection strings such as `' OR '1'='1`, `' OR 1=1 --`, `alice@…' --`, a `UNION SELECT` and a `DROP TABLE` to the mailbox and administrator sign-in, and as search text; every sign-in is refused (401 or 429) with no session, searches match nothing, and the tables are intact.
+- **Bugs found on the way:** D1 rejects LIKE patterns over 50 bytes, so a search of about 48 characters or more failed with a server error, and blocking a long domain failed when moving existing mail to Junk. Search patterns are now capped at 50 bytes (a longer search matches on its first characters) and blocked domains use a suffix comparison instead of LIKE.
 

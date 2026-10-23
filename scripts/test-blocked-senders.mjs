@@ -44,6 +44,7 @@ function database() {
   message("native:work", "Spammer@Junkmail.com");
   message("native:work", "promo@news.junkmail.com");
   message("native:work", "friend@example.net");
+  message("native:work", "x@notjunkmail.com");
   message("native:primary", "spammer@junkmail.com");
   return db;
 }
@@ -76,7 +77,7 @@ async function run(m) {
   assert.equal(await m.isBlockedSender(env, "native:work", ["x@notjunkmail.com"]), false, "only the domain and its subdomains");
   response = await m.addBlockedSender(post({ sender: "@junkmail.com" }), env, url("native:work"));
   assert.equal((await response.json()).moved, 1, "re-blocking the domain moves the subdomain sender");
-  assert.deepEqual(junk(db, "native:work"), ["Spammer@Junkmail.com", "promo@news.junkmail.com"]);
+  assert.deepEqual(junk(db, "native:work"), ["Spammer@Junkmail.com", "promo@news.junkmail.com"], "a look-alike domain (notjunkmail.com) is not moved");
 
   const listed = await (await m.listBlockedSenders(env, url("native:work"))).json();
   assert.deepEqual(listed.blocked.map(b => b.pattern).sort(), ["@junkmail.com", "spammer@junkmail.com"]);
