@@ -901,6 +901,42 @@ export async function run() {
           await session.context.close();
         }
       }],
+      ["SQL injection in the sign-in fields and in search changes nothing (runs last: it spends the rate limit)", async () => {
+        const stranger = await browser.newContext();
+        try {
+          const strangerApi = api(stranger, worker.origin);
+          const attacks = [
+            "' OR '1'='1", "' OR 1=1 --", `alice@${DOMAIN}' --`, `alice@${DOMAIN}'/*`, '" OR ""="',
+            `admin@${DOMAIN}' OR '1'='1`, "x' UNION SELECT id, 'a', 'b', 1 FROM native_mailboxes --", "'; DROP TABLE native_mailboxes; --",
+          ];
+          const attempts = [
+            ...attacks.map(email => ["/api/device/login", { email, password: "' OR '1'='1" }]),
+            ["/api/device/login", { email: `alice@${DOMAIN}`, password: "' OR '1'='1' --" }],
+            ...attacks.slice(0, 3).map(email => ["/api/admin/login/password", { email, password: "' OR '1'='1" }]),
+          ];
+          for (const [path, body] of attempts) {
+            const result = await strangerApi(path, { method: "POST", body });
+            assert.ok([401, 429].includes(result.status), `${path} ${JSON.stringify(body)} is refused, not an error (${result.status} ${result.text})`);
+            assert.ok(!result.headers["set-cookie"], `${path} ${JSON.stringify(body)} issues no session`);
+            assert.notEqual(result.json?.ok, true);
+          }
+          assert.equal((await strangerApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox`)).status, 401, "the stranger still has no access");
+          // Search text is bound and LIKE-escaped: quotes and wildcards are literal, inside one mailbox.
+          const searchFor = q => adminApi(`/api/messages?accountId=${encodeURIComponent(state.aliceId)}&folder=inbox&q=${encodeURIComponent(q)}`);
+          const control = await searchFor("quarterly");
+          assert.deepEqual(control.json.messages.map(m => m.subject), ["Quarterly report"], "the search is applied");
+          for (const search of ["' OR 1=1 --", "%", "_", "\\", "') UNION SELECT * FROM native_mailbox_credentials --"]) {
+            const result = await searchFor(search);
+            assert.equal(result.status, 200, `search ${search}: ${result.text}`);
+            assert.deepEqual(result.json.messages, [], `search ${search} matches no message literally`);
+          }
+          const boxes = await adminApi("/api/mailboxes");
+          assert.equal(boxes.status, 200, "the mailbox table is intact");
+          assert.ok(boxes.json.mailboxes.some(box => box.email_address === `alice@${DOMAIN}`));
+        } finally {
+          await stranger.close();
+        }
+      }],
     ], () => state.page ?? admin?.page);
     return failed;
   } finally {
