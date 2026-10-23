@@ -56,10 +56,12 @@ export async function addBlockedSender(request: Request, env: Env, url: URL): Pr
   await env.DB.prepare("INSERT OR IGNORE INTO blocked_senders (mailbox_id, pattern) VALUES (?1, ?2)").bind(mailboxId, pattern).run();
   let moved = 0;
   if (body?.moveExisting !== false) {
-    // Existing inbound mail from the sender moves to Junk too. Domains are
-    // validated to [a-z0-9.-], so they are safe inside LIKE.
+    // Existing inbound mail from the sender moves to Junk too: for a domain,
+    // addresses ending in "@domain" or ".domain". A suffix comparison rather
+    // than LIKE, because D1 rejects LIKE patterns over 50 bytes and domains
+    // can be up to 253 characters.
     const match = pattern.startsWith("@")
-      ? "(lower(from_address) LIKE '%' || ?2 OR lower(from_address) LIKE '%.' || ?3)"
+      ? "(substr(lower(from_address), -length(?2)) = ?2 OR substr(lower(from_address), -length(?3) - 1) = '.' || ?3)"
       : "lower(from_address) = ?2";
     const statement = env.DB.prepare(`UPDATE messages SET is_junk = 1 WHERE mailbox_id = ?1 AND direction = 'inbound' AND is_junk = 0 AND ${match}`);
     const result = await (pattern.startsWith("@") ? statement.bind(mailboxId, pattern, pattern.slice(1)) : statement.bind(mailboxId, pattern)).run();

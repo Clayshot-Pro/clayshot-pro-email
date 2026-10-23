@@ -930,6 +930,13 @@ export async function run() {
             assert.equal(result.status, 200, `search ${search}: ${result.text}`);
             assert.deepEqual(result.json.messages, [], `search ${search} matches no message literally`);
           }
+          // Long input stays within D1's 50-byte LIKE limit instead of failing.
+          const long = await searchFor("quarterly report numbers attached for alice ".repeat(3));
+          assert.equal(long.status, 200, `a long search returns results: ${long.text}`);
+          const domain = `${"a".repeat(60)}.example.com`;
+          const block = await adminApi(`/api/blocked-senders?accountId=${encodeURIComponent(state.aliceId)}`, { method: "POST", body: { sender: domain } });
+          assert.equal(block.status, 201, `blocking a long domain works: ${block.text}`);
+          await adminApi(`/api/blocked-senders?accountId=${encodeURIComponent(state.aliceId)}&pattern=${encodeURIComponent("@" + domain)}`, { method: "DELETE" });
           const boxes = await adminApi("/api/mailboxes");
           assert.equal(boxes.status, 200, "the mailbox table is intact");
           assert.ok(boxes.json.mailboxes.some(box => box.email_address === `alice@${DOMAIN}`));
