@@ -7,7 +7,6 @@ import { listUnsubscribeUrl } from "../email/unsubscribe";
 import { resolveProvider } from "../providers/registry";
 import { gmailAttachment, gmailFullMessage, gmailThread } from "../providers/gmailProvider";
 import type { MailFolder, ProviderMutation } from "../providers/types";
-import { likeContains } from "../sql";
 
 type Folder = "inbox" | "junk" | "starred" | "sent" | "drafts" | "archive" | "trash";
 type MessageRow = NativeMessageRow & {
@@ -163,8 +162,9 @@ export async function listMessages(request: Request, env: Env): Promise<Response
     let where = "mailbox_id = ?";
     const bindings: Array<string | number> = [provider.accountId];
     if (search) {
-      where += " AND (LOWER(subject) LIKE ? ESCAPE '\\' OR LOWER(body_text) LIKE ? ESCAPE '\\' OR LOWER(to_addresses) LIKE ? ESCAPE '\\')";
-      const term = likeContains(search);
+      // Literal substring match on the whole term (see NativeMailProvider.listMessages).
+      where += " AND (instr(LOWER(subject), ?) > 0 OR instr(LOWER(body_text), ?) > 0 OR instr(LOWER(to_addresses), ?) > 0)";
+      const term = search;
       bindings.push(term, term, term);
     }
     bindings.push(limit);
