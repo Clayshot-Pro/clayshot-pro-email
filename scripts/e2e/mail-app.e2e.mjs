@@ -930,9 +930,14 @@ export async function run() {
             assert.equal(result.status, 200, `search ${search}: ${result.text}`);
             assert.deepEqual(result.json.messages, [], `search ${search} matches no message literally`);
           }
-          // Long input stays within D1's 50-byte LIKE limit instead of failing.
-          const long = await searchFor("quarterly report numbers attached for alice ".repeat(3));
+          // A long search (past D1's 50-byte LIKE limit) works and keeps its full meaning.
+          const prefix = "weekly internship roundup for north american students";
+          for (const part of ["one", "two"]) {
+            assert.equal((await deliver(worker.origin, { from: "news@partner.test", to: `alice@${DOMAIN}`, subject: `${prefix} part ${part}`, text: part })).status, 200);
+          }
+          const long = await searchFor(`${prefix} part one`);
           assert.equal(long.status, 200, `a long search returns results: ${long.text}`);
+          assert.deepEqual(long.json.messages.map(m => m.subject), [`${prefix} part one`], "only the message containing the whole search");
           const domain = `${"a".repeat(60)}.example.com`;
           const block = await adminApi(`/api/blocked-senders?accountId=${encodeURIComponent(state.aliceId)}`, { method: "POST", body: { sender: domain } });
           assert.equal(block.status, 201, `blocking a long domain works: ${block.text}`);
