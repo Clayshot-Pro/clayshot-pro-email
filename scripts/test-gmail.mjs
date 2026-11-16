@@ -113,8 +113,74 @@ async function attachments(m) {
   }
 }
 
+// "Continue with Google" with an address that is one of the app's own mailboxes
+// opens that mailbox (a device grant) and keeps no Google access.
+async function nativeGoogleSignIn(m) {
+  const db = migratedDatabase();
+  const env = googleEnv(db);
+  db.exec(`INSERT OR REPLACE INTO domains (domain, status, is_primary) VALUES ('example.org', 'active', 1);
+    INSERT INTO native_mailboxes (id, email_address, status) VALUES ('native:contact', 'contact@example.org', 'active');
+    INSERT INTO native_mailboxes (id, email_address, status) VALUES ('native:off', 'off@example.org', 'disabled');
+    INSERT OR IGNORE INTO native_mailboxes (id, email_address, status) VALUES ('native:admin', 'admin@example.org', 'active');`);
+
+  const signIn = async (email, { verified = true, userinfoOk = true, gmailProfile = null } = {}) => {
+    const start = await m.startGoogleOAuth(new Request(`${ORIGIN}/api/accounts/gmail/connect`, { method: "POST" }), env);
+    assert.match(new URL((await start.json().then(body => body.authorizationUrl))).searchParams.get("scope"), /openid email /, "asks for the verified email");
+    const start2 = await m.startGoogleOAuth(new Request(`${ORIGIN}/api/accounts/gmail/connect`, { method: "POST" }), env);
+    const state = new URL((await start2.json()).authorizationUrl).searchParams.get("state");
+    const nonce = start2.headers.get("Set-Cookie").split(";")[0];
+    const calls = [];
+    const handler = async (url, init) => {
+      const target = String(url);
+      calls.push(target);
+      if (target.includes("oauth2.googleapis.com/token")) return Response.json({ access_token: "at", refresh_token: "rt", expires_in: 3600,
+        scope: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.modify" });
+      if (target.includes("openidconnect.googleapis.com")) return userinfoOk
+        ? Response.json({ email, email_verified: verified }) : new Response("{}", { status: 401 });
+      if (target.includes("gmail.googleapis.com")) return gmailProfile
+        ? Response.json({ emailAddress: gmailProfile, historyId: "1" }) : new Response("{}", { status: 400 });
+      return new Response("", { status: 200 }); // revoke
+    };
+    const response = await withFetch(handler, () => m.googleOAuthCallback(
+      new Request(`${ORIGIN}/api/accounts/gmail/callback?state=${state}&code=abc`, { headers: { Cookie: nonce } }), env));
+    return { response, calls, status: new URL(response.headers.get("Location")).searchParams.get("gmail") };
+  };
+  const grants = () => db.prepare("SELECT account_id, provider FROM device_session_accounts").all().map(row => ({ ...row }));
+
+  // A native mailbox address: signed in to the native inbox, Gmail never asked, token revoked.
+  const native = await signIn("Contact@Example.org");
+  assert.equal(native.status, "connected");
+  assert.deepEqual(grants(), [{ account_id: "native:contact", provider: "native" }], "the native mailbox is signed in on this device");
+  assert.ok(!native.calls.some(url => url.includes("gmail.googleapis.com")), "no Gmail inbox is looked up");
+  assert.ok(native.calls.some(url => url.includes("/revoke")), "Google's access is revoked");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM connected_accounts").get().n, 0, "no Gmail account is stored");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM provider_credentials").get().n, 0, "no Google token is stored");
+  assert.match(native.response.headers.get("Set-Cookie"), /__Host-ltm_device=/, "a device session is issued");
+
+  // Not routed to a native mailbox: unverified email, disabled mailbox, the administrator's address, a Gmail address.
+  const before = grants().length;
+  for (const [email, options, why] of [
+    ["contact@example.org", { verified: false, userinfoOk: true }, "an unverified email"],
+    ["off@example.org", {}, "a disabled mailbox"],
+    ["admin@example.org", {}, "the administrator's address (needs the password and passkey)"],
+  ]) {
+    const result = await signIn(email, options);
+    assert.equal(grants().length, before, `${why} gets no native sign-in`);
+    assert.notEqual(result.status, "connected", `${why} is not signed in (Gmail has no inbox for it here)`);
+  }
+  const gmail = await signIn("someone@gmail.com", { gmailProfile: "someone@gmail.com" });
+  assert.equal(gmail.status, "connected");
+  assert.ok(grants().some(grant => grant.provider === "gmail"), "an ordinary Gmail address still connects Gmail");
+  // The Gmail profile confirms the address when the verified-email lookup fails.
+  const viaProfile = await signIn("x", { userinfoOk: false, gmailProfile: "contact@example.org" });
+  assert.equal(viaProfile.status, "connected");
+  assert.equal(grants().filter(grant => grant.account_id === "native:contact").length, 2, "signed in to the native mailbox (a second browser)");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM connected_accounts").get().n, 1, "only someone@gmail.com is stored as a Gmail account");
+}
+
 async function run(m) {
   await oauthState(m);
+  await nativeGoogleSignIn(m);
   await attachments(m);
   console.log("PASS: Gmail sign-in states expire after ten minutes; Gmail attachments preview and download");
 }

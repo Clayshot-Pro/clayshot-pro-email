@@ -109,6 +109,22 @@ async function establishDeviceGrant(request: Request, env: Env, accountId: strin
 export async function grantGoogleDeviceSession(request: Request, env: Env, accountId: string): Promise<string | null> {
   return establishDeviceGrant(request, env, accountId, "gmail");
 }
+/**
+ * The active custom-domain mailbox whose address a Google-verified email is, so
+ * "Continue with Google" opens the app's own inbox instead of looking for a
+ * Gmail one. The administrator's addresses never qualify: they need the
+ * administrator password and passkey.
+ */
+export async function nativeMailboxForGoogleEmail(request: Request, env: Env, email: string): Promise<string | null> {
+  const normalized = normalizeMailboxAddress(email, await addressRules(env, "routing"));
+  if (!normalized || isAdministratorEmail(request, normalized, await primaryDomain(env))) return null;
+  const row = await env.DB.prepare(`SELECT id FROM native_mailboxes
+    WHERE email_address=?1 AND status='active' AND deleted_at IS NULL`).bind(normalized).first<{ id: string }>();
+  return row?.id ?? null;
+}
+export async function grantNativeDeviceSession(request: Request, env: Env, mailboxId: string): Promise<string | null> {
+  return establishDeviceGrant(request, env, mailboxId, "native");
+}
 export async function deviceAccountIds(request: Request, env: Env): Promise<string[]> {
   const session = await currentDeviceSession(request, env);
   if (!session) return [];
@@ -225,7 +241,19 @@ export async function deviceRemoveAccount(request: Request, env: Env, accountId:
     .bind(session.id,accountId).run();
   return Response.json({ ok:true });
 }
+/**
+ * POST /api/device/logout. Signs this browser out of everything, or with
+ * `{ "only": "admin" }` just out of the administrator session, so mailboxes
+ * signed in on the device with their own passwords stay signed in.
+ */
 export async function deviceLogout(request: Request, env: Env): Promise<Response> {
+  const input = await request.json<{ only?: unknown }>().catch(() => null);
+  if (input?.only === "admin") {
+    const ownerResponse = await ownerLogout(request, env);
+    const headers = new Headers(ownerResponse.headers);
+    headers.set("Cache-Control", "no-store");
+    return Response.json({ ok: true }, { headers });
+  }
   const session = await currentDeviceSession(request, env);
   if (session) await env.DB.prepare("DELETE FROM device_sessions WHERE id=?1").bind(session.id).run();
   const ownerResponse = await ownerLogout(request, env);
