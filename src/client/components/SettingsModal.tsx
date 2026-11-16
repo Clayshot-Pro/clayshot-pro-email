@@ -22,7 +22,11 @@ type Props = {
 
   onToggleNotifications: () => void;
   onAddInbox: () => void;
+  /** The device's main inbox, and the inboxes linked to it. */
+  mainAccountId: string | null;
+  linkedAccountIds: string[];
   onRemoveAccount: (id: string) => void;
+  onUnlinkAccount: (id: string) => void;
   onEditProfile: (accountId: string) => void;
   onViewSessions: () => void;
   onResetSessions: () => void;
@@ -67,7 +71,7 @@ export function SettingsModal(props: Props) {
         <div className="settings-scroll">
           <section className="settings-section">
             <h3>Inboxes</h3>
-            <p>Accounts available inside {brandName}.</p>
+            <p>Accounts available inside {brandName}. Inboxes you add are linked to your main inbox: log out and sign in again with the main inbox's password to get them all back.</p>
             <div className="settings-accounts">
               {props.accounts.map((account) => (
                 <div className="settings-account" key={account.id}>
@@ -79,7 +83,10 @@ export function SettingsModal(props: Props) {
                     </span>
                   )}
                   <div>
-                    <strong>{account.displayName || account.emailAddress}</strong>
+                    <strong>
+                      {account.displayName || account.emailAddress}
+                      {account.id === props.mainAccountId ? <small> · Main</small> : null}
+                    </strong>
                     <small>
                       {account.provider === "gmail" ? "Google · " : "Custom · "}
                       {account.emailAddress}
@@ -95,6 +102,11 @@ export function SettingsModal(props: Props) {
                       {(account.provider === "gmail" || !props.isAdmin) ? (
                         <button type="button" disabled={props.busy !== null} onClick={() => props.onRemoveAccount(account.id)}>
                           Sign out
+                        </button>
+                      ) : null}
+                      {props.linkedAccountIds.includes(account.id) ? (
+                        <button type="button" disabled={props.busy !== null} onClick={() => props.onUnlinkAccount(account.id)}>
+                          Unlink
                         </button>
                       ) : null}
                     </div>
@@ -205,7 +217,7 @@ export function SettingsModal(props: Props) {
             <div className="settings-row danger">
               <div>
                 <strong>Log out of all accounts</strong>
-                <small>Sign out every email account on this device, the administrator session included. Other devices stay signed in. To sign out of one account, use Sign out next to it under Inboxes.</small>
+                <small>Log out of {brandName} on this device, the administrator session included. Your linked inboxes are kept: signing in again with the main inbox brings them back. Other devices stay signed in. To remove one for good, use Unlink next to it under Inboxes.</small>
               </div>
               <button
                 type="button"

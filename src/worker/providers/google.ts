@@ -318,7 +318,8 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
  */
 export async function disconnectGoogleIfUnused(accountId: string, env: Env): Promise<void> {
   if (!accountId.startsWith("gmail:")) return;
-  const inUse = await env.DB.prepare("SELECT 1 AS yes FROM device_session_accounts WHERE account_id=?1 LIMIT 1").bind(accountId).first();
+  const inUse = await env.DB.prepare(`SELECT 1 AS yes FROM device_session_accounts WHERE account_id=?1
+    UNION SELECT 1 FROM account_links WHERE linked_account_id=?1 OR owner_account_id=?1 LIMIT 1`).bind(accountId).first();
   if (!inUse) await disconnectGoogle(accountId, env);
 }
 

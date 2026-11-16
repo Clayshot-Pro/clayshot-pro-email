@@ -10,7 +10,7 @@ import { readOwnerSessionToken } from "./ownerSessionPolicy";
 import { beginAdminLogin, adminPasswordConfigured, saveAdminPassword } from "./adminAuth";
 import { reconcileMailboxUsage } from "./usage";
 import {
-  deviceStatus, deviceLogin, deviceLogout, deviceRemoveAccount, deviceAccountIds,
+  deviceStatus, deviceLogin, deviceLogout, deviceRemoveAccount, deviceUnlinkAccount, deviceAccountIds,
   deviceAuthorized, adminAuthorized, rotateMailboxPassword, setMailboxPassword, cleanupDeviceSessions, changeOwnMailboxPassword,
 } from "./deviceAuth";
 import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleNativeMailboxDeletion, restoreNativeMailbox, purgeNativeMailbox, purgeExpiredNativeMailboxes, ADMIN_MAILBOX_ID } from "./mailboxes";
@@ -247,6 +247,18 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     const id = decodedRouteId(deviceAccountRoute);
     if (!id) return jsonError("Invalid account", 400);
     return deviceRemoveAccount(request, env, id);
+  }
+
+  const deviceLinkRoute = url.pathname.match(new RegExp("^/api/device/links/([^/]+)$"));
+  if (deviceLinkRoute && request.method === "DELETE") {
+    const id = decodedRouteId(deviceLinkRoute);
+    if (!id) return jsonError("Invalid account", 400);
+    const removed = await deviceUnlinkAccount(request, env, id);
+    if (removed.ok && id.startsWith("gmail:")) {
+      await disconnectGoogleIfUnused(id, env)
+        .catch(error => console.error("gmail_disconnect_failed", error instanceof Error ? error.name : "unknown"));
+    }
+    return removed;
   }
 
   if (url.pathname === "/api/mailboxes" && request.method === "GET") {

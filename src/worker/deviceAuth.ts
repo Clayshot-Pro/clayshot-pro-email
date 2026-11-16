@@ -15,7 +15,7 @@ const DEVICE_COOKIE = "__Host-ltm_device";
 const OAUTH_COOKIE = "__Host-ltm_oauth";
 const DEVICE_LIFETIME = 60 * 60 * 24 * 30;
 
-type DeviceSessionRow = { id: string; token_hash: string };
+type DeviceSessionRow = { id: string; token_hash: string; main_account_id: string | null };
 export type DeviceGrant = { account_id: string; provider: "native" | "gmail" };
 
 export { sha256Hex as tokenHash } from "./bytes";
@@ -49,7 +49,13 @@ export async function credentialForMailbox(_id: string, password: string): Promi
   if (invalid) throw new Error(invalid);
   return preparePassword(password, "mailbox");
 }
-export async function setMailboxPassword(env: Env, id: string, password: string): Promise<void> {
+/**
+ * `keepOwnedLinks`: the person signed in to this mailbox is changing its own
+ * password, so the inboxes they linked to it stay. An administrator's reset
+ * (the default) also ends them: whoever has the new password has not been
+ * given the other inboxes.
+ */
+export async function setMailboxPassword(env: Env, id: string, password: string, { keepOwnedLinks = false } = {}): Promise<void> {
   const invalid = mailboxPasswordError(password);
   if (invalid) throw new Error(invalid);
   // admin@ signs in with the administrator password and passkey only.
@@ -66,6 +72,7 @@ export async function setMailboxPassword(env: Env, id: string, password: string)
       iterations=excluded.iterations,updated_at=CURRENT_TIMESTAMP`)
       .bind(id,value.salt,value.hash,value.iterations),
     env.DB.prepare("DELETE FROM device_session_accounts WHERE account_id=?1 AND provider='native'").bind(id),
+    forgetLinks(env, id, { keepOwned: keepOwnedLinks }),
   ]);
 }
 export async function rotateMailboxPassword(env: Env, id: string): Promise<string> {
@@ -87,25 +94,71 @@ async function checkNativePassword(env: Env, normalized: string | null, password
 export async function currentDeviceSession(request: Request, env: Env): Promise<DeviceSessionRow | null> {
   const t = readCookie(request, DEVICE_COOKIE);
   if (!t || !/^[\w-]{30,100}$/.test(t)) return null;
-  return env.DB.prepare(`SELECT id,token_hash FROM device_sessions
+  return env.DB.prepare(`SELECT id,token_hash,main_account_id FROM device_sessions
     WHERE token_hash=?1 AND expires_at>datetime('now')`)
     .bind(await sha256Hex(t)).first<DeviceSessionRow>();
 }
+/**
+ * Signs `accountId` in on this device. The first inbox on a device is its main
+ * inbox; every inbox added later is linked to it, so logging out and signing
+ * in again with the main inbox's password brings them all back. A new session
+ * starts with the inboxes already linked to the inbox that opened it.
+ */
 async function establishDeviceGrant(request: Request, env: Env, accountId: string, provider: DeviceGrant["provider"]): Promise<string | null> {
   let session = await currentDeviceSession(request, env);
   let issued: string | null = null;
   if (!session) {
     issued = randomBase64Url();
     const id = crypto.randomUUID();
-    await env.DB.prepare(`INSERT INTO device_sessions (id,token_hash,expires_at,user_agent)
-      VALUES (?1,?2,datetime('now','+30 days'),?3)`)
-      .bind(id, await sha256Hex(issued), request.headers.get("User-Agent")?.slice(0, 300) ?? null).run();
-    session = { id, token_hash: await sha256Hex(issued) };
+    await env.DB.prepare(`INSERT INTO device_sessions (id,token_hash,expires_at,user_agent,main_account_id)
+      VALUES (?1,?2,datetime('now','+30 days'),?3,?4)`)
+      .bind(id, await sha256Hex(issued), request.headers.get("User-Agent")?.slice(0, 300) ?? null, accountId).run();
+    session = { id, token_hash: await sha256Hex(issued), main_account_id: accountId };
+  } else if (!session.main_account_id) {
+    // A session from before linking: its earliest inbox is the main one.
+    const first = await env.DB.prepare("SELECT account_id FROM device_session_accounts WHERE session_id=?1 ORDER BY added_at,rowid LIMIT 1")
+      .bind(session.id).first<{ account_id: string }>();
+    session.main_account_id = first?.account_id ?? accountId;
+    await env.DB.prepare("UPDATE device_sessions SET main_account_id=?2 WHERE id=?1").bind(session.id, session.main_account_id).run();
   }
   await env.DB.prepare(`INSERT OR IGNORE INTO device_session_accounts(session_id,account_id,provider)
     VALUES (?1,?2,?3)`).bind(session.id,accountId,provider).run();
+  if (session.main_account_id !== accountId) {
+    await env.DB.prepare("INSERT OR IGNORE INTO account_links (owner_account_id,linked_account_id,provider) VALUES (?1,?2,?3)")
+      .bind(session.main_account_id, accountId, provider).run();
+  } else if (issued) {
+    await restoreLinkedAccounts(env, session.id, accountId);
+  }
   return issued ? deviceCookie(issued) : null;
 }
+/** Signs the inboxes linked to a main inbox back in on a new session (only ones still usable). */
+async function restoreLinkedAccounts(env: Env, sessionId: string, mainAccountId: string): Promise<void> {
+  await env.DB.prepare(`INSERT OR IGNORE INTO device_session_accounts (session_id,account_id,provider)
+    SELECT ?1,l.linked_account_id,l.provider FROM account_links l
+    LEFT JOIN native_mailboxes n ON l.provider='native' AND n.id=l.linked_account_id
+    LEFT JOIN connected_accounts a ON l.provider='gmail' AND a.id=l.linked_account_id
+    WHERE l.owner_account_id=?2 AND (
+      (l.provider='native' AND n.status='active' AND n.deleted_at IS NULL) OR
+      (l.provider='gmail' AND a.status IN ('active','reauth_required')))`)
+    .bind(sessionId, mainAccountId).run();
+}
+/** Unlink an inbox from this device's main inbox and sign it out here. It no longer returns at the next sign-in. */
+export async function deviceUnlinkAccount(request: Request, env: Env, accountId: string): Promise<Response> {
+  const session = await currentDeviceSession(request, env);
+  if (!session) return jsonError("Session not found", 401);
+  if (!session.main_account_id || session.main_account_id === accountId) {
+    return jsonError("The main inbox cannot be unlinked; log out instead", 400);
+  }
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM account_links WHERE owner_account_id=?1 AND linked_account_id=?2").bind(session.main_account_id, accountId),
+    env.DB.prepare("DELETE FROM device_session_accounts WHERE session_id=?1 AND account_id=?2").bind(session.id, accountId),
+  ]);
+  return Response.json({ ok: true });
+}
+/** Statements that end every link to or from an inbox (disabled, deleted or its password reset). */
+export const forgetLinks = (env: Env, id: string, { keepOwned = false } = {}) => keepOwned
+  ? env.DB.prepare("DELETE FROM account_links WHERE linked_account_id=?1").bind(id)
+  : env.DB.prepare("DELETE FROM account_links WHERE linked_account_id=?1 OR owner_account_id=?1").bind(id);
 export async function grantGoogleDeviceSession(request: Request, env: Env, accountId: string): Promise<string | null> {
   return establishDeviceGrant(request, env, accountId, "gmail");
 }
@@ -157,9 +210,18 @@ export async function deviceStatus(request: Request, env: Env): Promise<Response
   const native = admin ? await env.DB.prepare("SELECT COUNT(*) AS count FROM native_mailboxes WHERE status='active' AND deleted_at IS NULL")
     .first<{count:number}>() : null;
   const renewal = ids.length ? await renewDeviceSession(request, env) : null;
+  const session = await currentDeviceSession(request, env);
+  const links = session?.main_account_id
+    ? await env.DB.prepare("SELECT linked_account_id FROM account_links WHERE owner_account_id=?1").bind(session.main_account_id).all<{ linked_account_id: string }>()
+    : null;
   const headers = new Headers({ "Cache-Control": "no-store" });
   if (renewal) headers.append("Set-Cookie", renewal);
-  return Response.json({ authenticated: admin || ids.length > 0, isAdmin: admin, accountCount: ids.length + (native?.count ?? 0) }, { headers });
+  return Response.json({
+    authenticated: admin || ids.length > 0, isAdmin: admin, accountCount: ids.length + (native?.count ?? 0),
+    // The inbox the others are linked to, and which inboxes are linked to it.
+    mainAccountId: session?.main_account_id ?? null,
+    linkedAccountIds: links?.results.map(row => row.linked_account_id) ?? [],
+  }, { headers });
 }
 export async function deviceLogin(request: Request, env: Env): Promise<Response> {
   const input = await request.json<{ email?: unknown; password?: unknown }>().catch(() => null);
@@ -228,7 +290,7 @@ export async function changeOwnMailboxPassword(request: Request, env: Env): Prom
   if (newPassword === currentPassword) return jsonError("Choose a password different from the current one", 400);
   await clearAccountLoginFailures(env, accountBucket);
   // setMailboxPassword removes the mailbox from every device; this one keeps it.
-  await setMailboxPassword(env, accountId, newPassword);
+  await setMailboxPassword(env, accountId, newPassword, { keepOwnedLinks: true });
   await establishDeviceGrant(request, env, accountId, "native");
   await env.DB.prepare("INSERT INTO mailbox_audit (id,mailbox_id,operation) VALUES (?1,?2,'password_change_self')")
     .bind(crypto.randomUUID(), accountId).run();
