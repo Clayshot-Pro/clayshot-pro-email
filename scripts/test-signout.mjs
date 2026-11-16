@@ -27,7 +27,10 @@ async function run(m) {
     return `__Host-ltm_device=${device}; __Host-ltm_session=${owner}`;
   };
   const post = (path, cookie, body) => new Request(`${ORIGIN}${path}`, { method: "POST", headers: { Cookie: cookie }, body: body ? JSON.stringify(body) : undefined });
-  const status = async cookie => (await m.deviceStatus(new Request(`${ORIGIN}/api/device/status`, { headers: { Cookie: cookie } }), env)).json();
+  const status = async cookie => {
+    const { mainAccountId, linkedAccountIds, ...rest } = await (await m.deviceStatus(new Request(`${ORIGIN}/api/device/status`, { headers: { Cookie: cookie } }), env)).json();
+    return rest; // the link fields are covered by test-linked-inboxes
+  };
   const cookies = response => response.headers.getSetCookie().join("\n");
 
   // Admin sign-out leaves the mailboxes signed in on the device.

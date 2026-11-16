@@ -60,13 +60,12 @@ function redirectWithStatus(request: Request, status: string): Response {
   });
 }
 
-export async function startGoogleOAuth(request: Request, env: Env): Promise<Response> {
-  try {
-    requireGoogleConfig(env);
-  } catch {
-    return Response.json({ error: "Gmail connection is not configured" }, { status: 503 });
-  }
-
+/**
+ * Google's consent screen is shown only when the account has not accepted this
+ * app's access before. `consent` forces it, which is the only way Google hands
+ * out a refresh token again: used when a Gmail account has to be (re)connected.
+ */
+async function beginAuthorization(request: Request, env: Env & { GOOGLE_CLIENT_ID: string }, consent: boolean): Promise<{ authorizationUrl: string; setCookie: string }> {
   const { nonce, setCookie } = prepareOAuthNonce();
   const state = randomBase64Url();
   const verifier = randomBase64Url(48);
@@ -84,7 +83,7 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
   `)
     .bind(
       stateHash,
-      await encryptSecret(env, { verifier, origin: appOrigin(request) }, `oauth:${stateHash}`),
+      await encryptSecret(env, { verifier, origin: appOrigin(request), consent }, `oauth:${stateHash}`),
       // SQLite's own format, so the CURRENT_TIMESTAMP comparisons below are exact.
       `+${OAUTH_STATE_TTL_SECONDS} seconds`,
       await tokenHash(nonce),
@@ -97,16 +96,24 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
     response_type: "code",
     scope: GOOGLE_SCOPE,
     access_type: "offline",
-    prompt: "consent",
+    ...(consent ? { prompt: "consent" } : {}),
     state,
     code_challenge: await pkceChallenge(verifier),
     code_challenge_method: "S256",
     include_granted_scopes: "false",
   });
 
-  return Response.json({
-    authorizationUrl: `https://accounts.google.com/o/oauth2/v2/auth?${query}`,
-  }, { headers: { "Set-Cookie": setCookie, "Cache-Control": "no-store" } });
+  return { authorizationUrl: `https://accounts.google.com/o/oauth2/v2/auth?${query}`, setCookie };
+}
+
+export async function startGoogleOAuth(request: Request, env: Env): Promise<Response> {
+  try {
+    requireGoogleConfig(env);
+  } catch {
+    return Response.json({ error: "Gmail connection is not configured" }, { status: 503 });
+  }
+  const { authorizationUrl, setCookie } = await beginAuthorization(request, env, false);
+  return Response.json({ authorizationUrl }, { headers: { "Set-Cookie": setCookie, "Cache-Control": "no-store" } });
 }
 
 /** Google's verified email for this sign-in, or null (no email scope, unverified, or an error). */
@@ -123,9 +130,9 @@ async function googleVerifiedEmail(accessToken: string | undefined): Promise<str
   }
 }
 
-async function nativeMailboxSignedIn(request: Request, env: Env, mailboxId: string, token: TokenResponse): Promise<Response> {
-  // Nothing from Google is kept: the app's own inbox needs no Google access.
-  await revokeGoogleToken(token.refresh_token ?? token.access_token ?? "");
+async function nativeMailboxSignedIn(request: Request, env: Env, mailboxId: string): Promise<Response> {
+  // Nothing from Google is stored: the app's own inbox needs no Google access.
+  // The grant is not revoked either, or Google would show its consent screen again at the next sign-in.
   const sessionCookie = await grantNativeDeviceSession(request, env, mailboxId);
   const response = redirectWithStatus(request, "connected");
   if (sessionCookie) response.headers.append("Set-Cookie", sessionCookie);
@@ -162,14 +169,16 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   if (!(await oauthNonceMatches(request, stateRow.device_nonce_hash))) return redirectWithStatus(request, "invalid_state");
 
   let verifier: string;
+  let consented = false;
   try {
-    const saved = await decryptSecret<{ verifier: string; origin?: string }>(
+    const saved = await decryptSecret<{ verifier: string; origin?: string; consent?: boolean }>(
       env, stateRow.pkce_verifier_encrypted, `oauth:${stateHash}`,
     );
     // The callback must arrive at the same Worker hostname as initiation.
     // Prior in-flight states expire after ten minutes and cannot cross origins.
     if (saved.origin !== appOrigin(request)) return redirectWithStatus(request, "invalid_state");
     verifier = saved.verifier;
+    consented = saved.consent === true;
   } catch {
     return redirectWithStatus(request, "invalid_state");
   }
@@ -199,18 +208,15 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   const grantedScope = token.scope ?? "";
 
   // An address that is one of this app's own mailboxes opens that mailbox: no
-  // Gmail inbox is connected and Google's access is revoked at once.
+  // Gmail inbox is connected.
   const verified = await googleVerifiedEmail(token.access_token);
   const nativeId = verified ? await nativeMailboxForGoogleEmail(request, env, verified) : null;
-  if (nativeId) return nativeMailboxSignedIn(request, env, nativeId, token);
+  if (nativeId) return nativeMailboxSignedIn(request, env, nativeId);
 
-  if (
-    !token.access_token
-    || !token.refresh_token
-    || !hasRequiredGoogleScopes(grantedScope)
-  ) {
-    if (token.refresh_token) await revokeGoogleToken(token.refresh_token);
-    else if (token.access_token) await revokeGoogleToken(token.access_token);
+  // Whatever Google gave, for revoking it when the sign-in is not completed.
+  const revocable = token.refresh_token ?? token.access_token;
+  if (!token.access_token || !hasRequiredGoogleScopes(grantedScope)) {
+    if (revocable) await revokeGoogleToken(revocable);
     return redirectWithStatus(request, "authorization_incomplete");
   }
 
@@ -221,26 +227,51 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
       { headers: { Authorization: `Bearer ${token.access_token}` } },
     );
     if (!response.ok) {
-      await revokeGoogleToken(token.refresh_token);
+      if (revocable) await revokeGoogleToken(revocable);
       return redirectWithStatus(request, "profile_failed");
     }
     profile = await response.json<GmailProfile>();
   } catch {
-    await revokeGoogleToken(token.refresh_token);
+    if (revocable) await revokeGoogleToken(revocable);
     return redirectWithStatus(request, "profile_failed");
   }
 
   const email = profile.emailAddress?.trim().toLowerCase();
   if (!email) {
-    await revokeGoogleToken(token.refresh_token);
+    if (revocable) await revokeGoogleToken(revocable);
     return redirectWithStatus(request, "profile_failed");
   }
 
   // Gmail confirms the address too (when the sign-in above gave no verified email).
   const nativeFromProfile = await nativeMailboxForGoogleEmail(request, env, email);
-  if (nativeFromProfile) return nativeMailboxSignedIn(request, env, nativeFromProfile, token);
+  if (nativeFromProfile) return nativeMailboxSignedIn(request, env, nativeFromProfile);
 
   const accountId = `gmail:${await sha256Hex(email)}`;
+
+  // Google skips the consent screen for an account that accepted before, and
+  // then sends no refresh token. An account already connected here keeps its
+  // stored credential and the device is signed in to it. Otherwise the
+  // consent screen is asked for once (never twice in a row) to get a token.
+  if (!token.refresh_token) {
+    const connected = await env.DB.prepare(`SELECT 1 FROM connected_accounts a
+      JOIN provider_credentials c ON c.account_id = a.id WHERE a.id = ?1 AND a.status = 'active'`)
+      .bind(accountId).first();
+    if (connected) {
+      const sessionCookie = await grantGoogleDeviceSession(request, env, accountId);
+      const response = redirectWithStatus(request, "connected");
+      if (sessionCookie) response.headers.append("Set-Cookie", sessionCookie);
+      response.headers.append("Set-Cookie", clearOAuthCookie());
+      return response;
+    }
+    if (consented) {
+      await revokeGoogleToken(token.access_token);
+      return redirectWithStatus(request, "authorization_incomplete");
+    }
+    const retry = await beginAuthorization(request, env, true);
+    const response = new Response(null, { status: 303, headers: { Location: retry.authorizationUrl, "Cache-Control": "no-store" } });
+    response.headers.append("Set-Cookie", retry.setCookie);
+    return response;
+  }
   const expiresAt = new Date(
     Date.now() + Math.max(60, token.expires_in ?? 3600) * 1000,
   ).toISOString();
@@ -318,7 +349,8 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
  */
 export async function disconnectGoogleIfUnused(accountId: string, env: Env): Promise<void> {
   if (!accountId.startsWith("gmail:")) return;
-  const inUse = await env.DB.prepare("SELECT 1 AS yes FROM device_session_accounts WHERE account_id=?1 LIMIT 1").bind(accountId).first();
+  const inUse = await env.DB.prepare(`SELECT 1 AS yes FROM device_session_accounts WHERE account_id=?1
+    UNION SELECT 1 FROM account_links WHERE linked_account_id=?1 OR owner_account_id=?1 LIMIT 1`).bind(accountId).first();
   if (!inUse) await disconnectGoogle(accountId, env);
 }
 

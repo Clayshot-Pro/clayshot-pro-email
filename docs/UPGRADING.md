@@ -10,6 +10,7 @@ Deploys apply migrations, and the app applies any still pending on its first req
 ## v3.33
 
 - Migration 0027 (applied by the deploy). After updating, open the app once on your custom domain signed in as administrator: from then on `workers.dev` and preview links redirect there. If Gmail or a bookmark used the `workers.dev` address, switch it to the custom domain. Instances used only on `workers.dev`: nothing to do.
+- Migration 0028 (applied by the deploy). Inboxes added on a device are linked to its main inbox (the first one signed in): after **Log out**, signing in with the main inbox brings them all back. Existing single-device sets are linked automatically. Settings → Inboxes has **Sign out** and **Unlink** per inbox.
 - Settings: **Remove** is now **Sign out** per account, with **Sign out of admin** for administrators and **Log out of all accounts** at the bottom. Google sign-in now also asks for `openid email`; with a Google address that is a mailbox on this app, sign-in opens that mailbox. Nothing to configure.
 - Phones stop receiving alerts once their sign-in has ended or expired. Admin phones get alerts for every mailbox only while the admin session is live; open the app signed in as admin to resume them. Nothing else to do.
 

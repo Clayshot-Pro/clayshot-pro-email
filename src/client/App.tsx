@@ -83,6 +83,9 @@ export function App() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  // The device's main inbox and the inboxes linked to it (they return when the main inbox signs in again).
+  const [mainAccountId, setMainAccountId] = useState<string | null>(null);
+  const [linkedAccountIds, setLinkedAccountIds] = useState<string[]>([]);
   const [addInboxMode, setAddInboxMode] = useState<AddInboxMode>(null);
   // The app opens on All inboxes (or the only account) once accounts load;
   // returning from the admin panel keeps the mailbox open in this tab.
@@ -131,12 +134,20 @@ export function App() {
     }
   }, []);
 
+  const refreshDeviceStatus = useCallback(async () => {
+    await fetch("/api/device/status", {cache:"no-store"})
+      .then(response => response.ok ? response.json() as Promise<{isAdmin:boolean;mainAccountId?:string|null;linkedAccountIds?:string[]}> : null)
+      .then(status => {
+        setIsAdmin(Boolean(status?.isAdmin));
+        setMainAccountId(status?.mainAccountId ?? null);
+        setLinkedAccountIds(status?.linkedAccountIds ?? []);
+      }).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
-    fetch("/api/device/status", {cache:"no-store"})
-      .then(response => response.ok ? response.json() as Promise<{isAdmin:boolean}> : null)
-      .then(status => setIsAdmin(Boolean(status?.isAdmin))).catch(() => undefined);
+    void refreshDeviceStatus();
     void refreshAccounts();
-  }, [refreshAccounts]);
+  }, [refreshAccounts, refreshDeviceStatus]);
 
   const refreshSessions = useCallback(async () => {
     const response = await fetch("/api/auth/sessions", { cache: "no-store" });
@@ -369,12 +380,20 @@ export function App() {
   };
 
 
-  const removeAccount = async (id: string) => {
-    if (!confirm("Sign out this email account on this device? Other devices stay signed in.")) return;
+  // Sign out keeps a linked inbox linked (it returns when the main inbox signs in
+  // again); unlinking removes it for good.
+  const removeAccount = async (id: string, unlink = false) => {
+    const linked = linkedAccountIds.includes(id);
+    const question = unlink
+      ? "Unlink this inbox? It is signed out here and no longer comes back when you log in with your main inbox."
+      : linked
+        ? "Sign out of this inbox? It stays linked to your main inbox and comes back the next time you log in with it. Use Unlink to remove it for good."
+        : "Sign out this email account on this device? Other devices stay signed in.";
+    if (!confirm(question)) return;
     setSettingsBusy("remove");
     try {
       const response = await fetch(
-        `/api/device/accounts/${encodeURIComponent(id)}`,
+        `/api/device/${unlink ? "links" : "accounts"}/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error();
@@ -389,7 +408,7 @@ export function App() {
           localStorage.setItem(draftSenderKey(compose.draftId), ADMIN_ACCOUNT_ID);
         }
       }
-      await refreshAccounts();
+      await Promise.all([refreshAccounts(), refreshDeviceStatus()]);
       if (!isAdmin && accounts.length <= 1) window.location.reload();
     } catch {
       setError("Could not sign out this email account");
@@ -1151,7 +1170,10 @@ export function App() {
         onClose={() => setSettingsOpen(false)}
         onToggleNotifications={() => void toggleNotifications()}
         onAddInbox={openAddInbox}
+        mainAccountId={mainAccountId}
+        linkedAccountIds={linkedAccountIds}
         onRemoveAccount={(id) => void removeAccount(id)}
+        onUnlinkAccount={(id) => void removeAccount(id, true)}
         onEditProfile={(accountId) => {
           setSettingsOpen(false);
           setProfileAccountId(accountId);
