@@ -11,6 +11,7 @@ const TESTS = [
   "test-audit-fixes",
   "test-push",
   "test-signout",
+  "test-linked-inboxes",
   "test-gmail",
   "test-email-images",
   "test-stored-keys",

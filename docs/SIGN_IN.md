@@ -15,7 +15,7 @@ The app works on whatever HTTPS address serves it (`workers.dev` or a custom dom
 
 ## Accounts on a device
 
-Each browser signs in to its own set of accounts. Nothing is shared between devices automatically.
+Each browser signs in to its own set of accounts. The only thing shared between devices is the list of inboxes linked to a main inbox (below).
 
 The sign-in form (and **Add inbox → Custom mailbox**) asks for a **username** in one field, with the domain on its right: type `alice` and pick `@example.com` from the list (an instance with one domain shows it without a list). The list holds the instance's own active domains (every fork shows its own; a domain appears once it is active in Admin → Domains), the main domain first, and the form remembers the last one used on that browser. A full address typed or filled in by a password manager is used as it is.
 
@@ -25,7 +25,8 @@ The sign-in form (and **Add inbox → Custom mailbox**) asks for a **username** 
 - With two or more accounts on a device, the app opens on **All inboxes**.
 - Every mail, draft, attachment and photo request is checked against the device's accounts on the server; asking for another account returns 403. `/api/accounts` lists only this device's accounts.
 - Push notifications go only to devices allowed to read the mailbox that received the mail (admin phones get every mailbox while the admin session is live). Once a sign-in ends or expires, its alerts stop.
-- **Sign out** next to an account (Settings → Inboxes) signs out just that account; the others stay signed in. Administrators have **Sign out of admin**, which ends only the admin session. **Log out of all accounts** ends everything on the device.
+- **Main inbox and linked inboxes:** the first inbox signed in on a device is its main inbox, and inboxes added later are linked to it. Log out, then sign in with the main inbox's password: every linked inbox is back. Signing in with a linked inbox's password gives only that inbox. The links are stored on the server, so they follow the main inbox to other devices; they end when a linked mailbox is disabled, deleted or has its password reset, or when an administrator resets the main inbox's password. Don't use a mailbox several people share as the main inbox.
+- **Sign out** next to an account (Settings → Inboxes) signs out just that account (a linked inbox returns at the next login); **Unlink** removes a linked inbox for good; the others stay signed in. Administrators have **Sign out of admin**, which ends only the admin session. **Log out of all accounts** ends everything on the device.
 - Signing out or removing an account affects only this device. Changing a mailbox password signs out that mailbox's devices; other accounts stay signed in.
 
 ## Administrator
