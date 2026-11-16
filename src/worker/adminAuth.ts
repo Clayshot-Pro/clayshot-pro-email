@@ -1,6 +1,5 @@
 import { randomBase64Url, sha256Hex } from "./bytes";
 import { checkPassword, preparePassword } from "./passwordCrypto";
-import { revokeAllMailAlerts } from "./push";
 import { isAdministratorEmail } from "./config";
 import { tryRecordAdminSecurityEvent } from "./adminSecurityAudit";
 import { adminPasswordError } from "./mailboxPasswordPolicy";
@@ -97,7 +96,6 @@ export async function saveAdminPassword(env: Env,newPassword: unknown,currentPas
       env.DB.prepare("DELETE FROM admin_login_pending"),
       // Invalidate previous passkey-only sessions after a successful password change.
       env.DB.prepare("DELETE FROM auth_sessions"),
-      revokeAllMailAlerts(env, "all"),
     ]);
   } catch (cause) {
     console.error("admin_password_storage_failure", cause instanceof Error ? cause.name : "unknown");

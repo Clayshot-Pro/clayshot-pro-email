@@ -39,7 +39,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
 | `v3.31` | SQL injection review of sign-in and search (no injection found; an end-to-end attack test added); long searches and long blocked domains no longer fail on D1's 50-byte LIKE limit |
 | `v3.32` | Users change their own mailbox password in Settings; admins choose a new mailbox's first password or leave it empty to generate one |
-| `v3.33` | One public address: workers.dev and preview links redirect to the app's own domain and refuse the API; the site asks search engines not to index it (migration 0027) |
+| `v3.33` | One public address: workers.dev and preview links redirect to the app's own domain and refuse the API; the site asks search engines not to index it (migration 0027); alerts stop when a sign-in ends |
 
 ## Decisions applied in v3.05
 
@@ -269,6 +269,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Audit:** signed-out requests to every API route answer 401, except the sign-in and branding routes the sign-in page needs (`/api/instance`, `/api/auth/status`, `/api/device/status`, the login and setup routes); unknown routes also answer 401, so routes cannot be discovered while signed out. Session cookies are `HttpOnly; Secure; SameSite`. Route names in the app's JavaScript are visible to anyone who loads the page, as on every web app; access is enforced by the server.
 - Test: `test-app-host`.
 - **Unread tab keeps the open mail:** opening a message marks it read, and the Unread tab hid every read message, so the open message's row vanished the moment it opened (most visible to an administrator going through other mailboxes' unread mail). The conversation open in the reader now stays listed and highlighted under Unread (and Starred, for un-starring) until the reader is closed (Back, delete, archive, another folder or account) or another message is opened. Test: `test-unread-filter`, plus an end-to-end check.
+- **Alerts stop when a sign-in ends — bug:** after the app signed you out on a page load (an admin session idle for an hour, or past its 12 hours), the phone still received new-mail alerts. v3.18 gave a phone that turned alerts on as administrator alerts for every mailbox for 30 days (`push_subscriptions.all_mail_until`); only an explicit sign-out cleared it, so an expired or idle session kept it alive. The admin-session branch of the delivery query also checked only the session's lifetime, not the idle limit the app applies on a page load.
+- **Fix:** a new-mail alert is sent only while a sign-in is live, judged by the same rules as a page load: a mailbox signed in on the phone's device session (not expired), or the admin session the phone registered under (not expired, not idle). Signing in again re-registers the phone and alerts resume. The every-mailbox grant (`all_mail_until`) is no longer written or read, and `revokeAllMailAlerts` is gone because ending a session now ends its alerts. The column stays, unused.
+- **Behaviour change:** admin phones get every mailbox's alerts only while the admin session is live (up to an hour idle). Open the app signed in as admin to resume them.
+- Test: `test-push` (idle-expired, expired and removed admin sessions send nothing; signing in again restores alerts).
 
 ## v3.32: self-service passwords
 

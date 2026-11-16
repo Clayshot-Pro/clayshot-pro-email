@@ -88,32 +88,28 @@ async function run(m) {
   assert.deepEqual(m.notificationCopy({ ...mail, subject: "" }), { title: "Sam Lee", body: "(no subject)\nAre you free around noon" },
     "every alert, administrator ones included, is sender / subject / body");
 
-  // The administrator's phone gets every mailbox's mail for 30 days after enabling
-  // alerts as admin, even after the short admin session has ended.
+  // The administrator's phone gets every mailbox's mail only while its admin
+  // session is live. Once that session ends (sign-out, expiry, idle timeout,
+  // other sessions signed out), alerts stop with it.
   {
     const adminToken = "a".repeat(43);
     const adminHash = await sha256Hex(adminToken);
-    db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('admin-1', ?, datetime('now', '+12 hours'), datetime('now'))").run(adminHash);
-    const enable = await m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
-      method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` },
-      body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
-    }), env);
-    assert.equal(enable.status, 201);
-
-    // Edge on Windows subscribes through Windows Push Notification Services (any *.notify.windows.com host).
-    const subscribe = endpoint => m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
-      method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` },
+    const phone = "https://web.push.apple.com/admin-phone";
+    const startSession = (id, expires, seen) => db.prepare("INSERT OR REPLACE INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES (?, ?, datetime('now', ?), datetime('now', ?))").run(id, adminHash, expires, seen);
+    startSession("admin-1", "+12 hours", "+0 seconds");
+    const subscribe = (endpoint, cookie = `__Host-ltm_session=${adminToken}`) => m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
+      method: "POST", headers: cookie ? { Cookie: cookie } : {},
       body: JSON.stringify({ endpoint, keys: { p256dh: k.p256dh, auth: k.auth } }),
     }), env);
+    assert.equal((await subscribe(phone)).status, 201);
+
+    // Edge on Windows subscribes through Windows Push Notification Services (any *.notify.windows.com host).
     assert.equal((await subscribe("https://wns2-sg2p.notify.windows.com/w/?token=BQYAAAB")).status, 201, "an Edge (WNS) endpoint is accepted");
     for (const endpoint of ["https://notify.windows.com.attacker.test/w/", "https://evilnotify.windows.com/w/", "https://notify.windows.com/w/",
       "http://wns2-sg2p.notify.windows.com/w/", "https://wns2-sg2p.notify.windows.com:8443/w/", "https://user:pw@wns2-sg2p.notify.windows.com/w/"]) {
       assert.equal((await subscribe(endpoint)).status, 400, `refused: ${endpoint}`);
     }
     db.prepare("DELETE FROM push_subscriptions WHERE endpoint LIKE '%notify.windows.com%'").run();
-    const until = db.prepare("SELECT julianday(all_mail_until) - julianday('now') AS d FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().d;
-    assert.ok(until > 29.9 && until < 30.1, `all-mail alerts for 30 days (${until})`);
-    db.prepare("DELETE FROM auth_sessions WHERE session_id = 'admin-1'").run();
 
     const deliver = async () => {
       const calls = [];
@@ -122,31 +118,41 @@ async function run(m) {
       try { await m.sendNewMailPush(env, mail); } finally { globalThis.fetch = realFetch; }
       return calls;
     };
-    assert.ok((await deliver()).some(url => url.includes("admin-phone")), "the admin phone gets the friend's mail after the admin session ended");
+    const alerted = async () => (await deliver()).some(url => url.includes("admin-phone"));
+    assert.ok(await alerted(), "the admin phone gets the friend's mail while its admin session is live");
 
-    // Registering again without the admin session keeps it; with it, renews it.
-    await m.subscribePush(new Request("https://mail.example.org/api/push/subscribe", {
-      method: "POST", body: JSON.stringify({ endpoint: "https://web.push.apple.com/admin-phone", keys: { p256dh: k.p256dh, auth: k.auth } }),
-    }), env).catch(() => null);
-    assert.ok(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until);
+    // Registering again without a session changes nothing about who is alerted.
+    await subscribe(phone, "").catch(() => null);
+    assert.ok(await alerted(), "re-registering without a session keeps the live admin binding");
+
+    // An admin session idle past the idle limit is signed out on the next page load: no alerts.
+    startSession("admin-1", "+12 hours", "-2 hours");
+    assert.ok(!(await alerted()), "an idle-expired admin session stops the alerts");
+    // So does one past its lifetime, and one that was deleted by cleanup.
+    startSession("admin-1", "-1 minutes", "+0 seconds");
+    assert.ok(!(await alerted()), "an expired admin session stops the alerts");
+    db.prepare("DELETE FROM auth_sessions WHERE session_id = 'admin-1'").run();
+    assert.ok(!(await alerted()), "a removed admin session stops the alerts");
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().n, 1, "the subscription itself is kept for the next sign-in");
+
+    // Signing in again (the app re-registers on start) turns alerts back on.
+    startSession("admin-2", "+12 hours", "+0 seconds");
+    assert.equal((await subscribe(phone)).status, 201);
+    assert.ok(await alerted(), "signing in again restores the admin phone's alerts");
 
     // Signing out as admin, signing out other sessions, or a password change stops it.
-    db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('admin-2', ?, datetime('now', '+12 hours'), datetime('now'))").run(adminHash);
     await m.logout(new Request("https://mail.example.org/api/auth/logout", { method: "POST", headers: { Cookie: `__Host-ltm_session=${adminToken}` } }), env);
-    assert.equal(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until, null);
-    assert.ok(!(await deliver()).some(url => url.includes("admin-phone")), "after admin sign-out the phone only gets its own mailboxes");
+    assert.ok(!(await alerted()), "after admin sign-out the phone only gets its own mailboxes");
 
-    db.prepare("UPDATE push_subscriptions SET all_mail_until = datetime('now', '+10 days'), owner_session_hash = 'other-hash' WHERE endpoint LIKE '%admin-phone'").run();
+    startSession("admin-3", "+12 hours", "+0 seconds");
+    assert.ok(await alerted());
     const keepToken = "k".repeat(43);
     db.prepare("INSERT INTO auth_sessions (session_id, token_hash, expires_at, last_seen_at) VALUES ('keep', ?, datetime('now', '+12 hours'), datetime('now'))").run(await sha256Hex(keepToken));
     await m.resetSessions(new Request("https://mail.example.org/api/auth/sessions/reset", { method: "POST", headers: { Cookie: `__Host-ltm_session=${keepToken}` } }), env);
-    assert.equal(db.prepare("SELECT all_mail_until FROM push_subscriptions WHERE endpoint LIKE '%admin-phone'").get().all_mail_until, null,
-      "signing out other sessions stops other phones' all-mail alerts");
-    db.prepare("UPDATE push_subscriptions SET all_mail_until = datetime('now', '+10 days') WHERE endpoint LIKE '%admin-phone'").run();
-    await m.revokeAllMailAlerts(env, "all").run();
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM push_subscriptions WHERE all_mail_until IS NOT NULL").get().n, 0);
-    assert.match(readFileSync(new URL("../src/worker/adminAuth.ts", import.meta.url), "utf8"), /DELETE FROM auth_sessions"\),\s+revokeAllMailAlerts\(env, "all"\)/,
-      "a password change stops all-mail alerts with the sessions");
+    assert.ok(!(await alerted()), "signing out other sessions stops other phones' alerts");
+    db.prepare("DELETE FROM auth_sessions").run();
+    assert.match(readFileSync(new URL("../src/worker/adminAuth.ts", import.meta.url), "utf8"), /DELETE FROM auth_sessions"\)/,
+      "a password change ends every admin session, and with them the alerts");
   }
 
   // Signing in again re-binds the phone's existing subscription to the new session.
@@ -224,7 +230,7 @@ try {
   const entry = join(out, "entry.ts");
   const file = path => new URL(`../src/${path}`, import.meta.url).pathname;
   writeFileSync(entry, [
-    `export { notificationCopy, revokeAllMailAlerts, sendNewMailPush, subscribePush } from "${file("worker/push.ts")}";`,
+    `export { notificationCopy, sendNewMailPush, subscribePush } from "${file("worker/push.ts")}";`,
     `export { logout, resetSessions } from "${file("worker/auth.ts")}";`,
     `export { deviceStatus, tokenHash } from "${file("worker/deviceAuth.ts")}";`,
     `export { needsHomeScreenInstall } from "${file("client/appModel.ts")}";`,
