@@ -434,6 +434,19 @@ export function App() {
     }
   };
 
+  // Ends the administrator session only. Mailboxes signed in on this device with
+  // their own passwords stay signed in; with none left the page shows the sign-in.
+  const signOutAdmin = async () => {
+    if (!confirm("Sign out of the administrator session? Other accounts signed in on this device stay signed in.")) return;
+    setSettingsBusy("logout");
+    await fetch("/api/device/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ only: "admin" }),
+    }).catch(() => undefined);
+    location.reload();
+  };
+
   const logout = async () => {
     setSettingsBusy("logout");
     await fetch("/api/device/logout", { method: "POST" }).catch(() => undefined);
@@ -1149,6 +1162,7 @@ export function App() {
         }}
         onResetSessions={() => void resetSessions()}
         onLogout={() => void logout()}
+        onSignOutAdmin={() => void signOutAdmin()}
       />
       <AddInboxModal
         mode={addInboxMode}
