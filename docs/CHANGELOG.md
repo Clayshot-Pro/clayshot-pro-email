@@ -39,7 +39,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
 | `v3.31` | SQL injection review of sign-in and search (no injection found; an end-to-end attack test added); long searches and long blocked domains no longer fail on D1's 50-byte LIKE limit |
 | `v3.32` | Users change their own mailbox password in Settings; admins choose a new mailbox's first password or leave it empty to generate one |
-| `v3.33` | One public address: workers.dev and preview links redirect to the app's own domain and refuse the API; the site asks search engines not to index it (migration 0027); alerts stop when a sign-in ends |
+| `v3.33` | One public address: workers.dev and preview links redirect to the app's own domain and refuse the API; the site asks search engines not to index it (migration 0027); alerts stop when a sign-in ends; signing out of one account keeps the others; Google sign-in opens a native mailbox with that address |
 
 ## Decisions applied in v3.05
 
@@ -273,6 +273,10 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Fix:** a new-mail alert is sent only while a sign-in is live, judged by the same rules as a page load: a mailbox signed in on the phone's device session (not expired), or the admin session the phone registered under (not expired, not idle). Signing in again re-registers the phone and alerts resume. The every-mailbox grant (`all_mail_until`) is no longer written or read, and `revokeAllMailAlerts` is gone because ending a session now ends its alerts. The column stays, unused.
 - **Behaviour change:** admin phones get every mailbox's alerts only while the admin session is live (up to an hour idle). Open the app signed in as admin to resume them.
 - Test: `test-push` (idle-expired, expired and removed admin sessions send nothing; signing in again restores alerts).
+
+- **Signing out of one account:** **Log out** ended every account on the device, administrator session included, and an administrator had no way to sign out of just one account (the per-account button is hidden for admins, who see every mailbox). Each account now has its own **Sign out** (it was called Remove), the administrator has **Sign out of admin** (`POST /api/device/logout` with `{"only":"admin"}` ends the admin session and keeps the device session), and the old button is now **Log out of all accounts**. Signing out of one account never touches the others. Test: `test-signout`.
+- **Google sign-in for a mailbox on this app:** "Continue with Google" always looked for a Gmail inbox, so an address like `contact@example.org` that lives here (Cloudflare email routing, no Gmail mailbox) was refused (`profile_failed`). The sign-in now also asks for `openid email`; when Google reports a verified email that is the address of an active custom-domain mailbox, the device is signed in to that mailbox, Google's access is revoked at once and nothing from Google is stored. The Gmail profile address is checked the same way when the verified email is unavailable. Never routed this way: an unverified email, a disabled mailbox, and the administrator's addresses (`admin@`, which needs the password and passkey). Any other address connects Gmail as before. Test: `test-gmail`.
+- **Security note:** this makes a Google account that controls a mailbox's address (verified by Google) a sign-in for that mailbox, alongside its password. Mailboxes whose address is not under a Google account cannot be reached this way.
 
 ## v3.32: self-service passwords
 

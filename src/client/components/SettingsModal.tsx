@@ -27,6 +27,8 @@ type Props = {
   onViewSessions: () => void;
   onResetSessions: () => void;
   onLogout: () => void;
+  /** Ends the administrator session only; mailboxes signed in with their own passwords stay. */
+  onSignOutAdmin: () => void;
 };
 
 export function SettingsModal(props: Props) {
@@ -92,7 +94,7 @@ export function SettingsModal(props: Props) {
                       ) : null}
                       {(account.provider === "gmail" || !props.isAdmin) ? (
                         <button type="button" disabled={props.busy !== null} onClick={() => props.onRemoveAccount(account.id)}>
-                          Remove
+                          Sign out
                         </button>
                       ) : null}
                     </div>
@@ -185,17 +187,32 @@ export function SettingsModal(props: Props) {
                 </div>
               </>
             ) : null}
+            {props.isAdmin ? (
+              <div className="settings-row danger">
+                <div>
+                  <strong>Sign out of admin</strong>
+                  <small>Ends the administrator session only. Mailboxes signed in on this device with their own password stay signed in.</small>
+                </div>
+                <button
+                  type="button"
+                  disabled={props.busy !== null}
+                  onClick={props.onSignOutAdmin}
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : null}
             <div className="settings-row danger">
               <div>
-                <strong>Log out</strong>
-                <small>Sign out all email accounts on this device. Other devices stay signed in.</small>
+                <strong>Log out of all accounts</strong>
+                <small>Sign out every email account on this device, the administrator session included. Other devices stay signed in. To sign out of one account, use Sign out next to it under Inboxes.</small>
               </div>
               <button
                 type="button"
                 disabled={props.busy !== null}
                 onClick={props.onLogout}
               >
-                Log out
+                Log out all
               </button>
             </div>
           </section>

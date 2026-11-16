@@ -10,6 +10,7 @@ const TESTS = [
   "test-unit-core",
   "test-audit-fixes",
   "test-push",
+  "test-signout",
   "test-gmail",
   "test-email-images",
   "test-stored-keys",

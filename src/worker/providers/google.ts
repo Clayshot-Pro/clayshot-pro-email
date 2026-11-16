@@ -1,11 +1,12 @@
 import { randomBase64Url, sha256Hex, toBase64Url } from "../bytes";
 import { appOrigin } from "../config";
-import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, clearOAuthCookie } from "../deviceAuth";
+import { prepareOAuthNonce, oauthNonceMatches, tokenHash, grantGoogleDeviceSession, grantNativeDeviceSession, nativeMailboxForGoogleEmail, clearOAuthCookie } from "../deviceAuth";
 import { decryptSecret, encryptSecret } from "./crypto";
 import {
   GOOGLE_REVOKE_ENDPOINT,
   GOOGLE_SCOPE,
   GOOGLE_TOKEN_ENDPOINT,
+  GOOGLE_USERINFO_ENDPOINT,
   hasRequiredGoogleScopes,
   requireGoogleConfig,
 } from "./googleConfig";
@@ -108,6 +109,30 @@ export async function startGoogleOAuth(request: Request, env: Env): Promise<Resp
   }, { headers: { "Set-Cookie": setCookie, "Cache-Control": "no-store" } });
 }
 
+/** Google's verified email for this sign-in, or null (no email scope, unverified, or an error). */
+async function googleVerifiedEmail(accessToken: string | undefined): Promise<string | null> {
+  if (!accessToken) return null;
+  try {
+    const response = await fetch(GOOGLE_USERINFO_ENDPOINT, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) return null;
+    const info = await response.json<{ email?: unknown; email_verified?: unknown }>();
+    return info.email_verified === true && typeof info.email === "string" && info.email.length <= 320
+      ? info.email.trim().toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function nativeMailboxSignedIn(request: Request, env: Env, mailboxId: string, token: TokenResponse): Promise<Response> {
+  // Nothing from Google is kept: the app's own inbox needs no Google access.
+  await revokeGoogleToken(token.refresh_token ?? token.access_token ?? "");
+  const sessionCookie = await grantNativeDeviceSession(request, env, mailboxId);
+  const response = redirectWithStatus(request, "connected");
+  if (sessionCookie) response.headers.append("Set-Cookie", sessionCookie);
+  response.headers.append("Set-Cookie", clearOAuthCookie());
+  return response;
+}
+
 export async function googleOAuthCallback(request: Request, env: Env): Promise<Response> {
   try {
     requireGoogleConfig(env);
@@ -172,6 +197,13 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
   }
 
   const grantedScope = token.scope ?? "";
+
+  // An address that is one of this app's own mailboxes opens that mailbox: no
+  // Gmail inbox is connected and Google's access is revoked at once.
+  const verified = await googleVerifiedEmail(token.access_token);
+  const nativeId = verified ? await nativeMailboxForGoogleEmail(request, env, verified) : null;
+  if (nativeId) return nativeMailboxSignedIn(request, env, nativeId, token);
+
   if (
     !token.access_token
     || !token.refresh_token
@@ -203,6 +235,10 @@ export async function googleOAuthCallback(request: Request, env: Env): Promise<R
     await revokeGoogleToken(token.refresh_token);
     return redirectWithStatus(request, "profile_failed");
   }
+
+  // Gmail confirms the address too (when the sign-in above gave no verified email).
+  const nativeFromProfile = await nativeMailboxForGoogleEmail(request, env, email);
+  if (nativeFromProfile) return nativeMailboxSignedIn(request, env, nativeFromProfile, token);
 
   const accountId = `gmail:${await sha256Hex(email)}`;
   const expiresAt = new Date(
