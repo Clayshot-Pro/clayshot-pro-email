@@ -9,6 +9,7 @@ import { build } from "esbuild";
 import { d1, migratedDatabase } from "./test-harness.mjs";
 
 const ORIGIN = "https://mail.example.org";
+const sha256 = async text => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).toString("hex");
 const googleEnv = db => ({
   DB: d1(db), GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
   PROVIDER_CREDENTIAL_KEY: Buffer.alloc(32, 7).toString("base64url"),
@@ -123,17 +124,19 @@ async function nativeGoogleSignIn(m) {
     INSERT INTO native_mailboxes (id, email_address, status) VALUES ('native:off', 'off@example.org', 'disabled');
     INSERT OR IGNORE INTO native_mailboxes (id, email_address, status) VALUES ('native:admin', 'admin@example.org', 'active');`);
 
-  const signIn = async (email, { verified = true, userinfoOk = true, gmailProfile = null } = {}) => {
+  const signIn = async (email, { verified = true, userinfoOk = true, gmailProfile = null, refresh = true, consent = false } = {}) => {
     const start = await m.startGoogleOAuth(new Request(`${ORIGIN}/api/accounts/gmail/connect`, { method: "POST" }), env);
-    assert.match(new URL((await start.json().then(body => body.authorizationUrl))).searchParams.get("scope"), /openid email /, "asks for the verified email");
-    const start2 = await m.startGoogleOAuth(new Request(`${ORIGIN}/api/accounts/gmail/connect`, { method: "POST" }), env);
-    const state = new URL((await start2.json()).authorizationUrl).searchParams.get("state");
-    const nonce = start2.headers.get("Set-Cookie").split(";")[0];
+    const authorization = new URL((await start.json()).authorizationUrl);
+    assert.match(authorization.searchParams.get("scope"), /openid email /, "asks for the verified email");
+    assert.equal(authorization.searchParams.get("prompt"), null, "an account that accepted before is not asked again");
+    const state = authorization.searchParams.get("state");
+    const nonce = start.headers.get("Set-Cookie").split(";")[0];
+    if (consent) db.prepare("UPDATE oauth_states SET pkce_verifier_encrypted = ?").run(await m.encryptSecret(env, { verifier: "v", origin: ORIGIN, consent: true }, `oauth:${await sha256(state)}`));
     const calls = [];
     const handler = async (url, init) => {
       const target = String(url);
       calls.push(target);
-      if (target.includes("oauth2.googleapis.com/token")) return Response.json({ access_token: "at", refresh_token: "rt", expires_in: 3600,
+      if (target.includes("oauth2.googleapis.com/token")) return Response.json({ access_token: "at", ...(refresh ? { refresh_token: "rt" } : {}), expires_in: 3600,
         scope: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.modify" });
       if (target.includes("openidconnect.googleapis.com")) return userinfoOk
         ? Response.json({ email, email_verified: verified }) : new Response("{}", { status: 401 });
@@ -143,7 +146,8 @@ async function nativeGoogleSignIn(m) {
     };
     const response = await withFetch(handler, () => m.googleOAuthCallback(
       new Request(`${ORIGIN}/api/accounts/gmail/callback?state=${state}&code=abc`, { headers: { Cookie: nonce } }), env));
-    return { response, calls, status: new URL(response.headers.get("Location")).searchParams.get("gmail") };
+    const location = new URL(response.headers.get("Location"));
+    return { response, calls, location, status: location.searchParams.get("gmail") };
   };
   const grants = () => db.prepare("SELECT account_id, provider FROM device_session_accounts").all().map(row => ({ ...row }));
 
@@ -152,7 +156,7 @@ async function nativeGoogleSignIn(m) {
   assert.equal(native.status, "connected");
   assert.deepEqual(grants(), [{ account_id: "native:contact", provider: "native" }], "the native mailbox is signed in on this device");
   assert.ok(!native.calls.some(url => url.includes("gmail.googleapis.com")), "no Gmail inbox is looked up");
-  assert.ok(native.calls.some(url => url.includes("/revoke")), "Google's access is revoked");
+  assert.ok(!native.calls.some(url => url.includes("/revoke")), "Google's grant is left alone, so its consent screen is not shown again");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM connected_accounts").get().n, 0, "no Gmail account is stored");
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM provider_credentials").get().n, 0, "no Google token is stored");
   assert.match(native.response.headers.get("Set-Cookie"), /__Host-ltm_device=/, "a device session is issued");
@@ -172,10 +176,32 @@ async function nativeGoogleSignIn(m) {
   assert.equal(gmail.status, "connected");
   assert.ok(grants().some(grant => grant.provider === "gmail"), "an ordinary Gmail address still connects Gmail");
   // The Gmail profile confirms the address when the verified-email lookup fails.
+  // Google sends no refresh token to an account that accepted before. A native mailbox needs none.
+  const nativeNoToken = await signIn("contact@example.org", { refresh: false });
+  assert.equal(nativeNoToken.status, "connected", "a native mailbox signs in without a refresh token");
+  // A Gmail account not connected here needs one: Google is asked once, with the consent screen.
+  const unknown = await signIn("new@gmail.com", { refresh: false, gmailProfile: "new@gmail.com" });
+  assert.equal(unknown.response.status, 303);
+  assert.equal(unknown.location.hostname, "accounts.google.com", "sent back to Google");
+  assert.equal(unknown.location.searchParams.get("prompt"), "consent", "this time with the consent screen");
+  assert.match(unknown.response.headers.get("Set-Cookie"), /__Host-ltm_oauth=/, "with a fresh one-time nonce");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM connected_accounts WHERE email_address = 'new@gmail.com'").get().n, 0);
+  // ...and never twice in a row: still no token after the consent screen is an incomplete sign-in.
+  const stuck = await signIn("new@gmail.com", { refresh: false, gmailProfile: "new@gmail.com", consent: true });
+  assert.equal(stuck.status, "authorization_incomplete");
+  // A Gmail account already connected here signs in again without a new token, keeping its stored credential.
+  const hash = await sha256("returning@gmail.com");
+  db.prepare("INSERT INTO connected_accounts (id, provider, provider_account_id, email_address, status) VALUES (?, 'gmail', 'returning@gmail.com', 'returning@gmail.com', 'active')").run(`gmail:${hash}`);
+  db.prepare("INSERT INTO provider_credentials (account_id, encrypted_blob) VALUES (?, 'kept')").run(`gmail:${hash}`);
+  const returning = await signIn("returning@gmail.com", { refresh: false, gmailProfile: "returning@gmail.com" });
+  assert.equal(returning.status, "connected");
+  assert.ok(grants().some(grant => grant.account_id === `gmail:${hash}`), "the device is signed in to the connected Gmail account");
+  assert.equal(db.prepare("SELECT encrypted_blob FROM provider_credentials WHERE account_id = ?").get(`gmail:${hash}`).encrypted_blob, "kept", "its stored credential is untouched");
   const viaProfile = await signIn("x", { userinfoOk: false, gmailProfile: "contact@example.org" });
   assert.equal(viaProfile.status, "connected");
-  assert.equal(grants().filter(grant => grant.account_id === "native:contact").length, 2, "signed in to the native mailbox (a second browser)");
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM connected_accounts").get().n, 1, "only someone@gmail.com is stored as a Gmail account");
+  assert.equal(grants().filter(grant => grant.account_id === "native:contact").length, 3, "signed in to the native mailbox (a third browser)");
+  assert.deepEqual(db.prepare("SELECT email_address FROM connected_accounts ORDER BY email_address").all().map(row => row.email_address),
+    ["returning@gmail.com", "someone@gmail.com"], "only Gmail addresses are stored as Gmail accounts; the native mailbox never is");
 }
 
 async function run(m) {
