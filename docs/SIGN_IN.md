@@ -21,7 +21,7 @@ The sign-in form (and **Add inbox → Custom mailbox**) asks for a **username** 
 
 - Signing in gives the browser an HttpOnly, Secure device session for 30 days, renewed for another 30 when the app is opened after a week. D1 keeps the list of accounts that device may open.
 - **Mailboxes:** sign in with the mailbox address and the password the admin chose or generated. Mailbox users never get admin rights.
-- **Gmail:** **Continue with Google** on each device (OAuth with PKCE). Signing a Gmail account out on one device doesn't affect others. If the Google account's verified address is the address of an active mailbox on this app, Google opens that mailbox instead (no Gmail inbox is connected and Google's access is revoked); the administrator's addresses are never opened this way.
+- **Gmail:** **Continue with Google** on each device (OAuth with PKCE). Signing a Gmail account out on one device doesn't affect others. If the Google account's verified address is the address of an active mailbox on this app, Google opens that mailbox instead (no Gmail inbox is connected and nothing from Google is stored); the administrator's addresses are never opened this way.
 - With two or more accounts on a device, the app opens on **All inboxes**.
 - Every mail, draft, attachment and photo request is checked against the device's accounts on the server; asking for another account returns 403. `/api/accounts` lists only this device's accounts.
 - Push notifications go only to devices allowed to read the mailbox that received the mail (admin phones get every mailbox while the admin session is live). Once a sign-in ends or expires, its alerts stop.
