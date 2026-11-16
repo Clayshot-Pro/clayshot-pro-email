@@ -1,4 +1,5 @@
 import { ownerSessionHash } from "./auth";
+import { OWNER_IDLE_TTL_SECONDS } from "./ownerSessionPolicy";
 import { currentDeviceSession } from "./deviceAuth";
 import { mailboxForRecipient } from "./mailboxes";
 import { buildPushPayload, type PushSubscription } from "@block65/webcrypto-web-push";
@@ -74,9 +75,6 @@ export function notificationCopy(notification: NewMailPush) {
   };
 }
 
-/** How long a phone that enabled alerts as administrator keeps receiving every mailbox's alerts. */
-const ALL_MAIL_DAYS = 30;
-
 export function pushConfig(env: Env): Response {
   const keys = vapidKeys(env);
   return Response.json({ configured: Boolean(keys), publicKey: keys?.publicKey ?? null });
@@ -102,19 +100,14 @@ export async function subscribePush(request: Request, env: Env): Promise<Respons
   if (!device && !ownerHash) return Response.json({ error: "No verified device session" }, { status: 401 });
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
-  // Signed in as administrator: alerts for every mailbox, renewed on each
-  // registration (the app re-registers on every start). A later registration
-  // without the admin session keeps what the administrator set up.
-  const allMailUntil = ownerHash ? new Date(Date.now() + ALL_MAIL_DAYS * 86_400_000).toISOString() : null;
   await env.DB.prepare(`INSERT INTO push_subscriptions
-    (id,endpoint,p256dh,auth,expiration_time,created_at,updated_at,device_session_id,owner_session_hash,all_mail_until)
-    VALUES (?1,?2,?3,?4,?5,?6,?6,?7,?8,?9)
+    (id,endpoint,p256dh,auth,expiration_time,created_at,updated_at,device_session_id,owner_session_hash)
+    VALUES (?1,?2,?3,?4,?5,?6,?6,?7,?8)
     ON CONFLICT(endpoint) DO UPDATE SET
       p256dh=excluded.p256dh,auth=excluded.auth,expiration_time=excluded.expiration_time,
       updated_at=excluded.updated_at,device_session_id=COALESCE(excluded.device_session_id,push_subscriptions.device_session_id),
-      owner_session_hash=COALESCE(excluded.owner_session_hash,push_subscriptions.owner_session_hash),
-      all_mail_until=COALESCE(excluded.all_mail_until,push_subscriptions.all_mail_until)`)
-    .bind(id, endpoint, p256dh, auth, expirationTime, now, device?.id ?? null, ownerHash, allMailUntil)
+      owner_session_hash=COALESCE(excluded.owner_session_hash,push_subscriptions.owner_session_hash)`)
+    .bind(id, endpoint, p256dh, auth, expirationTime, now, device?.id ?? null, ownerHash)
     .run();
   return Response.json({ ok: true }, { status: 201 });
 }
@@ -174,12 +167,14 @@ export async function sendNewMailPush(env: Env, notification: NewMailPush): Prom
   const mailbox = await mailboxForRecipient(env, notification.toAddress);
   if (!mailbox) return;
   // Historical unscoped subscriptions are intentionally excluded. A phone is
-  // alerted for a mailbox signed in on it, or for every mailbox when the
-  // administrator turned alerts on there (all_mail_until).
+  // alerted only while a sign-in is live: for a mailbox signed in on it, or for
+  // every mailbox while the administrator session it registered under is live.
+  // "Live" is the same test the app applies on a page load (not expired and not
+  // idle too long), so a phone that was signed out stops getting alerts.
   const subscriptions = await env.DB.prepare(`SELECT p.id,p.endpoint,p.p256dh,p.auth,p.expiration_time,
       p.device_session_id,p.owner_session_hash
     FROM push_subscriptions p
-    WHERE p.all_mail_until > ?2 OR (
+    WHERE (
       p.device_session_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM device_session_accounts g
         JOIN device_sessions s ON s.id=g.session_id AND s.expires_at>datetime('now')
@@ -187,21 +182,11 @@ export async function sendNewMailPush(env: Env, notification: NewMailPush): Prom
       )
     ) OR (
       p.owner_session_hash IS NOT NULL AND EXISTS (
-        SELECT 1 FROM auth_sessions a WHERE a.token_hash=p.owner_session_hash AND a.expires_at>datetime('now')
+        SELECT 1 FROM auth_sessions a WHERE a.token_hash=p.owner_session_hash
+          AND a.expires_at>datetime('now') AND a.last_seen_at>datetime('now', ?2)
       )
     )
     ORDER BY p.updated_at DESC LIMIT 100`)
-    .bind(mailbox.id, new Date().toISOString()).all<StoredSubscription>();
+    .bind(mailbox.id, `-${OWNER_IDLE_TTL_SECONDS} seconds`).all<StoredSubscription>();
   await Promise.allSettled(subscriptions.results.map(row => sendToSubscription(env, row, notification)));
-}
-
-/**
- * Stop administrator (every-mailbox) alerts when admin sessions end: "this"
- * session on sign-out, every other one on "sign out other sessions", or all.
- */
-export function revokeAllMailAlerts(env: Env, scope: { only: string } | { except: string } | "all"): D1PreparedStatement {
-  if (scope === "all") return env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE all_mail_until IS NOT NULL");
-  return "only" in scope
-    ? env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE owner_session_hash=?1").bind(scope.only)
-    : env.DB.prepare("UPDATE push_subscriptions SET all_mail_until=NULL WHERE all_mail_until IS NOT NULL AND (owner_session_hash IS NULL OR owner_session_hash!=?1)").bind(scope.except);
 }

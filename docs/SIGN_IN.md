@@ -24,7 +24,7 @@ The sign-in form (and **Add inbox → Custom mailbox**) asks for a **username** 
 - **Gmail:** **Continue with Google** on each device (OAuth with PKCE). Signing a Gmail account out on one device doesn't affect others.
 - With two or more accounts on a device, the app opens on **All inboxes**.
 - Every mail, draft, attachment and photo request is checked against the device's accounts on the server; asking for another account returns 403. `/api/accounts` lists only this device's accounts.
-- Push notifications go only to devices allowed to read the mailbox that received the mail (admin phones get every mailbox).
+- Push notifications go only to devices allowed to read the mailbox that received the mail (admin phones get every mailbox while the admin session is live). Once a sign-in ends or expires, its alerts stop.
 - Signing out or removing an account affects only this device. Changing a mailbox password signs out that mailbox's devices; other accounts stay signed in.
 
 ## Administrator

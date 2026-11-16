@@ -108,7 +108,7 @@ If **Admin → Keys** says `PROVIDER_CREDENTIAL_KEY` is missing, add it (32 rand
 - **Your password:** Settings → Password changes a mailbox's password with the current one; other devices using the mailbox are signed out.
 - **Native reader:** ordinary mail follows your theme; designed newsletters keep their look. Scripts are always blocked. Embedded images show; remote images load privately through the app (senders see Cloudflare, not your IP address). Settings → Images in mail → **Ask first** to approve them per message (per device).
 - **Appearance:** Settings → Appearance sets theme, accent colour, density, text size and icon set, within what the admin allows.
-- **Notifications:** installable **PWA** with push alerts showing sender, subject and a preview (Settings → Notifications). Admin phones get alerts for every mailbox.
+- **Notifications:** installable **PWA** with push alerts showing sender, subject and a preview (Settings → Notifications). Admin phones get alerts for every mailbox while the admin session is live.
 - **Unsubscribe** from list mail, **profile photos** per mailbox, **branding** and per-domain themes.
 - **Administration** (Admin panel): Domains; Mailboxes (create with a chosen or generated password, change password, disable, delete with 30-day restore, Recount storage); Mail settings (forward admin@ mail, mailbox limit, automatic purge); Deliverability (suppressed recipients); Keys; Branding (and what users may change); Security activity. Admins see active sessions in Settings → Security & sessions.
 
